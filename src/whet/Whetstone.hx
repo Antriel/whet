@@ -14,7 +14,7 @@ class Whetstone {
                 var justClass = ((this:WhetstoneID):String).split('.').pop();
 				project.commands.set('$justClass.$name', Reflect.field(this, name));
                 if(!project.commands.exists(name)) {//add short alias if none yet exists
-                    project.commands.set(name, Reflect.field(this, name));
+                    project.commands.set(name, function(arg) Reflect.callMethod(this, Reflect.field(this, name), [arg]));
                 }
 			}
 		}

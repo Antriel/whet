@@ -1,6 +1,6 @@
 package whet.stones;
 
-#if sys
+#if (sys || nodejs)
 import sys.io.File;
 #end
 using whet.ArgTools;
@@ -57,7 +57,7 @@ class BuildStone extends whet.Whetstone {
         ]); 
     }
     
-    #if sys
+    #if (sys || nodejs)
     @command public function hxml(configs:String) {
         var configs = configs.toArray();
         Whet.msg('Generating hxml file with configurations: $configs.');
