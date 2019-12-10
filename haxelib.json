@@ -1,0 +1,9 @@
+{
+    "name": "whetstone",
+    "description": "Haxe based project configuration, building and tooling.",
+    "url" : "https://github.com/antriel/whet/",
+    "version": "0.0.0",
+    "classPath": "src",
+    "releasenote": "Initial release.",
+    "contributors": ["Antriel"]
+}
