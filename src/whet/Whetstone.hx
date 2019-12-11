@@ -5,7 +5,10 @@ import haxe.rtti.Meta;
 
 class Whetstone {
 	
+	var project:WhetProject;
+	
 	public function new(project:WhetProject) {
+		this.project = project;
 		if(project.stones.exists(this)) Whet.error('Duplicate whetstone "${(this:WhetstoneID)}".');
         project.stones.set(this, this);
 		var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(this));
