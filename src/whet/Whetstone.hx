@@ -24,7 +24,7 @@ class Whetstone {
     }
 
     #if tink_io
-    public function getSource<T>(id:SourceId):tink.io.Source<T> {
+    public function getSource(id:SourceId):WhetSource {
         throw "Not implemented";
     }
     #end
@@ -41,3 +41,12 @@ abstract WhetstoneID(String) from String to String {
     public static inline function fromInstance(v:Whetstone):WhetstoneID
         return fromClass(Type.getClass(v));
 }
+
+#if tink_io
+@:structInit class WhetSource {
+
+    public var data:tink.io.Source.IdealSource;
+    public var length:Int;
+
+}
+#end

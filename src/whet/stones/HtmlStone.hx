@@ -1,8 +1,8 @@
 package whet.stones;
 
-import tink.io.Source;
+import whet.Whetstone;
 
-class HtmlStone extends whet.Whetstone {
+class HtmlStone extends Whetstone {
 
     var config:HtmlConfig;
 
@@ -81,10 +81,14 @@ class HtmlStone extends whet.Whetstone {
     }
 
     #if tink_io
-    public override function getSource<T>(id:SourceId):tink.io.Source<T> {
+    public override function getSource(id:SourceId):WhetSource {
         var self = config.name;
         if (self == id || (self.withoutExt == 'index' && id.isDir() && self.isInDir(id))) {
-            return getContent();
+            var chunk:tink.Chunk = getContent();
+            return {
+                data: chunk,
+                length: chunk.length
+            };
         } else return null;
     }
     #end

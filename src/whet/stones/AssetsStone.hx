@@ -1,9 +1,10 @@
 package whet.stones;
 
+import whet.Whetstone;
 #if tink_io
 import tink.io.Source;
 
-class AssetsStone extends whet.Whetstone {
+class AssetsStone extends Whetstone {
 
     public var config:AssetsConfig;
 
@@ -12,7 +13,7 @@ class AssetsStone extends whet.Whetstone {
         this.config = config;
     }
 
-    override function getSource<T>(id:SourceId):Source<T> {
+    override function getSource(id:SourceId):WhetSource {
         for (source in config.sources) {
             var found = source.getSource(id);
             if (found != null) return found;
