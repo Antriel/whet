@@ -20,7 +20,7 @@ abstract SourceId(String) to String {
 
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
         if (!directory.isDir()) throw '"$directory" is not a directory.';
-        return nested ? dir == directory : (directory:String).indexOf(dir) == 0;
+        return nested ? (dir:String).indexOf(directory) == 0 : dir == directory;
     }
 
     private inline function get_withExt() return this.withoutDirectory();
