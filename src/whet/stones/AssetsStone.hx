@@ -12,7 +12,7 @@ class AssetsStone extends Whetstone {
 
     public function new(project:WhetProject, config:AssetsConfig = null) {
         super(project);
-        this.config = config;
+        this.config = config == null ? { } : config;
     }
 
     public function addStaticFiles(srcDir:SourceId, serveDir:SourceId):AssetsStone {

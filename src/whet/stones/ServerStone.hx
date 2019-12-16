@@ -9,8 +9,6 @@ import tink.http.containers.*;
 import tink.web.routing.*;
 import tink.http.Header;
 
-@:require("tink_web")
-@:require("mime")
 class ServerStone extends Whetstone {
 
     var config:ServerConfig;
@@ -100,13 +98,14 @@ class ServerStone extends Whetstone {
 
 }
 #else
-@:require("tink_web")
-@:require("mime")
 class ServerStone extends Whetstone {
 
     public function new(project:WhetProject, config:ServerConfig = null) {
-        Whet.error('ServerStone requires tink_web and mime libraries.');
         super(project);
+    }
+
+    @command public function start(_) {
+        Whet.error('ServerStone requires tink_web and mime libraries.');
     }
 
 }

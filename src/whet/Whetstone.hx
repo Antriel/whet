@@ -15,9 +15,10 @@ class Whetstone {
         for (name => val in meta) {
             if (Reflect.hasField(val, 'command')) {
                 var justClass = ((this:WhetstoneID):String).split('.').pop();
-                project.commands.set('$justClass.$name', Reflect.field(this, name));
+                var fnc = function(arg) Reflect.callMethod(this, Reflect.field(this, name), [arg]);
+                project.commands.set('$justClass.$name', fnc);
                 if (!project.commands.exists(name)) { // add short alias if none yet exists
-                    project.commands.set(name, function(arg) Reflect.callMethod(this, Reflect.field(this, name), [arg]));
+                    project.commands.set(name, fnc);
                 }
             }
         }

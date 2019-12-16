@@ -8,61 +8,46 @@ using whet.ArgTools;
 
 class BuildStone extends whet.Whetstone {
 
-    var base:HxmlConfig;
-    var configs:Map<String, HxmlConfig>;
+    var config:HxmlConfig;
     var hxmlPath:String;
 
-    public function new(project:WhetProject, baseConfig:HxmlConfig, hxmlPath:String = null) {
+    public function new(project:WhetProject, config:HxmlConfig, hxmlPath:String = null) {
         super(project);
-        base = baseConfig;
-        configs = new Map();
+        this.config = config;
         if (hxmlPath == null) hxmlPath = 'build.hxml';
         this.hxmlPath = hxmlPath;
     }
 
-    public function addConfig(name:String, config:HxmlConfig):BuildStone {
-        configs.set(name, config);
+    public function mergeConfig(additionalConfig:HxmlConfig):BuildStone {
+        function merge<T>(from:Array<T>, to:Array<T>)
+            if (from != null) for (item in from) if (to.indexOf(item) == -1) to.push(item);
+
+        merge(additionalConfig.libs, config.libs);
+        merge(additionalConfig.paths, config.paths);
+        merge(additionalConfig.defines, config.defines);
+        merge(additionalConfig.flags, config.flags);
+        if (additionalConfig.dce != null) config.dce = additionalConfig.dce;
+        if (additionalConfig.main != null) config.main = additionalConfig.main;
+        if (additionalConfig.debug != null) config.debug = additionalConfig.debug;
         return this;
     }
 
-    public function getArgs(configs:Array<String> = null):Array<String> {
-        var libs:Array<String> = [];
-        var paths:Array<String> = [];
-        var defines:Array<String> = [];
-        var dce:DCE = null;
-        var main:String = null;
-        var debug:Bool = false;
-        var flags:Array<String> = [];
-        function merge<T>(from:Array<T>, to:Array<T>)
-            if (from != null) for (item in from) if (to.indexOf(item) == -1) to.push(item);
-        if (configs == null) configs = [];
-        for (config in configs) if (!this.configs.exists(config))
-            whet.Whet.error('Config "$config" was not defined in project.');
-        for (config in [base].concat([for (config in configs) this.configs[config]])) {
-            merge(config.libs, libs);
-            merge(config.paths, paths);
-            merge(config.defines, defines);
-            merge(config.flags, flags);
-            if (config.dce != null) dce = config.dce;
-            if (config.main != null) main = config.main;
-            if (config.debug != null) debug = config.debug;
-        }
+    public function getArgs():Array<String> {
         return Lambda.flatten([
-            libs.map(lib -> '-lib $lib'),
-            paths.map(path -> '-cp $path'),
-            defines.map(def -> '-D $def'),
-            dce != null ? ['-dce $dce'] : [],
-            main != null ? ['-main $main'] : [],
-            debug == true ? ['-debug'] : [],
-            flags
+            config.libs.map(lib -> '-lib $lib'),
+            config.paths.map(path -> '-cp $path'),
+            config.defines.map(def -> '-D $def'),
+            config.dce != null ? ['-dce ${config.dce}'] : [],
+            config.main != null ? ['-main ${config.main}'] : [],
+            config.debug == true ? ['-debug'] : [],
+            config.flags
         ]);
     }
 
     #if (sys || nodejs)
-    @command public function hxml(configs:String) {
-        var configs = configs.toArray();
-        Whet.msg('Generating hxml file with configurations: $configs.');
-        var hxmlArgs = getArgs(configs);
+    @command public function hxml(_) {
+        Whet.msg('Generating hxml file.');
+        var hxmlArgs = getArgs();
         File.saveContent(hxmlPath, hxmlArgs.join('\n'));
         Whet.msg('Generated $hxmlPath.');
     }
