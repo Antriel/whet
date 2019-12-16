@@ -4,8 +4,6 @@ using haxe.io.Path;
 
 abstract SourceId(String) to String {
 
-    private static inline var SEP:String = '/';
-
     public var withoutExt(get, set):String;
     public var withExt(get, set):String;
     public var ext(get, set):String;
@@ -25,7 +23,10 @@ abstract SourceId(String) to String {
 
     private inline function get_withExt() return this.withoutDirectory();
 
-    private inline function set_withExt(v):String throw "Not implemented.";
+    private inline function set_withExt(v):String {
+        this = Path.join([dir, v]);
+        return v;
+    }
 
     private inline function get_ext() return this.extension();
 

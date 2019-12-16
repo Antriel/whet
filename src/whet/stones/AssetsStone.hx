@@ -15,12 +15,20 @@ class AssetsStone extends Whetstone {
         this.config = config == null ? { } : config;
     }
 
-    public function addStaticFiles(srcDir:SourceId, serveDir:SourceId):AssetsStone {
-        if (!srcDir.isDir()) throw 'Source directory "$srcDir" is not a directory';
-        if (!serveDir.isDir()) throw 'Serve directory "$serveDir" is not a directory';
-        config.staticDirs.push({
-            src: srcDir,
-            serve: serveDir
+    /**
+     * Add a file/directory to assets.
+     * @param src   Source file or directory. If a directory, all files inside, recursively, will be available.
+     * @param serve Serving destination. Must be a directory if source is a directory,
+     *              otherwise directory assumes the same assets name or pass in custom name.
+     */
+    public function add(src:SourceId, serve:SourceId):AssetsStone {
+        if (!src.isDir() && serve.isDir())
+            serve.withExt = src.withExt;
+        if (src.isDir()) if (!serve.isDir()) Whet.error('If source is a directory, serve destination must be too.');
+
+        config.routes.push({
+            src: src,
+            serve: serve
         });
         return this;
     }
@@ -30,24 +38,25 @@ class AssetsStone extends Whetstone {
             var found = source.getSource(id);
             if (found != null) return found;
         }
-        for (route in config.staticDirs) {
-            if (id.isInDir(route.serve)) {
-                var realPath = getRealPath(id, route);
-                if (FileSystem.exists(realPath)) {
-                    var data = File.getBytes(realPath);
-                    return {
-                        data: data,
-                        length: data.length
-                    }
+        for (route in config.routes) {
+            var path = null;
+            if (route.serve.isDir()) {
+                if (id.isInDir(route.serve)) {
+                    path = (route.src:String).substring(1) // Remove start slash -> make relative to CWD.
+                        + (id:String).substring((route.serve:String).length);
+                }
+            } else { // not a dir
+                if (id == route.serve) path = route.src;
+            }
+            if (path != null && FileSystem.exists(path)) {
+                var data = File.getBytes(path);
+                return {
+                    data: data,
+                    length: data.length
                 }
             }
         }
         return null;
-    }
-
-    function getRealPath(file:SourceId, route:DirRouting):String {
-        return (route.src:String).substring(1) // Remove start slash -> make relative to CWD.
-            + (file:String).substring((route.serve:String).length);
     }
 
 }
@@ -55,11 +64,11 @@ class AssetsStone extends Whetstone {
 @:structInit class AssetsConfig {
 
     public var sources:Array<Whetstone> = [];
-    public var staticDirs:Array<DirRouting> = [];
+    public var routes:Array<Routing> = [];
 
 }
 
-typedef DirRouting = {
+typedef Routing = {
 
     src:SourceId,
     serve:SourceId
