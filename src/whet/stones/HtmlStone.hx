@@ -74,7 +74,7 @@ class HtmlStone extends Whetstone {
         sb.add('<body>\n');
 
         for (el in config.bodyElements)
-            sb.add(el.split('\n').map(line -> '\t$line').join('\n'));
+            sb.add(el.split('\n').map(line -> '\t$line').join('\n') + '\n');
         sb.add('</body>\n');
         sb.add('</html>');
         return sb.toString();

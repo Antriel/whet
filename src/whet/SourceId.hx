@@ -2,7 +2,7 @@ package whet;
 
 using haxe.io.Path;
 
-abstract SourceId(String) to String {
+abstract SourceId(String) {
 
     public var withoutExt(get, set):String;
     public var withExt(get, set):String;
@@ -13,6 +13,8 @@ abstract SourceId(String) to String {
         var norm = '/$s'.normalize();
         return (s.lastIndexOf('/') == s.length - 1) ? cast norm.addTrailingSlash() : cast norm;
     }
+
+    @:to public inline function toRelPath():String return this.substring(1); // Remove start slash -> make relative to CWD.
 
     public inline function isDir():Bool return this == dir;
 

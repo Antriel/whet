@@ -2,6 +2,7 @@ package whet.stones;
 
 import sys.FileSystem;
 import sys.io.File;
+import haxe.io.Path;
 import whet.Whetstone;
 #if tink_io
 import tink.io.Source;
@@ -33,6 +34,37 @@ class AssetsStone extends Whetstone {
         return this;
     }
 
+    /** Lists all files currently available under the supplied dir. */
+    public function list(dir:SourceId):Array<SourceId> {
+        var files:Array<SourceId> = [];
+        for (route in config.routes) {
+            if (route.serve.isDir()) {
+                var path = getRealPath(dir, route);
+                if (path != null) for (file in getFilesFrom(path))
+                    files.push(Path.join([route.serve, dir, file]));
+            }
+        }
+        return files;
+    }
+
+    function getFilesFrom(root:String):Array<String> {
+        var arr = [];
+        function search(dir:String, relativePath:String) {
+            if (FileSystem.exists(dir)) {
+                for (file in FileSystem.readDirectory(dir)) {
+                    var filePath = Path.join([dir, file]);
+                    if (FileSystem.isDirectory(filePath)) {
+                        search(filePath, Path.join([relativePath, file]));
+                    } else {
+                        arr.push(Path.join([relativePath, file]));
+                    }
+                }
+            }
+        }
+        search(root, ".");
+        return arr.map(p -> Path.normalize(p));
+    }
+
     override function getSource(id:SourceId):WhetSource {
         for (source in config.sources) {
             var found = source.getSource(id);
@@ -41,10 +73,7 @@ class AssetsStone extends Whetstone {
         for (route in config.routes) {
             var path = null;
             if (route.serve.isDir()) {
-                if (id.isInDir(route.serve)) {
-                    path = (route.src:String).substring(1) // Remove start slash -> make relative to CWD.
-                        + (id:String).substring((route.serve:String).length);
-                }
+                path = getRealPath(id, route);
             } else { // not a dir
                 if (id == route.serve) path = route.src;
             }
@@ -57,6 +86,12 @@ class AssetsStone extends Whetstone {
             }
         }
         return null;
+    }
+
+    function getRealPath(id:SourceId, route:Routing):String {
+        if (id.isInDir(route.serve, true)) {
+            return route.src.toRelPath() + id.toRelPath().substring(route.serve.toRelPath().length);
+        } else return null;
     }
 
 }
