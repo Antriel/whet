@@ -49,9 +49,10 @@ class Whet {
             }
 
         });
-        Context.onAfterGenerate(function() {
-            Sys.command('node', [Compiler.getOutput()]);
-        });
+        if (Sys.args().indexOf('--no-output') == -1) // Don't run in diagnostics/display context.
+            Context.onAfterGenerate(function() {
+                Sys.command('node', [Compiler.getOutput()]);
+            });
     }
     #end
 
@@ -67,7 +68,7 @@ class Whet {
     }
 
     public static function error(msg:String):Void {
-        #if (sys || nodejs)
+        #if (sys || hxnodejs)
         Sys.stderr().writeString('Error: ' + msg);
         Sys.exit(1);
         #else
@@ -76,7 +77,7 @@ class Whet {
     }
 
     public static function msg(msg:String):Void {
-        #if (sys || nodejs)
+        #if (sys || hxnodejs)
         Sys.stdout().writeString(msg + '\n');
         #else
         trace(msg);
