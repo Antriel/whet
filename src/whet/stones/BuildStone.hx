@@ -1,6 +1,7 @@
 package whet.stones;
 
-#if (sys || nodejs)
+import whet.SourceId;
+#if (sys || hxnodejs)
 import sys.io.File;
 #end
 
@@ -40,11 +41,29 @@ class BuildStone extends whet.Whetstone {
             config.dce != null ? ['-dce ${config.dce}'] : [],
             config.main != null ? ['-main ${config.main}'] : [],
             config.debug == true ? ['-debug'] : [],
+            getBuild(),
             config.flags
         ]);
     }
 
-    #if (sys || nodejs)
+    function getBuild():Array<String> {
+        return switch config.build {
+            case null: [];
+            case JS(file): ['-js', file];
+            case SWF(file): ['-swf', file];
+            case NEKO(file): ['-neko', file];
+            case PHP(directory): ['-php', directory];
+            case CPP(directory): ['-cpp', directory];
+            case CS(directory): ['-cs', directory];
+            case JAVA(directory): ['-java', directory];
+            case PYTHON(file): ['-python', file];
+            case LUA(file): ['-lua', file];
+            case HL(file): ['-hl', file];
+            case CPPIA(file): ['-cppia', file];
+        }
+    }
+
+    #if (sys || hxnodejs)
     @command public function hxml(_) {
         Whet.msg('Generating hxml file.');
         var hxmlArgs = getArgs();
@@ -68,6 +87,7 @@ typedef HxmlConfig = {
     @:optional var main:String;
     @:optional var debug:Bool;
     @:optional var flags:Array<String>;
+    @:optional var build:BuildPlatform;
 
 }
 
@@ -76,5 +96,21 @@ enum abstract DCE(String) to String {
     var STD = "std";
     var FULL = "full";
     var NO = "no";
+
+}
+
+enum BuildPlatform {
+
+    JS(file:SourceId);
+    SWF(file:SourceId);
+    NEKO(file:SourceId);
+    PHP(directory:SourceId);
+    CPP(directory:SourceId);
+    CS(directory:SourceId);
+    JAVA(directory:SourceId);
+    PYTHON(file:SourceId);
+    LUA(file:SourceId);
+    HL(file:SourceId);
+    CPPIA(file:SourceId);
 
 }
