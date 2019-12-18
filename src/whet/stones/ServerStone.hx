@@ -35,15 +35,12 @@ class ServerStone extends Whetstone {
         var id:SourceId = req.header.url.path;
         var res:OutgoingResponse = null;
         if (req.header.method == GET) {
-            for (dir => source in config.sources) {
-                if (id.isInDir(dir, true)) { // TODO might need to actually route this
-                    var data = source.getSource(id);
-                    if (data != null) {
-                        var mime = mime.Mime.lookup(id);
-                        res = partial(req.header, data, mime, id.withExt);
-                        break;
-                    }
-                }
+            if (id.isDir()) id.withExt = "index.html";
+            else if (id.ext == '') id = '$id/index.html';
+            var data = findSource(id);
+            if (data != null) {
+                var mime = mime.Mime.lookup(id);
+                res = partial(req.header, data, mime, id.withExt);
             }
         }
         if (res == null) res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
@@ -115,6 +112,5 @@ class ServerStone extends Whetstone {
 class ServerConfig {
 
     public final port:Int = 7000;
-    public var sources:Map<SourceId, Whetstone> = new Map();
 
 }

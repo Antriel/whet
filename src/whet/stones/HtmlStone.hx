@@ -6,12 +6,12 @@ class HtmlStone extends Whetstone {
 
     var config:HtmlConfig;
 
-    public function new(project:WhetProject, config:HtmlConfig, setDefaults:Bool = true) {
+    public function new(project:WhetProject, config:HtmlConfig = null, setDefaults:Bool = true) {
         super(project);
-        this.config = config;
+        this.config = config == null ? { } : config;
         if (setDefaults) {
-            if (config.title == null) config.title = project.config.name;
-            if (config.description == null) config.description = project.config.description;
+            if (this.config.title == null) this.config.title = project.config.name;
+            if (this.config.description == null) this.config.description = project.config.description;
         }
         // TODO:
         // x config options for common elements
@@ -81,23 +81,13 @@ class HtmlStone extends Whetstone {
     }
 
     #if tink_io
-    public override function getSource(id:SourceId):WhetSource {
-        var self = config.name;
-        if (self == id || (self.withoutExt == 'index' && id.isDir() && self.isInDir(id))) {
-            var chunk:tink.Chunk = getContent();
-            return {
-                data: chunk,
-                length: chunk.length
-            };
-        } else return null;
-    }
+    public override function getSource():WhetSource return getContent();
     #end
 
 }
 
 @:structInit class HtmlConfig {
 
-    public var name:SourceId;
     public var headElements:Array<String> = [];
     public var bodyElements:Array<String> = [];
     public var noScaleMeta:Bool = true;

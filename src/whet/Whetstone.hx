@@ -25,8 +25,20 @@ class Whetstone {
     }
 
     #if tink_io
-    public function getSource(id:SourceId):WhetSource {
+    public var router:WhetSourceRouter;
+
+    public function route(routes:Map<SourceId, Whetstone>) {
+        if (router == null) router = routes;
+        else for (k => v in routes) router.add(k, v);
+        return this;
+    }
+
+    public function getSource():WhetSource {
         throw "Not implemented";
+    }
+
+    public function findSource(id:SourceId):WhetSource {
+        return router == null ? null : router.find(id);
     }
     #end
 
@@ -44,7 +56,16 @@ abstract WhetstoneID(String) from String to String {
 }
 
 #if tink_io
-@:structInit class WhetSource {
+@:forward abstract WhetSource(WhetSourceDef) from WhetSourceDef {
+
+    @:from public static function fromString(s:String)
+        return fromBytes(haxe.io.Bytes.ofString(s));
+
+    @:from public static function fromBytes(data:haxe.io.Bytes):WhetSource
+        return { data: data, length: data.length };
+}
+
+typedef WhetSourceDef = {
 
     public var data:tink.io.Source.IdealSource;
     public var length:Int;

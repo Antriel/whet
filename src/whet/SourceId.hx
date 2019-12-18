@@ -7,7 +7,7 @@ abstract SourceId(String) {
     public var withoutExt(get, set):String;
     public var withExt(get, set):String;
     public var ext(get, set):String;
-    public var dir(get, set):String;
+    public var dir(get, set):SourceId;
 
     @:from public inline static function fromString(s:String):SourceId {
         var norm = '/$s'.normalize();
@@ -20,13 +20,21 @@ abstract SourceId(String) {
 
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
         if (!directory.isDir()) throw '"$directory" is not a directory.';
-        return nested ? (dir:String).indexOf(directory) == 0 : dir == directory;
+        return nested ? dir.toRelPath().indexOf(directory) == 0 : dir == directory;
+    }
+
+    public function relativeTo(directory:SourceId):SourceId {
+        if (isInDir(directory, true)) {
+            var rel = (dir.toRelPath().substr(directory.toRelPath().length):SourceId);
+            rel.withExt = withExt;
+            return rel;
+        } else return null;
     }
 
     private inline function get_withExt() return this.withoutDirectory();
 
-    private inline function set_withExt(v):String {
-        this = Path.join([dir, v]);
+    private inline function set_withExt(v:String):String {
+        if (v.length > 0) this = cast fromString(Path.join([dir, v]));
         return v;
     }
 
@@ -38,8 +46,8 @@ abstract SourceId(String) {
 
     private inline function set_withoutExt(v):String throw "Not implemented.";
 
-    private inline function get_dir() return this.directory().addTrailingSlash();
+    private inline function get_dir():SourceId return this.directory().addTrailingSlash();
 
-    private inline function set_dir(v):String throw "Not implemented";
+    private inline function set_dir(v):SourceId throw "Not implemented";
 
 }

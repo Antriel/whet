@@ -1,13 +1,14 @@
 package whet.stones;
 
 import whet.SourceId;
+import whet.Whetstone;
 #if (sys || hxnodejs)
 import sys.io.File;
 #end
 
 using whet.ArgTools;
 
-class BuildStone extends whet.Whetstone {
+class BuildStone extends Whetstone {
 
     var config:HxmlConfig;
     var hxmlPath:String;
@@ -63,6 +64,13 @@ class BuildStone extends whet.Whetstone {
         }
     }
 
+    function getBuildPath():String {
+        return switch config.build {
+            case JS(file) | SWF(file) | NEKO(file) | PYTHON(file) | LUA(file) | HL(file) | CPPIA(file): file;
+            case _: throw "Not supported for this build.";
+        }
+    }
+
     #if (sys || hxnodejs)
     @command public function hxml(_) {
         Whet.msg('Generating hxml file.');
@@ -73,6 +81,16 @@ class BuildStone extends whet.Whetstone {
 
     @command public function build(configs:String) {
         trace('running build with $configs');
+    }
+    #end
+
+    #if tink_io
+    public override function getSource():WhetSource {
+        // TODO mode, cached, just-relay file, always new...
+        var path = getBuildPath();
+        if (sys.FileSystem.exists(path))
+            return sys.io.File.getBytes(path);
+        else return null;
     }
     #end
 
