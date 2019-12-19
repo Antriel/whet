@@ -8,6 +8,7 @@ import tink.http.Response;
 import tink.http.containers.*;
 import tink.web.routing.*;
 import tink.http.Header;
+import tink.io.Source.RealSourceTools;
 
 class ServerStone extends Whetstone {
 
@@ -34,16 +35,31 @@ class ServerStone extends Whetstone {
     function handler(req:IncomingRequest):Future<OutgoingResponse> {
         var id:SourceId = req.header.url.path;
         var res:OutgoingResponse = null;
-        if (req.header.method == GET) {
-            if (id.isDir()) id.withExt = "index.html";
-            else if (id.ext == '') id = '$id/index.html';
-            var data = findSource(id);
-            if (data != null) {
-                var mime = mime.Mime.lookup(id);
-                res = partial(req.header, data, mime, id.withExt);
-            }
+        switch req.header.method {
+            case GET:
+                if (id.isDir()) id.withExt = "index.html";
+                else if (id.ext == '') id = '$id/index.html';
+                var data = findSource(id);
+                if (data != null) {
+                    var mime = mime.Mime.lookup(id);
+                    res = partial(req.header, data, mime, id.withExt);
+                } else res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
+            case PUT:
+                var cmd = haxe.io.Path.removeTrailingSlashes(id);
+                if (project.commands.exists(cmd)) {
+                    return switch req.body {
+                        case Plain(source): // TODO: this should all be more async and properly handle errors, possibly return results.
+                            RealSourceTools.all(source).next(function(p) {
+                                project.commands.get(cmd)(p.toString());
+                                return OutgoingResponse.blob(OK, tink.Chunk.EMPTY, "");
+                            }).recover(e -> OutgoingResponse.reportError(new Error(InternalError, 'InternalError')));
+                        case Parsed(parts): throw "Not implemented.";
+                    }
+                } else res = OutgoingResponse.reportError(new Error(NotFound, 'Command not found.'));
+
+            case _:
+                res = OutgoingResponse.reportError(new Error(NotImplemented, 'Unrecognized command.'));
         }
-        if (res == null) res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
         return res;
     }
 
