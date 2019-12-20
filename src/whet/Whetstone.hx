@@ -25,7 +25,7 @@ class Whetstone {
     }
 
     #if tink_io
-    public var router:WhetSourceRouter;
+    var router:WhetSourceRouter;
 
     public function route(routes:Map<SourceId, Whetstone>) {
         if (router == null) router = routes;

@@ -3,6 +3,7 @@ package whet.stones;
 import whet.Whetstone;
 #if (tink_web && hxnodejs && mime)
 import tink.CoreApi;
+import tink.http.Handler;
 import tink.http.Request;
 import tink.http.Response;
 import tink.http.containers.*;
@@ -21,8 +22,12 @@ class ServerStone extends Whetstone {
 
     #if !macro
     @command public function start(_) {
-        var container = new NodeContainer(config.port);
-        container.run(handler).handle(function(state) switch state {
+        var container = new NodeContainer(config.port, { upgradable: true });
+        var h:Handler = handler;
+        #if tink_http_middleware
+        for (middleware in config.middlewares) h = middleware.getMiddleware().apply(h);
+        #end
+        container.run(h).handle(function(state) switch state {
             case Running(_):
                 Whet.msg('Started web server at port ${config.port}.');
             case Failed(e):
@@ -128,5 +133,14 @@ class ServerStone extends Whetstone {
 class ServerConfig {
 
     public final port:Int = 7000;
+    public final middlewares:Array<WhetServerMiddleware> = [];
+
+}
+
+interface WhetServerMiddleware {
+
+    #if tink_http_middleware
+    function getMiddleware():tink.http.Middleware;
+    #end
 
 }
