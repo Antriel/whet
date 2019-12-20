@@ -16,7 +16,7 @@ class BuildStone extends Whetstone {
     public function new(project:WhetProject, config:HxmlConfig, hxmlPath:String = null) {
         super(project);
         this.config = config;
-        if (hxmlPath == null) hxmlPath = 'build.hxml';
+        if (hxmlPath == null) hxmlPath = '.whet/build.hxml';
         this.hxmlPath = hxmlPath;
     }
 
@@ -36,6 +36,7 @@ class BuildStone extends Whetstone {
 
     public function getArgs():Array<String> {
         return Lambda.flatten([
+            ['# Generated from Whet library. Do not manually edit.'],
             config.libs.map(lib -> '-lib $lib'),
             config.paths.map(path -> '-cp $path'),
             config.defines.map(def -> '-D $def'),
@@ -50,17 +51,17 @@ class BuildStone extends Whetstone {
     function getBuild():Array<String> {
         return switch config.build {
             case null: [];
-            case JS(file): ['-js', file];
-            case SWF(file): ['-swf', file];
-            case NEKO(file): ['-neko', file];
-            case PHP(directory): ['-php', directory];
-            case CPP(directory): ['-cpp', directory];
-            case CS(directory): ['-cs', directory];
-            case JAVA(directory): ['-java', directory];
-            case PYTHON(file): ['-python', file];
-            case LUA(file): ['-lua', file];
-            case HL(file): ['-hl', file];
-            case CPPIA(file): ['-cppia', file];
+            case JS(file): ['-js $file'];
+            case SWF(file): ['-swf $file'];
+            case NEKO(file): ['-neko $file'];
+            case PHP(directory): ['-php $directory'];
+            case CPP(directory): ['-cpp $directory'];
+            case CS(directory): ['-cs $directory'];
+            case JAVA(directory): ['-java $directory'];
+            case PYTHON(file): ['-python $file'];
+            case LUA(file): ['-lua $file'];
+            case HL(file): ['-hl $file'];
+            case CPPIA(file): ['-cppia $file'];
         }
     }
 
@@ -96,16 +97,16 @@ class BuildStone extends Whetstone {
 
 }
 
-typedef HxmlConfig = {
+@:structInit class HxmlConfig {
 
-    @:optional var libs:Array<String>;
-    @:optional var paths:Array<String>;
-    @:optional var defines:Array<String>;
-    @:optional var dce:DCE;
-    @:optional var main:String;
-    @:optional var debug:Bool;
-    @:optional var flags:Array<String>;
-    @:optional var build:BuildPlatform;
+    public var libs:Array<String> = [];
+    public var paths:Array<String> = [];
+    public var defines:Array<String> = [];
+    public var dce:DCE = null;
+    public var main:String = null;
+    public var debug:Bool = false;
+    public var flags:Array<String> = [];
+    public var build:BuildPlatform = null;
 
 }
 
