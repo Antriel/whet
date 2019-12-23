@@ -9,8 +9,8 @@ class Whetstone {
 
     public function new(project:WhetProject) {
         this.project = project;
-        if (project.stones.exists(this)) Whet.error('Duplicate whetstone "${(this:WhetstoneID)}".');
-        project.stones.set(this, this);
+        if (project.stones.exists(this)) project.stones.get(this).push(this);
+        else project.stones.set(this, [this]);
         var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(this));
         for (name => val in meta) {
             if (Reflect.hasField(val, 'command')) {
@@ -58,17 +58,31 @@ abstract WhetstoneID(String) from String to String {
 #if tink_io
 @:forward abstract WhetSource(WhetSourceDef) from WhetSourceDef {
 
+    public static function fromFile(path:String):WhetSource {
+        if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
+        var source = fromBytes(sys.io.File.getBytes(path));
+        source.file = path;
+        return source;
+    }
+
     @:from public static function fromString(s:String)
         return fromBytes(haxe.io.Bytes.ofString(s));
 
     @:from public static function fromBytes(data:haxe.io.Bytes):WhetSource
         return { data: data, length: data.length };
+
+    public function getFilePath():String {
+        if (this.file != null) return this.file;
+        else throw "not implemented yet";
+    }
+
 }
 
 typedef WhetSourceDef = {
 
     public var data:tink.io.Source.IdealSource;
     public var length:Int;
+    public var ?file:String;
 
 }
 #end

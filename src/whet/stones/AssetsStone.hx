@@ -72,7 +72,7 @@ class AssetsStone extends Whetstone {
                 if (id == serve) path = src;
             }
             if (path != null && FileSystem.exists(path)) {
-                return File.getBytes(path);
+                return WhetSource.fromFile(path);
             }
         }
         return null;

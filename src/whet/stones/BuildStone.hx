@@ -88,9 +88,13 @@ class BuildStone extends Whetstone {
     #if tink_io
     public override function getSource():WhetSource {
         // TODO mode, cached, just-relay file, always new...
+        // Use global cache system, default mode to 'fresh cache' i.e. compile once per startup of whet.
+        // The cache should/could be on the core level, i.e. no stone needs to actually deal with it, it's abstracted away
+        // I.e. when getting source from something it automatically goes through the cache, and every stine has settings that
+        // can be changed.
         var path = getBuildPath();
         if (sys.FileSystem.exists(path))
-            return sys.io.File.getBytes(path);
+            return WhetSource.fromFile(path);
         else return null;
     }
     #end
