@@ -27,7 +27,11 @@ class ClosureCompilerStone extends Whetstone {
             return null;
         });
         Whet.msg('Closure compiling ${files.length} file${files.length == 1 ? "" : "s"}.');
-        // TODO add Ids to sources, print out names and sizes here
+        var totalSizeKB = 0;
+        for (file in files) {
+            totalSizeKB += file.lengthKB;
+            Whet.msg('File ${file.getFilePath()} with size ${file.lengthKB} KB.');
+        }
 
         var args = [
             '-jar', compilerPath,
@@ -44,11 +48,11 @@ class ClosureCompilerStone extends Whetstone {
 
         return switch Sys.command('java', args) {
             case 0:
-                var size = FileSystem.stat(config.output).size;
+                var resource = WhetSource.fromFile(config.output);
                 var totalTime = Sys.time() - startTime;
                 var secondsRounded = Math.round(totalTime * 1000) / 1000;
-                Whet.msg('Success. Merged in ${secondsRounded}s, final size ${Math.round(size / 1024)} KB.');
-                WhetSource.fromFile(config.output);
+                Whet.msg('Success. Merged in ${secondsRounded}s, final size ${resource.lengthKB} KB (-${totalSizeKB - resource.lengthKB} KB).');
+                return resource;
             case error:
                 Whet.msg('Closure compile failed with error code $error.');
                 null;

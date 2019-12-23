@@ -56,33 +56,41 @@ abstract WhetstoneID(String) from String to String {
 }
 
 #if tink_io
-@:forward abstract WhetSource(WhetSourceDef) from WhetSourceDef {
-
-    public static function fromFile(path:String):WhetSource {
-        if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
-        var source = fromBytes(sys.io.File.getBytes(path));
-        source.file = path;
-        return source;
-    }
-
-    @:from public static function fromString(s:String)
-        return fromBytes(haxe.io.Bytes.ofString(s));
-
-    @:from public static function fromBytes(data:haxe.io.Bytes):WhetSource
-        return { data: data, length: data.length };
-
-    public function getFilePath():String {
-        if (this.file != null) return this.file;
-        else throw "not implemented yet";
-    }
-
-}
-
-typedef WhetSourceDef = {
+class WhetSource {
 
     public var data:tink.io.Source.IdealSource;
     public var length:Int;
-    public var ?file:String;
+    public var lengthKB(get, never):Int;
+    public final source:String;
 
+    var filePath:String = null;
+
+    private function new(data, length, pos:haxe.PosInfos) {
+        this.data = data;
+        this.length = length;
+        this.source = pos.className.split('.').pop();
+    }
+
+    public static function fromFile(path:String, ?pos:haxe.PosInfos):WhetSource {
+        if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
+        var source = fromBytes(sys.io.File.getBytes(path), pos);
+        source.filePath = path;
+        return source;
+    }
+
+    public static function fromString(s:String, ?pos:haxe.PosInfos) {
+        return fromBytes(haxe.io.Bytes.ofString(s), pos);
+    }
+
+    public static function fromBytes(data:haxe.io.Bytes, ?pos:haxe.PosInfos):WhetSource {
+        return new WhetSource(data, data.length, pos);
+    }
+
+    public function getFilePath():String {
+        if (this.filePath != null) return this.filePath;
+        else throw "not implemented yet";
+    }
+
+    inline function get_lengthKB() return Math.round(length / 1024);
 }
 #end

@@ -81,7 +81,7 @@ class HtmlStone extends Whetstone {
     }
 
     #if tink_io
-    public override function getSource():WhetSource return getContent();
+    public override function getSource():WhetSource return WhetSource.fromString(getContent());
     #end
 
 }
