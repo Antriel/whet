@@ -92,7 +92,7 @@ class ServerStone extends Whetstone {
                                     new HeaderField('Content-Range', 'bytes $pos-${pos + len - 1}/${source.length}'),
                                     new HeaderField('Content-Length', len),
                                 ])),
-                                source.data.skip(pos).limit(len)
+                                source.data.sub(pos, len)
                             );
                         }
 

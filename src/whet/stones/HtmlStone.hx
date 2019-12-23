@@ -80,10 +80,7 @@ class HtmlStone extends Whetstone {
         return sb.toString();
     }
 
-    #if tink_io
     public override function getSource():WhetSource return WhetSource.fromString(getContent());
-    #end
-
 }
 
 @:structInit class HtmlConfig {

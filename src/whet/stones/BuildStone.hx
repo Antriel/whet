@@ -72,7 +72,6 @@ class BuildStone extends Whetstone {
         }
     }
 
-    #if (sys || hxnodejs)
     @command public function hxml(_) {
         Whet.msg('Generating hxml file.');
         var hxmlArgs = getArgs();
@@ -83,21 +82,20 @@ class BuildStone extends Whetstone {
     @command public function build(configs:String) {
         trace('running build with $configs');
     }
-    #end
 
-    #if tink_io
     public override function getSource():WhetSource {
         // TODO mode, cached, just-relay file, always new...
         // Use global cache system, default mode to 'fresh cache' i.e. compile once per startup of whet.
         // The cache should/could be on the core level, i.e. no stone needs to actually deal with it, it's abstracted away
         // I.e. when getting source from something it automatically goes through the cache, and every stine has settings that
         // can be changed.
+        // invalidation: when something uses something, it gets dirty when dependencies are dirty
+        // saving data to files, store temp var based on source name+hash in .whet/.ephemeral folder.
         var path = getBuildPath();
         if (sys.FileSystem.exists(path))
             return WhetSource.fromFile(path);
         else return null;
     }
-    #end
 
 }
 

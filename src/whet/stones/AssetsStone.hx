@@ -4,8 +4,6 @@ import sys.FileSystem;
 import sys.io.File;
 import haxe.io.Path;
 import whet.Whetstone;
-#if tink_io
-import tink.io.Source;
 
 class AssetsStone extends Whetstone {
 
@@ -91,4 +89,3 @@ class AssetsStone extends Whetstone {
     public var files:Map<SourceId, SourceId> = [];
 
 }
-#end

@@ -24,7 +24,6 @@ class Whetstone {
         }
     }
 
-    #if tink_io
     var router:WhetSourceRouter;
 
     public function route(routes:Map<SourceId, Whetstone>) {
@@ -40,7 +39,6 @@ class Whetstone {
     public function findSource(id:SourceId):WhetSource {
         return router == null ? null : router.find(id);
     }
-    #end
 
 }
 
@@ -55,10 +53,9 @@ abstract WhetstoneID(String) from String to String {
         return fromClass(Type.getClass(v));
 }
 
-#if tink_io
 class WhetSource {
 
-    public var data:tink.io.Source.IdealSource;
+    public var data:haxe.io.Bytes;
     public var length:Int;
     public var lengthKB(get, never):Int;
     public final source:String;
@@ -93,4 +90,3 @@ class WhetSource {
 
     inline function get_lengthKB() return Math.round(length / 1024);
 }
-#end

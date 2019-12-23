@@ -2,7 +2,6 @@ package whet;
 
 import whet.Whetstone;
 
-#if tink_io
 abstract WhetSourceRouter(SourceMap) from SourceMap {
 
     public function find(id:SourceId):WhetSource {
@@ -22,4 +21,3 @@ abstract WhetSourceRouter(SourceMap) from SourceMap {
 }
 
 typedef SourceMap = haxe.ds.Map<SourceId, Whetstone>;
-#end
