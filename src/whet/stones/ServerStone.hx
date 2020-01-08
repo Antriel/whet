@@ -44,10 +44,10 @@ class ServerStone extends Whetstone {
             case GET:
                 if (id.isDir()) id.withExt = "index.html";
                 else if (id.ext == '') id = '$id/index.html';
-                var data = findSource(id);
+                var data = findStone(id);
                 if (data != null) {
                     var mime = mime.Mime.lookup(id);
-                    res = partial(req.header, data, mime, id.withExt);
+                    res = partial(req.header, data.getSource(), mime, id.withExt);
                 } else res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
             case PUT:
                 var cmd = haxe.io.Path.removeTrailingSlashes(id);

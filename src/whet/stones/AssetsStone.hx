@@ -59,8 +59,8 @@ class AssetsStone extends Whetstone {
         return arr.map(p -> Path.normalize(p));
     }
 
-    override function findSource(id:SourceId):WhetSource {
-        var routeResult = super.findSource(id);
+    override function findStone(id:SourceId):Whetstone {
+        var routeResult = super.findStone(id);
         if (routeResult != null) return routeResult;
         for (src => serve in config.files) {
             var path = null;
@@ -70,7 +70,7 @@ class AssetsStone extends Whetstone {
                 if (id == serve) path = src;
             }
             if (path != null && FileSystem.exists(path)) {
-                return WhetSource.fromFile(path);
+                return new FileStone(project, path);
             }
         }
         return null;

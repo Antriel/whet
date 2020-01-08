@@ -75,6 +75,7 @@ class BuildStone extends Whetstone {
     @command public function hxml(_) {
         Whet.msg('Generating hxml file.');
         var hxmlArgs = getArgs();
+        // TODO if dir doesn't exist, create it.
         File.saveContent(hxmlPath, hxmlArgs.join('\n'));
         Whet.msg('Generated $hxmlPath.');
     }
@@ -83,7 +84,7 @@ class BuildStone extends Whetstone {
         trace('running build with $configs');
     }
 
-    public override function getSource():WhetSource {
+    public override function generateSource():WhetSource {
         // TODO mode, cached, just-relay file, always new...
         // Use global cache system, default mode to 'fresh cache' i.e. compile once per startup of whet.
         // The cache should/could be on the core level, i.e. no stone needs to actually deal with it, it's abstracted away
@@ -93,7 +94,7 @@ class BuildStone extends Whetstone {
         // saving data to files, store temp var based on source name+hash in .whet/.ephemeral folder.
         var path = getBuildPath();
         if (sys.FileSystem.exists(path))
-            return WhetSource.fromFile(path);
+            return WhetSource.fromFile(path, null);
         else return null;
     }
 

@@ -19,7 +19,7 @@ abstract SourceId(String) {
     public inline function isDir():Bool return this == dir;
 
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
-        if (!directory.isDir()) throw '"$directory" is not a directory.';
+        assertDir(directory);
         return nested ? dir.toRelPath().indexOf(directory) == 0 : dir == directory;
     }
 
@@ -29,6 +29,15 @@ abstract SourceId(String) {
             rel.withExt = withExt;
             return rel;
         } else return null;
+    }
+
+    public function getPutInDir(dir:SourceId):SourceId {
+        assertDir(dir);
+        return dir + this;
+    }
+
+    public static inline function assertDir(directory:SourceId) {
+        if (!directory.isDir()) throw '"$directory" is not a directory.';
     }
 
     private inline function get_withExt() return this.withoutDirectory();
@@ -44,7 +53,7 @@ abstract SourceId(String) {
 
     private inline function get_withoutExt() return this.withoutDirectory().withoutExtension();
 
-    private inline function set_withoutExt(v):String throw "Not implemented.";
+    private inline function set_withoutExt(v):String return this = '$dir$v' + (ext == "" ? "" : '.$ext');
 
     private inline function get_dir():SourceId return this.directory().addTrailingSlash();
 
