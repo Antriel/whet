@@ -25,7 +25,7 @@ class CacheManager {
     }
 
     static public function getFilePath(stone:Whetstone, ?fileId:SourceId):SourceId {
-        if (fileId == null) fileId = "file";
+        if (fileId == null) fileId = "file.dat";
         var fileCache:FileCache = null;
 
         if (stone.cacheMode.match(FileCache)) {
@@ -33,7 +33,7 @@ class CacheManager {
         } else {
             fileCache = tempFiles;
         }
-        return fileCache.add(stone, fileId);
+        return fileCache.add(stone.id, fileId);
         // TODO clean tmp on start/end of process
     }
 
@@ -58,17 +58,9 @@ class FileCache {
     }
 
     public function add(stoneId:WhetstoneID, fileId:SourceId):SourceId {
-        if (!map.exists(stoneId)) map.set(stoneId, []);
+        fileId = fileId.getPutInDir(stoneId + '/');
         fileId = fileId.getPutInDir(folder);
-        var allFiles = map.get(stoneId);
-        var name = fileId.withoutExt;
-        var counter = -1;
-        do {
-            fileId.withoutExt = counter >= 0 ? name + counter : name;
-            counter++;
-        } while (allFiles.indexOf(fileId) >= 0);
-        allFiles.push(fileId);
-
+        // TODO empty for temp cache, but will add stuff for file cache.
         return fileId;
     }
 
