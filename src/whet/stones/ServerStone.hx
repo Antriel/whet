@@ -1,26 +1,26 @@
 package whet.stones;
 
 import whet.Whetstone;
-#if (tink_web && hxnodejs && mime)
+#if tink_http
 import tink.CoreApi;
 import tink.http.Handler;
 import tink.http.Request;
 import tink.http.Response;
 import tink.http.containers.*;
-import tink.web.routing.*;
 import tink.http.Header;
 import tink.io.Source.RealSourceTools;
+#end
 
 class ServerStone extends Whetstone {
 
-    var config:ServerConfig;
+    public var config:ServerConfig;
 
-    public function new(project:WhetProject, config:ServerConfig = null) {
-        super(project);
-        this.config = config == null ? { } : config;
+    public function new(project:WhetProject, id:WhetstoneID = null, config:ServerConfig = null) {
+        super(project, id);
+        this.config = config != null ? config : {};
     }
 
-    #if !macro
+    #if (!macro && tink_http && hxnodejs && mime)
     @command public function start(_) {
         var container = new NodeContainer(config.port, { upgradable: true });
         var h:Handler = handler;
@@ -112,22 +112,13 @@ class ServerStone extends Whetstone {
                 );
         }
     }
-    #end
-
-}
-#else
-class ServerStone extends Whetstone {
-
-    public function new(project:WhetProject, config:ServerConfig = null) {
-        super(project);
-    }
-
+    #else
     @command public function start(_) {
         Whet.error('ServerStone requires tink_web and mime libraries.');
     }
+    #end
 
 }
-#end
 
 @:structInit
 class ServerConfig {

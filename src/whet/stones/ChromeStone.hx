@@ -1,12 +1,14 @@
 package whet.stones;
 
+import whet.Whetstone;
+
 class ChromeStone extends Whetstone {
 
-    var config:ChromeConfig;
+    public var config:ChromeConfig;
 
-    public function new(project:WhetProject, config:ChromeConfig = null) {
-        super(project);
-        this.config = config == null ? { } : config;
+    public function new(project:WhetProject, id:WhetstoneID = null, config:ChromeConfig = null) {
+        super(project, id);
+        this.config = config != null ? config : {};
     }
 
     #if !macro

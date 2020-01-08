@@ -3,17 +3,16 @@ package whet.stones;
 import sys.FileSystem;
 import whet.Whetstone;
 
-#if closure
 class ClosureCompilerStone extends Whetstone {
 
-    var config:ClosureStoneConfig;
+    public var config:ClosureCompilerConfig;
 
-    public function new(project:WhetProject, config:ClosureStoneConfig) {
-        super(project);
-        this.cacheMode = MemoryCache; // TODO use File one
+    public function new(project:WhetProject, id:WhetstoneID = null, config:ClosureCompilerConfig) {
+        super(project, id, MemoryCache); // TODO use FileCache.
         this.config = config;
     }
 
+    #if closure
     static var compilerPath:String = #if macro getCompilerPathImpl(); #else getCompilerPath(); #end
 
     public override function generateSource():WhetSource {
@@ -85,24 +84,16 @@ class ClosureCompilerStone extends Whetstone {
         return path;
     }
     #end
-
-}
-#else
-class ClosureCompilerStone extends Whetstone {
-
-    public function new(project:WhetProject, config:ClosureStoneConfig) {
-        super(project);
-    }
-
+    #else
     public override function generateSource():WhetSource {
         Whet.error('ClosureCompilerStone requires closure library.');
         return null;
     }
+    #end
 
 }
-#end
 
-@:structInit class ClosureStoneConfig {
+@:structInit class ClosureCompilerConfig {
 
     public var files:Array<SourceId>;
     public var sources:Array<Whetstone>;

@@ -9,9 +9,11 @@ import tink.websocket.RawMessage;
 import tink.websocket.MessageStream;
 import tink.streams.Stream;
 import tink.http.middleware.WebSocket;
+#end
 
 class WebSocketStone extends Whetstone implements WhetServerMiddleware {
 
+    #if (tink_websocket && tink_http_middleware)
     var server:TinkServer;
 
     public function getMiddleware():WebSocket {
@@ -31,9 +33,6 @@ class WebSocketStone extends Whetstone implements WhetServerMiddleware {
             }
         }
     }
+    #end
 
 }
-#else
-class WebSocketStone extends Whetstone implements WhetServerMiddleware { }
-
-#end

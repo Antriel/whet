@@ -7,7 +7,7 @@ class FileStone extends Whetstone {
     final filePath:String;
 
     public function new(project:WhetProject, filePath:String) {
-        super(project);
+        super(project, filePath);
         this.filePath = filePath;
     }
 

@@ -7,11 +7,11 @@ import whet.Whetstone;
 
 class AssetsStone extends Whetstone {
 
-    var config:AssetsConfig;
+    public var config:AssetsConfig;
 
-    public function new(project:WhetProject, config:AssetsConfig = null) {
-        super(project);
-        this.config = config == null ? { } : config;
+    public function new(project:WhetProject, id:WhetstoneID = null, config:AssetsConfig = null) {
+        super(project, id);
+        this.config = config != null ? config : {};
     }
 
     /**

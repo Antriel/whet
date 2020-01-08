@@ -10,46 +10,47 @@ using whet.ArgTools;
 
 class BuildStone extends Whetstone {
 
-    var config:HxmlConfig;
-    var hxmlPath:String;
+    public var config:BuildConfig;
 
-    public function new(project:WhetProject, config:HxmlConfig, hxmlPath:String = null) {
-        super(project);
-        this.config = config;
-        if (hxmlPath == null) hxmlPath = '.whet/build.hxml';
-        this.hxmlPath = hxmlPath;
+    public function new(project:WhetProject, id:WhetstoneID = null, config:BuildConfig) {
+        if (id == null) id = project.config.id;
+        super(project, id);
+        this.config = config != null ? config : {};
+        if (this.config.hxmlPath == null) config.hxmlPath = '.whet/build.hxml';
     }
 
     public function mergeConfig(additionalConfig:HxmlConfig):BuildStone {
         function merge<T>(from:Array<T>, to:Array<T>)
             if (from != null) for (item in from) if (to.indexOf(item) == -1) to.push(item);
 
-        merge(additionalConfig.libs, config.libs);
-        merge(additionalConfig.paths, config.paths);
-        merge(additionalConfig.defines, config.defines);
-        merge(additionalConfig.flags, config.flags);
-        if (additionalConfig.dce != null) config.dce = additionalConfig.dce;
-        if (additionalConfig.main != null) config.main = additionalConfig.main;
-        if (additionalConfig.debug != null) config.debug = additionalConfig.debug;
+        var hxml = config.hxml;
+        merge(additionalConfig.libs, hxml.libs);
+        merge(additionalConfig.paths, hxml.paths);
+        merge(additionalConfig.defines, hxml.defines);
+        merge(additionalConfig.flags, hxml.flags);
+        if (additionalConfig.dce != null) hxml.dce = additionalConfig.dce;
+        if (additionalConfig.main != null) hxml.main = additionalConfig.main;
+        if (additionalConfig.debug != null) hxml.debug = additionalConfig.debug;
         return this;
     }
 
     public function getArgs():Array<String> {
+        var hxml = config.hxml;
         return Lambda.flatten([
             ['# Generated from Whet library. Do not manually edit.'],
-            config.libs.map(lib -> '-lib $lib'),
-            config.paths.map(path -> '-cp $path'),
-            config.defines.map(def -> '-D $def'),
-            config.dce != null ? ['-dce ${config.dce}'] : [],
-            config.main != null ? ['-main ${config.main}'] : [],
-            config.debug == true ? ['-debug'] : [],
+            hxml.libs.map(lib -> '-lib $lib'),
+            hxml.paths.map(path -> '-cp $path'),
+            hxml.defines.map(def -> '-D $def'),
+            hxml.dce != null ? ['-dce ${hxml.dce}'] : [],
+            hxml.main != null ? ['-main ${hxml.main}'] : [],
+            hxml.debug == true ? ['-debug'] : [],
             getBuild(),
-            config.flags
+            hxml.flags
         ]);
     }
 
     function getBuild():Array<String> {
-        return switch config.build {
+        return switch config.hxml.build {
             case null: [];
             case JS(file): ['-js $file'];
             case SWF(file): ['-swf $file'];
@@ -66,7 +67,7 @@ class BuildStone extends Whetstone {
     }
 
     function getBuildPath():String {
-        return switch config.build {
+        return switch config.hxml.build {
             case JS(file) | SWF(file) | NEKO(file) | PYTHON(file) | LUA(file) | HL(file) | CPPIA(file): file;
             case _: throw "Not supported for this build.";
         }
@@ -76,8 +77,8 @@ class BuildStone extends Whetstone {
         Whet.msg('Generating hxml file.');
         var hxmlArgs = getArgs();
         // TODO if dir doesn't exist, create it.
-        File.saveContent(hxmlPath, hxmlArgs.join('\n'));
-        Whet.msg('Generated $hxmlPath.');
+        File.saveContent(config.hxmlPath, hxmlArgs.join('\n'));
+        Whet.msg('Generated ${config.hxmlPath}.');
     }
 
     @command public function build(configs:String) {
@@ -97,6 +98,13 @@ class BuildStone extends Whetstone {
             return WhetSource.fromFile(path, null);
         else return null;
     }
+
+}
+
+@:structInit class BuildConfig {
+
+    public var hxml:HxmlConfig = {};
+    public var hxmlPath:String = null;
 
 }
 

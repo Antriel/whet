@@ -4,15 +4,13 @@ import whet.Whetstone;
 
 class HtmlStone extends Whetstone {
 
-    var config:HtmlConfig;
+    public var config:HtmlConfig;
 
-    public function new(project:WhetProject, config:HtmlConfig = null, setDefaults:Bool = true) {
-        super(project);
-        this.config = config == null ? { } : config;
-        if (setDefaults) {
-            if (this.config.title == null) this.config.title = project.config.name;
-            if (this.config.description == null) this.config.description = project.config.description;
-        }
+    public function new(project:WhetProject, id:WhetstoneID = null, config:HtmlConfig = null) {
+        super(project, id);
+        this.config = config != null ? config : {};
+        if (this.config.title == null) this.config.title = project.config.name;
+        if (this.config.description == null) this.config.description = project.config.description;
         // TODO:
         // x config options for common elements
         // x build by iterating the config and use string builder

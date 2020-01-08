@@ -6,14 +6,15 @@ import haxe.rtti.Meta;
 
 class Whetstone {
 
+    public final id:WhetstoneID;
+    public var cacheMode:CacheMode;
+
     var project:WhetProject;
 
-    public var cacheMode:CacheMode = NoCache;
-
-    public function new(project:WhetProject) {
+    public function new(project:WhetProject, id:WhetstoneID = null, cacheMode = NoCache) {
         this.project = project;
-        if (project.stones.exists(this)) project.stones.get(this).push(this);
-        else project.stones.set(this, [this]);
+        this.cacheMode = cacheMode;
+        this.id = project.add(this, id != null ? id : this);
         var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(this));
         for (name => val in meta) {
             if (Reflect.hasField(val, 'command')) {
@@ -49,7 +50,7 @@ abstract WhetstoneID(String) from String to String {
 
     @:from
     public static inline function fromClass(v:Class<Whetstone>):WhetstoneID
-        return Type.getClassName(v);
+        return Type.getClassName(v).split('.').pop();
 
     @:from
     public static inline function fromInstance(v:Whetstone):WhetstoneID
