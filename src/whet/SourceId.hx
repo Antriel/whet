@@ -53,7 +53,7 @@ abstract SourceId(String) {
 
     private inline function get_withoutExt() return this.withoutDirectory().withoutExtension();
 
-    private inline function set_withoutExt(v):String return this = '$dir$v' + (ext == "" ? "" : '.$ext');
+    private inline function set_withoutExt(v):String return this = '/$dir$v' + (ext == "" ? "" : '.$ext');
 
     private inline function get_dir():SourceId return this.directory().addTrailingSlash();
 

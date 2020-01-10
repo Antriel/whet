@@ -78,7 +78,7 @@ class HtmlStone extends Whetstone {
         return sb.toString();
     }
 
-    public override function generateSource():WhetSource return WhetSource.fromString(getContent(), null);
+    public override function generateSource():WhetSource return WhetSource.fromString(this, getContent(), null);
 }
 
 @:structInit class HtmlConfig {

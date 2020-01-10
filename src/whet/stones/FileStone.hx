@@ -12,7 +12,7 @@ class FileStone extends Whetstone {
     }
 
     override function generateSource():WhetSource {
-        return WhetSource.fromFile(filePath, null);
+        return WhetSource.fromFile(this, filePath, null);
     }
 
 }

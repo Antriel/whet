@@ -27,10 +27,7 @@ class WhetProject {
     public function stoneByID(id:WhetstoneID) return stones.get(id);
 
     @:allow(whet.Whetstone) function add(stone:Whetstone, id:WhetstoneID):WhetstoneID {
-        var uniqueId = id;
-        var counter = 1;
-        while (stones.exists(uniqueId))
-            uniqueId = (id:String) + ++counter;
+        var uniqueId = Utils.makeUniqueString(id, id -> stones.exists(id));
         stones.set(uniqueId, stone);
         return uniqueId;
     }

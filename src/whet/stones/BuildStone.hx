@@ -6,8 +6,6 @@ import whet.Whetstone;
 import sys.io.File;
 #end
 
-using whet.ArgTools;
-
 class BuildStone extends Whetstone {
 
     public var config:BuildConfig;
@@ -95,7 +93,7 @@ class BuildStone extends Whetstone {
         // saving data to files, store temp var based on source name+hash in .whet/.ephemeral folder.
         var path = getBuildPath();
         if (sys.FileSystem.exists(path))
-            return WhetSource.fromFile(path, null);
+            return WhetSource.fromFile(this, path, null);
         else return null;
     }
 

@@ -7,13 +7,13 @@ import haxe.rtti.Meta;
 class Whetstone {
 
     public final id:WhetstoneID;
-    public var cacheMode:CacheMode;
+    public var cacheStrategy:CacheStrategy;
 
     var project:WhetProject;
 
-    public function new(project:WhetProject, id:WhetstoneID = null, cacheMode = NoCache) {
+    public function new(project:WhetProject, id:WhetstoneID = null, cacheStrategy = null) {
         this.project = project;
-        this.cacheMode = cacheMode;
+        this.cacheStrategy = cacheStrategy != null ? cacheStrategy : CacheManager.defaultStrategy;
         this.id = project.add(this, id != null ? id : this);
         var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(this));
         for (name => val in meta) {
@@ -60,39 +60,44 @@ abstract WhetstoneID(String) from String to String {
 class WhetSource {
 
     public final data:haxe.io.Bytes;
-    public final source:String;
+    public final origin:Whetstone;
     public final hash:WhetSourceHash;
 
     public var length(get, never):Int;
     public var lengthKB(get, never):Int;
 
-    var filePath:String = null;
+    var filePath:SourceId = null;
 
-    private function new(data, hash, pos:haxe.PosInfos) {
+    private function new(origin, data, hash) {
         this.data = data;
         this.hash = hash;
-        this.source = pos.className.split('.').pop();
+        this.origin = origin;
     }
 
-    public static function fromFile(path:String, hash:WhetSourceHash, ?pos:haxe.PosInfos):WhetSource {
+    public static function fromFile(stone:Whetstone, path:String, hash:WhetSourceHash):WhetSource {
         if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
-        var source = fromBytes(sys.io.File.getBytes(path), hash, pos);
+        var source = fromBytes(stone, sys.io.File.getBytes(path), hash);
         source.filePath = path;
         return source;
     }
 
-    public static function fromString(s:String, hash:WhetSourceHash, ?pos:haxe.PosInfos) {
-        return fromBytes(haxe.io.Bytes.ofString(s), hash, pos);
+    public static function fromString(stone:Whetstone, s:String, hash:WhetSourceHash) {
+        return fromBytes(stone, haxe.io.Bytes.ofString(s), hash);
     }
 
-    public static function fromBytes(data:haxe.io.Bytes, hash:WhetSourceHash, ?pos:haxe.PosInfos):WhetSource {
+    public static function fromBytes(stone:Whetstone, data:haxe.io.Bytes, hash:WhetSourceHash):WhetSource {
         if (hash == null) hash = data;
-        return new WhetSource(data, hash, pos);
+        return new WhetSource(stone, data, hash);
     }
 
-    public function getFilePath():String {
-        if (this.filePath != null) return this.filePath;
-        else throw "not implemented yet";
+    public function hasFile():Bool return this.filePath != null;
+
+    public function getFilePath():SourceId {
+        if (this.filePath == null) {
+            this.filePath = CacheManager.getFilePath(origin, origin.id);
+            sys.io.File.saveBytes(this.filePath, this.data); // TODO handle missing dir
+        }
+        return this.filePath;
     }
 
     inline function get_length() return data.length;
@@ -101,6 +106,8 @@ class WhetSource {
 }
 
 abstract WhetSourceHash(haxe.io.Bytes) {
+
+    static inline var HASH_LENGTH:Int = 20;
 
     @:from public static function fromBytes(data:haxe.io.Bytes):WhetSourceHash {
         return cast haxe.crypto.Sha1.make(data);
@@ -111,9 +118,9 @@ abstract WhetSourceHash(haxe.io.Bytes) {
     }
 
     @:op(A + B) public static function add(a:WhetSourceHash, b:WhetSourceHash):WhetSourceHash {
-        var data = haxe.io.Bytes.alloc(40);
-        data.blit(0, cast a, 0, 20);
-        data.blit(20, cast b, 0, 20);
+        var data = haxe.io.Bytes.alloc(HASH_LENGTH * 2);
+        data.blit(0, cast a, 0, HASH_LENGTH);
+        data.blit(HASH_LENGTH, cast b, 0, HASH_LENGTH);
         return fromBytes(data);
     }
 
@@ -122,8 +129,14 @@ abstract WhetSourceHash(haxe.io.Bytes) {
 
     @:op(A != B) public function notEquals(other:WhetSourceHash):Bool return !equals(other);
 
-    public function toString():String {
+    public function toHex():String {
         return this == null ? "" : this.toHex();
+    }
+
+    public static function fromHex(hex:String):WhetSourceHash {
+        var hash = haxe.io.Bytes.ofHex(hex);
+        if (hash.length != HASH_LENGTH) return null;
+        else return cast hash;
     }
 
 }
