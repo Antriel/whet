@@ -74,8 +74,7 @@ class BuildStone extends Whetstone {
     @command public function hxml(_) {
         Whet.msg('Generating hxml file.');
         var hxmlArgs = getArgs();
-        // TODO if dir doesn't exist, create it.
-        File.saveContent(config.hxmlPath, hxmlArgs.join('\n'));
+        whet.Utils.saveContent(config.hxmlPath, hxmlArgs.join('\n'));
         Whet.msg('Generated ${config.hxmlPath}.');
     }
 

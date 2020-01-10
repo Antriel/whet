@@ -95,7 +95,7 @@ class WhetSource {
     public function getFilePath():SourceId {
         if (this.filePath == null) {
             this.filePath = CacheManager.getFilePath(origin, origin.id);
-            sys.io.File.saveBytes(this.filePath, this.data); // TODO handle missing dir
+            Utils.saveBytes(this.filePath, this.data);
         }
         return this.filePath;
     }

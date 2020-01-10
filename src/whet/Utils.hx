@@ -22,4 +22,25 @@ class Utils {
 
     public static inline function makeUniqueString(s:String, isNotUnique:String->Bool):String
         return makeUnique(s, isNotUnique, (s, v) -> s + v);
+
+    public static function ensureDirExist(path:String):Void {
+        var fullPath = "";
+        for (dir in haxe.io.Path.directory(path).split('/')) {
+            fullPath += '$dir/';
+            if (!sys.FileSystem.exists(fullPath)) sys.FileSystem.createDirectory(fullPath);
+        }
+    }
+
+    /** Same as `sys.io.File.saveContent`, but also creates missing directories. */
+    public static function saveContent(path:String, content:String):Void {
+        ensureDirExist(path);
+        sys.io.File.saveContent(path, content);
+    }
+
+    /** Same as `sys.io.File.saveBytes`, but also creates missing directories. */
+    public static function saveBytes(path:String, bytes:haxe.io.Bytes):Void {
+        ensureDirExist(path);
+        sys.io.File.saveBytes(path, bytes);
+    }
+
 }

@@ -179,7 +179,7 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
     override function value(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue return {
         hash: source.hash,
         fileHash: source.data,
-        filePath: source.getFilePath() // TODO implement, test it on some index file or something
+        filePath: source.getFilePath()
     }
 
     override function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
@@ -209,7 +209,7 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
             fileHash: val.fileHash.toHex(),
             filePath: val.filePath
         }]);
-        sys.io.File.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')); // TODO handle missing dir
+        Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t'));
     }
 
 }
