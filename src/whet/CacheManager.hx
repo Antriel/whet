@@ -7,23 +7,21 @@ class CacheManager {
 
     public static var defaultStrategy:CacheStrategy = None;
 
-    /** Keep last 5 for a day and last 1 indefinitely. */
+    /** Keep last used 5 for a day and last used 1 indefinitely. */
     public static var defaultFileStrategy:CacheStrategy = InFile(Any([
-        All([MaxAge(24 * 60 * 60), MaxVersions(5)]),
-        MaxVersions(1)
-    ]));
+        LimitCountByLastUse(1),
+        All([MaxAge(24 * 60 * 60), LimitCountByLastUse(5)])
+    ]), AllOnUse);
 
     static var memCache:MemoryCache = new MemoryCache();
-    static var fileCache:FileCache;
+    @:isVar static var fileCache(get, set):FileCache;
 
     static public function getSource(stone:Whetstone):WhetSource {
-        var cache:Cache = getCache(stone);
-        var source = cache.get(stone);
-        if (source == null) {
-            source = stone.generateSource();
-            cache.set(stone, source);
+        return switch stone.cacheStrategy {
+            case None: stone.generateSource();
+            case InMemory(durability, check): memCache.get(stone, durability, check);
+            case InFile(durability, check): fileCache.get(stone, durability, check);
         }
-        return source;
     }
 
     /** 
@@ -35,22 +33,24 @@ class CacheManager {
         fileId = fileId.getPutInDir(stone.id + '/');
         if (stone.cacheStrategy.match(None | InMemory(_))) fileId = fileId.getPutInDir('.temp/');
         fileId = fileId.getPutInDir('.whet/');
-        return getCache(stone).getUniqueName(stone, fileId);
+        return switch stone.cacheStrategy {
+            case None: fileId;
+            case InMemory(_): memCache.getUniqueName(stone, fileId);
+            case InFile(_): fileCache.getUniqueName(stone, fileId);
+        }
         // TODO clean tmp on start/end of process
     }
 
-    static function getCache(stone:Whetstone):Cache return switch stone.cacheStrategy {
-        case None: NoCache.instance;
-        case InMemory(_): memCache;
-        case InFile(_): fileCache != null ? fileCache : (fileCache = new FileCache());
-    }
+    static function get_fileCache():FileCache return fileCache != null ? fileCache : (fileCache = new FileCache());
+
+    static function set_fileCache(v):FileCache return fileCache = v;
 }
 
 enum CacheStrategy {
 
     None;
-    InMemory(durability:CacheDurability);
-    InFile(durability:CacheDurability);
+    InMemory(durability:CacheDurability, check:DurabilityCheck);
+    InFile(durability:CacheDurability, check:DurabilityCheck);
     // TODO combined file+memory cache?
 
 }
@@ -58,7 +58,8 @@ enum CacheStrategy {
 enum CacheDurability {
 
     KeepForever;
-    MaxVersions(count:Int);
+    LimitCountByLastUse(count:Int);
+    LimitCountByAge(count:Int);
     MaxAge(seconds:Int);
     Custom(keep:WhetSource->Bool);
     All(keepIfAll:Array<CacheDurability>);
@@ -66,36 +67,67 @@ enum CacheDurability {
 
 }
 
+enum DurabilityCheck {
+
+    /** Checks all cached sources for a stone, whenever the cache is used. The default. */
+    AllOnUse;
+
+    /**
+     * Checks all cached sources for a stone, whenever any resource is being added to the cache.
+     * Improves performance, but can leave behind invalid files.
+     */
+    AllOnSet;
+
+    /** 
+     * Checks just the cached source when receiving it. Useful for custom durability checks
+     * and situations where the hash isn't ensuring validity.
+     */
+    SingleOnGet;
+
+}
+
 private interface Cache {
 
-    public function get(stone:Whetstone):WhetSource;
-    public function set(stone:Whetstone, source:WhetSource):Void;
+    public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
     public function getUniqueName(stone:Whetstone, id:SourceId):SourceId;
 
 }
 
-private class BaseCache<Key, Value:{final hash:WhetSourceHash;}> implements Cache {
+private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float;}> implements Cache {
 
-    var cache:Map<Key, Array<Value>>;
+    var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
 
-    public function get(stone:Whetstone):WhetSource {
+    public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
         var values = cache.get(key(stone));
+        var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
+        var value:Value = null;
         if (values != null && values.length > 0) {
             var hash = stone.getHash();
-            for (val in values) if (val.hash == hash) return source(stone, val);
+            value = Lambda.find(values, v -> v.hash == hash);
+            if (value != null && check.match(SingleOnGet) && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
+                remove(stone, value);
+                value = null;
+            }
+            if (value != null) setRecentUseOrder(values, value);
         }
-        return null;
+        if (value == null) {
+            if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
+            value = set(stone, stone.generateSource());
+        }
+        if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
+        return value != null ? source(stone, value) : null;
     }
 
-    public function set(stone:Whetstone, source:WhetSource):Void {
+    function set(stone:Whetstone, source:WhetSource):Value {
         var k = key(stone);
         if (!cache.exists(k)) cache.set(k, []);
-        cache.get(k).push(value(stone, source));
-        // TODO eviction
+        var values = cache.get(k);
+        var val = value(stone, source);
+        values.unshift(val);
+        return val;
     }
 
     public function getUniqueName(stone:Whetstone, id:SourceId):SourceId {
-        var list = cache.get(key(stone));
         var filenames = getFilenames(stone);
         if (filenames != null) {
             return Utils.makeUnique(id, id -> filenames.indexOf(id) >= 0, (id, v) -> {
@@ -105,6 +137,34 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash;}> implements Cach
         } else return id;
     }
 
+    function checkDurability(stone:Whetstone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
+            ageIndex:Value->Int):Void {
+        if (values == null || values.length == 0) return;
+        var i = values.length;
+        while (--i > 0) {
+            if (!shouldKeep(stone, values[i], durability, useIndex, ageIndex)) remove(stone, values[i]);
+        }
+    }
+
+    function shouldKeep(stone:Whetstone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
+        return switch durability {
+            case KeepForever: true;
+            case LimitCountByLastUse(count): useIndex(val) < count;
+            case LimitCountByAge(count): ageIndex(val) < count;
+            case MaxAge(seconds): (Sys.time() - val.ctime) <= seconds;
+            case Custom(keep): keep(source(stone, val));
+            case All(keepIfAll): Lambda.foreach(keepIfAll, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
+            case Any(keepIfAny): Lambda.exists(keepIfAny, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
+        }
+    }
+
+    function setRecentUseOrder(values:Array<Value>, value:Value):Void {
+        values.remove(value);
+        values.unshift(value);
+    }
+
+    function remove(stone:Whetstone, value:Value):Void cache.get(key(stone)).remove(value);
+
     function key(stone:Whetstone):Key return null;
 
     function value(stone:Whetstone, source:WhetSource):Value return null;
@@ -112,19 +172,6 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash;}> implements Cach
     function source(stone:Whetstone, value:Value):WhetSource return null;
 
     function getFilenames(stone:Whetstone):Array<SourceId> return null;
-}
-
-private class NoCache implements Cache {
-
-    public static final instance:NoCache = new NoCache();
-
-    private function new() { }
-
-    public function get(stone:Whetstone):WhetSource return null;
-
-    public function set(stone:Whetstone, source:WhetSource):Void { }
-
-    public function getUniqueName(stone:Whetstone, id:SourceId):SourceId return id;
 }
 
 private class MemoryCache extends BaseCache<Whetstone, WhetSource> {
@@ -150,6 +197,7 @@ private class MemoryCache extends BaseCache<Whetstone, WhetSource> {
 typedef FileCacheValue<H, S> = {
 
     final hash:H;
+    final ctime:Float;
     final fileHash:H;
     final filePath:S;
 
@@ -168,6 +216,7 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
             var db:DbJson = haxe.Json.parse(sys.io.File.getContent(dbFile));
             for (key => values in db) cache.set(key, [for (val in values) {
                 hash: WhetSourceHash.fromHex(val.hash),
+                ctime: val.ctime,
                 fileHash: WhetSourceHash.fromHex(val.fileHash),
                 filePath: val.filePath
             }]);
@@ -178,6 +227,7 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
 
     override function value(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue return {
         hash: source.hash,
+        ctime: source.ctime,
         fileHash: source.data,
         filePath: source.getFilePath()
     }
@@ -185,15 +235,16 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
     override function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
         var source = WhetSource.fromFile(stone, value.filePath, value.hash);
         if (source == null || value.fileHash != source.data) {
-            cache.get(stone.id).remove(value); // remove from DB
+            remove(stone, value);
             flush();
             return null;
         } else return source;
     }
 
-    public override function set(stone:Whetstone, source:WhetSource):Void {
-        super.set(stone, source);
+    override function set(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue {
+        var val = super.set(stone, source);
         flush();
+        return val;
     }
 
     override function getFilenames(stone:Whetstone):Array<SourceId> {
@@ -202,10 +253,22 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         else return null;
     }
 
+    override function remove(stone:Whetstone, value:RuntimeFileCacheValue):Void {
+        sys.FileSystem.deleteFile(value.filePath);
+        super.remove(stone, value);
+        flush();
+    }
+
+    override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Void {
+        super.setRecentUseOrder(values, value);
+        flush();
+    }
+
     function flush() {
         var db:DbJson = {};
         for (id => values in cache) db.set(id, [for (val in values) {
             hash: val.hash.toHex(),
+            ctime: val.ctime,
             fileHash: val.fileHash.toHex(),
             filePath: val.filePath
         }]);

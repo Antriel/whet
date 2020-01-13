@@ -42,7 +42,7 @@ class Whetstone {
 
     public function getHash():WhetSourceHash return generateSource().hash;
 
-    @:allow(whet.CacheManager) private function generateSource():WhetSource throw "Not implemented";
+    @:allow(whet) private function generateSource():WhetSource throw "Not implemented";
 
 }
 
@@ -62,19 +62,21 @@ class WhetSource {
     public final data:haxe.io.Bytes;
     public final origin:Whetstone;
     public final hash:WhetSourceHash;
+    public final ctime:Float;
 
     public var length(get, never):Int;
     public var lengthKB(get, never):Int;
 
     var filePath:SourceId = null;
 
-    private function new(origin, data, hash) {
+    private function new(origin, data, hash, ctime = null) {
         this.data = data;
         this.hash = hash;
         this.origin = origin;
+        this.ctime = ctime != null ? ctime : Sys.time();
     }
 
-    public static function fromFile(stone:Whetstone, path:String, hash:WhetSourceHash):WhetSource {
+    public static function fromFile(stone:Whetstone, path:String, hash:WhetSourceHash, ctime:Float = null):WhetSource {
         if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
         var source = fromBytes(stone, sys.io.File.getBytes(path), hash);
         source.filePath = path;
@@ -85,9 +87,9 @@ class WhetSource {
         return fromBytes(stone, haxe.io.Bytes.ofString(s), hash);
     }
 
-    public static function fromBytes(stone:Whetstone, data:haxe.io.Bytes, hash:WhetSourceHash):WhetSource {
+    public static function fromBytes(stone:Whetstone, data:haxe.io.Bytes, hash:WhetSourceHash, ctime:Float = null):WhetSource {
         if (hash == null) hash = data;
-        return new WhetSource(stone, data, hash);
+        return new WhetSource(stone, data, hash, ctime);
     }
 
     public function hasFile():Bool return this.filePath != null;
