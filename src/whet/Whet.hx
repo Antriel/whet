@@ -79,7 +79,9 @@ class Whet {
     public static function msg(msg:String):Void {
         #if (sys || hxnodejs)
         Sys.stdout().writeString(msg + '\n');
+        #if sys
         Sys.stdout().flush();
+        #end
         #else
         trace(msg);
         #end

@@ -9,6 +9,7 @@ class HtmlStone extends Whetstone {
     public function new(project:WhetProject, id:WhetstoneID = null, config:HtmlConfig = null) {
         super(project, id);
         this.config = config != null ? config : {};
+        this.defaultFilename = id != null ? '$id.html' : 'index.html';
         if (this.config.title == null) this.config.title = project.config.name;
         if (this.config.description == null) this.config.description = project.config.description;
         // TODO:
@@ -79,6 +80,7 @@ class HtmlStone extends Whetstone {
     }
 
     override function generateSource():WhetSource return WhetSource.fromString(this, getContent(), null);
+
 }
 
 @:structInit class HtmlConfig {

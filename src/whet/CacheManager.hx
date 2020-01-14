@@ -19,8 +19,9 @@ class CacheManager {
     @:access(whet.Whetstone) static public function getSource(stone:Whetstone):WhetSource {
         return switch stone.cacheStrategy {
             case None: stone.generateSource();
-            case InMemory(durability, check): memCache.get(stone, durability, check);
-            case InFile(durability, check): fileCache.get(stone, durability, check);
+            case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
+            case InFile(durability, check): fileCache.get(stone, durability, check != null ? check : AllOnUse);
+            case SingleFile(_, durability): fileCache.get(stone, All([LimitCountByAge(1), durability]), AllOnUse);
         }
     }
 
@@ -37,6 +38,7 @@ class CacheManager {
             case None: fileId;
             case InMemory(_): memCache.getUniqueName(stone, fileId);
             case InFile(_): fileCache.getUniqueName(stone, fileId);
+            case SingleFile(filepath, _): filepath;
         }
         // TODO clean tmp on start/end of process
     }
@@ -44,13 +46,15 @@ class CacheManager {
     static function get_fileCache():FileCache return fileCache != null ? fileCache : (fileCache = new FileCache());
 
     static function set_fileCache(v):FileCache return fileCache = v;
+
 }
 
 enum CacheStrategy {
 
     None;
-    InMemory(durability:CacheDurability, check:DurabilityCheck);
-    InFile(durability:CacheDurability, check:DurabilityCheck);
+    InMemory(durability:CacheDurability, ?check:DurabilityCheck);
+    InFile(durability:CacheDurability, ?check:DurabilityCheck);
+    SingleFile(path:SourceId, durability:CacheDurability);
     // TODO combined file+memory cache?
 
 }
@@ -175,6 +179,7 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
     function source(stone:Whetstone, value:Value):WhetSource return null;
 
     function getFilenames(stone:Whetstone):Array<SourceId> return null;
+
 }
 
 private class MemoryCache extends BaseCache<Whetstone, WhetSource> {
@@ -251,13 +256,13 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
     }
 
     override function getFilenames(stone:Whetstone):Array<SourceId> {
-        var list = cache.get(stone);
+        var list = cache.get(stone.id);
         if (list != null) return list.map(s -> s.filePath);
         else return null;
     }
 
     override function remove(stone:Whetstone, value:RuntimeFileCacheValue):Void {
-        if (sys.FileSystem.exists(value.filePath))
+        if (sys.FileSystem.exists(value.filePath) && Lambda.count(cache.get(stone.id), v -> v.filePath == value.filePath) == 1)
             sys.FileSystem.deleteFile(value.filePath);
         super.remove(stone, value);
         flush();

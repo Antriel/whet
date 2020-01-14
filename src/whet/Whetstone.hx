@@ -45,6 +45,12 @@ class Whetstone {
 
     private function generateSource():WhetSource throw "Not implemented";
 
+    /** Caches this resource under supplied `path` as a single, always up-to-date copy. */
+    public function cacheAsSingleFile(path:SourceId):Void {
+        this.cacheStrategy = SingleFile(path, KeepForever);
+        getSource();
+    }
+
 }
 
 abstract WhetstoneID(String) from String to String {
@@ -56,6 +62,7 @@ abstract WhetstoneID(String) from String to String {
     @:from
     public static inline function fromInstance(v:Whetstone):WhetstoneID
         return fromClass(Type.getClass(v));
+
 }
 
 class WhetSource {
@@ -106,6 +113,7 @@ class WhetSource {
     inline function get_length() return data.length;
 
     inline function get_lengthKB() return Math.round(length / 1024);
+
 }
 
 abstract WhetSourceHash(haxe.io.Bytes) {
