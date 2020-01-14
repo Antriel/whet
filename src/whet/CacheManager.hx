@@ -159,9 +159,11 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
         }
     }
 
-    function setRecentUseOrder(values:Array<Value>, value:Value):Void {
+    function setRecentUseOrder(values:Array<Value>, value:Value):Bool {
+        if (values[0] == value) return false;
         values.remove(value);
         values.unshift(value);
+        return true;
     }
 
     function remove(stone:Whetstone, value:Value):Void cache.get(key(stone)).remove(value);
@@ -261,9 +263,10 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         flush();
     }
 
-    override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Void {
-        super.setRecentUseOrder(values, value);
-        flush();
+    override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Bool {
+        var changed = super.setRecentUseOrder(values, value);
+        if (changed) flush();
+        return changed;
     }
 
     function flush() {
