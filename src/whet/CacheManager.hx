@@ -29,7 +29,7 @@ class CacheManager {
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
      */
     static public function getFilePath(stone:Whetstone, ?fileId:SourceId):SourceId {
-        if (fileId == null) fileId = "file.dat";
+        if (fileId == null) fileId = stone.defaultFilename;
         fileId = fileId.getPutInDir(stone.id + '/');
         if (stone.cacheStrategy.match(None | InMemory(_))) fileId = fileId.getPutInDir('.temp/');
         fileId = fileId.getPutInDir('.whet/');

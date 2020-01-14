@@ -8,6 +8,7 @@ class Whetstone {
 
     public final id:WhetstoneID;
     public var cacheStrategy:CacheStrategy;
+    public var defaultFilename:String = "file.dat";
 
     var project:WhetProject;
 
@@ -96,7 +97,7 @@ class WhetSource {
 
     public function getFilePath():SourceId {
         if (this.filePath == null) {
-            this.filePath = CacheManager.getFilePath(origin, origin.id);
+            this.filePath = CacheManager.getFilePath(origin);
             Utils.saveBytes(this.filePath, this.data);
         }
         return this.filePath;
