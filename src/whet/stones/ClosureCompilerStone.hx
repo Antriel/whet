@@ -15,7 +15,7 @@ class ClosureCompilerStone extends Whetstone {
     #if closure
     static var compilerPath:String = #if macro getCompilerPathImpl(); #else getCompilerPath(); #end
 
-    public override function generateSource():WhetSource {
+    override function generateSource():WhetSource {
         var startTime = Sys.time();
         var files = getFiles().map(s -> s.getSource());
         Whet.msg('Closure compiling ${files.length} file${files.length == 1 ? "" : "s"}.');
@@ -85,7 +85,7 @@ class ClosureCompilerStone extends Whetstone {
     }
     #end
     #else
-    public override function generateSource():WhetSource {
+    override function generateSource():WhetSource {
         Whet.error('ClosureCompilerStone requires closure library.');
         return null;
     }

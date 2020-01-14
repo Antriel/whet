@@ -42,7 +42,7 @@ class Whetstone {
 
     public function getHash():WhetSourceHash return generateSource().hash;
 
-    @:allow(whet) private function generateSource():WhetSource throw "Not implemented";
+    private function generateSource():WhetSource throw "Not implemented";
 
 }
 

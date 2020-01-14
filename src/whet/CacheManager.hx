@@ -16,7 +16,7 @@ class CacheManager {
     static var memCache:MemoryCache = new MemoryCache();
     @:isVar static var fileCache(get, set):FileCache;
 
-    static public function getSource(stone:Whetstone):WhetSource {
+    @:access(whet.Whetstone) static public function getSource(stone:Whetstone):WhetSource {
         return switch stone.cacheStrategy {
             case None: stone.generateSource();
             case InMemory(durability, check): memCache.get(stone, durability, check);
@@ -97,7 +97,7 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
 
     var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
 
-    public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
+    @:access(whet.Whetstone) public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
         var values = cache.get(key(stone));
         var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
         var value:Value = null;
@@ -110,12 +110,13 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
             }
             if (value != null) setRecentUseOrder(values, value);
         }
-        if (value == null) {
+        var src = value != null ? source(stone, value) : null;
+        if (src == null) {
             if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-            value = set(stone, stone.generateSource());
+            src = source(stone, set(stone, stone.generateSource()));
         }
         if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
-        return value != null ? source(stone, value) : null;
+        return src;
     }
 
     function set(stone:Whetstone, source:WhetSource):Value {
@@ -254,7 +255,8 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
     }
 
     override function remove(stone:Whetstone, value:RuntimeFileCacheValue):Void {
-        sys.FileSystem.deleteFile(value.filePath);
+        if (sys.FileSystem.exists(value.filePath))
+            sys.FileSystem.deleteFile(value.filePath);
         super.remove(stone, value);
         flush();
     }
