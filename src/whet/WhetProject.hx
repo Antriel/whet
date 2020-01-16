@@ -1,11 +1,18 @@
 package whet;
 
+import haxe.Constraints.Function;
 import whet.Whetstone;
+import haxe.DynamicAccess;
+import haxe.rtti.Meta;
 
+#if !macro
+@:autoBuild(whet.Macros.addDocsMeta())
+#end
 class WhetProject {
 
     public final config:WhetProjectConfig;
-    public final commands:Map<String, String->Void>;
+    public final commands:Map<String, CommandMetadata>;
+    public final commandsMeta:Array<CommandMetadata>;
 
     final stones:Map<WhetstoneID, Whetstone>;
 
@@ -14,11 +21,30 @@ class WhetProject {
         if (config.id == null) config.id = StringTools.replace(config.name, ' ', '-').toLowerCase();
         stones = new Map();
         commands = new Map();
-        var fields = Type.getInstanceFields(Type.getClass(this));
-        for (origField in Type.getInstanceFields(WhetProject)) fields.remove(origField);
-        fields = fields.filter(f -> Reflect.isFunction(Reflect.field(this, f)));
-        for (f in fields) commands.set(f, function(arg)
-            Reflect.callMethod(this, Reflect.field(this, f), [arg])); // TODO deduplicate with whetstone?
+        commandsMeta = [];
+        addCommands(this);
+    }
+
+    public function addCommands(ctx:Dynamic) {
+        var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(ctx));
+        for (name => val in meta) {
+            var command:Array<Dynamic> = val.command;
+            if (command != null && command.length == 2) {
+                var hasArg = command[0] == true;
+                var meta:CommandMetadata = {
+                    names: [],
+                    description: command[1],
+                    fnc: function(arg) Reflect.callMethod(ctx, Reflect.field(ctx, name), hasArg ? [arg] : [])
+                };
+                if (!commands.exists(name)) meta.names.push(name);
+                if (Reflect.hasField(ctx, 'id')) {
+                    var alias = Std.string(Reflect.field(ctx, 'id')) + "." + name;
+                    if (!commands.exists(alias)) meta.names.push(alias);
+                }
+                for (name in meta.names) commands.set(name, meta);
+                commandsMeta.push(meta);
+            }
+        }
     }
 
     public function stone<T:Whetstone>(cls:Class<T>):T return
@@ -39,5 +65,13 @@ typedef WhetProjectConfig = {
     var name:String;
     @:optional var id:String;
     @:optional var description:String;
+
+}
+
+typedef CommandMetadata = {
+
+    var fnc:Function;
+    var names:Array<String>;
+    var description:String;
 
 }

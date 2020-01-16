@@ -17,7 +17,8 @@ class BuildStone extends Whetstone {
         this.config = config;
     }
 
-    @command public function build(_ = null) {
+    /** Build the given hxml. */
+    @command public function build() {
         Sys.command('haxe', Lambda.flatten(config.hxml.getArgs()));
     }
 

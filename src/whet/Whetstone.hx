@@ -4,6 +4,9 @@ import whet.CacheManager;
 import haxe.DynamicAccess;
 import haxe.rtti.Meta;
 
+#if !macro
+@:autoBuild(whet.Macros.addDocsMeta())
+#end
 class Whetstone {
 
     public final id:WhetstoneID;
@@ -16,17 +19,7 @@ class Whetstone {
         this.project = project;
         this.cacheStrategy = cacheStrategy != null ? cacheStrategy : CacheManager.defaultStrategy;
         this.id = project.add(this, id != null ? id : this);
-        var meta:DynamicAccess<Dynamic> = Meta.getFields(Type.getClass(this));
-        for (name => val in meta) {
-            if (Reflect.hasField(val, 'command')) {
-                var justClass = ((this:WhetstoneID):String).split('.').pop();
-                var fnc = function(arg) Reflect.callMethod(this, Reflect.field(this, name), [arg]);
-                project.commands.set('$justClass.$name', fnc);
-                if (!project.commands.exists(name)) { // add short alias if none yet exists
-                    project.commands.set(name, fnc);
-                }
-            }
-        }
+        project.addCommands(this);
     }
 
     var router:WhetSourceRouter;

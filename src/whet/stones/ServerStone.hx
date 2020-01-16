@@ -21,7 +21,8 @@ class ServerStone extends Whetstone {
     }
 
     #if (!macro && tink_http && hxnodejs && mime)
-    @command public function start(_) {
+    /** Starts a static server hosting attached resources. */
+    @command public function serve() {
         var container = new NodeContainer(config.port, { upgradable: true });
         var h:Handler = handler;
         #if tink_http_middleware
@@ -55,7 +56,7 @@ class ServerStone extends Whetstone {
                     return switch req.body {
                         case Plain(source): // TODO: this should all be more async and properly handle errors, possibly return results.
                             RealSourceTools.all(source).next(function(p) {
-                                project.commands.get(cmd)(p.toString());
+                                project.commands.get(cmd).fnc(p.toString());
                                 return OutgoingResponse.blob(OK, tink.Chunk.EMPTY, "");
                             }).recover(e -> OutgoingResponse.reportError(new Error(InternalError, 'InternalError')));
                         case Parsed(parts): throw "Not implemented.";
@@ -111,10 +112,6 @@ class ServerStone extends Whetstone {
                     ])), source.data
                 );
         }
-    }
-    #else
-    @command public function start(_) {
-        Whet.error('ServerStone requires tink_web and mime libraries.');
     }
     #end
 

@@ -31,15 +31,6 @@ class Whet {
         ];
         if (config == null) config = {};
 
-        if (Context.defined('hxnodejs')) {
-            compileAndRun();
-        } else { // interpret
-            executeProject(getProject(), commands);
-        }
-        return null;
-    }
-
-    static function compileAndRun() {
         Context.defineType(macro class WhetMain {
 
             static function main() {
@@ -49,21 +40,26 @@ class Whet {
             }
 
         });
-        if (Sys.args().indexOf('--no-output') == -1) // Don't run in diagnostics/display context.
+        if (Context.defined('hxnodejs') && Sys.args().indexOf('--no-output') == -1) // Don't run in diagnostics/display context.
             Context.onAfterGenerate(function() {
                 Sys.command('node', [Compiler.getOutput()]);
             });
+        return null;
     }
     #end
 
     @:noCompletion
     public static function executeProject(project:WhetProject, commands:Array<{command:String, argument:String}>):Void {
         if (commands.length == 0) {
-            msg('No command found. Use `-D whet.<command>=[args]`.\nAvailable commands: ${[for (key in project.commands.keys()) key]}');
+            msg('No command found. Use `-D whet.<command>=[arg]`.\nAvailable commands:');
+            for (meta in project.commandsMeta) {
+                msg(meta.names.join(', '));
+                if (meta.description != null) msg('   ' + meta.description);
+            }
         }
         for (cmd in commands) {
             if (!project.commands.exists(cmd.command)) error('Command "${cmd.command}" is not defined.');
-            project.commands.get(cmd.command)(cmd.argument);
+            project.commands.get(cmd.command).fnc(cmd.argument);
         }
     }
 

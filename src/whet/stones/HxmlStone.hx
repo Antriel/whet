@@ -99,7 +99,7 @@ class HxmlStone extends Whetstone {
     public var defines:Array<String> = [];
     public var dce:DCE = null;
     public var main:String = null;
-    public var debug:Bool = false;
+    public var debug:Null<Bool> = null;
     public var flags:Array<Array<String>> = [];
     public var platform:BuildPlatform = null;
 
