@@ -11,8 +11,8 @@ class ChromeStone extends Whetstone {
         this.config = config != null ? config : {};
     }
 
-    #if !macro
-    @command public function launchChrome(opts:String) {
+    @command public function launchChrome() {
+        #if !macro
         var args = [
             '--app=http://localhost:7000/${config.launchPath}',
             '--user-data-dir=${config.userDataDir}',
@@ -31,8 +31,8 @@ class ChromeStone extends Whetstone {
         #else
         Whet.error("Not implemented.");
         #end
+        #end
     }
-    #end
 
 }
 

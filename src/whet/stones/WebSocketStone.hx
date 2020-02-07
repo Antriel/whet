@@ -13,11 +13,13 @@ import tink.http.middleware.WebSocket;
 
 class WebSocketStone extends Whetstone implements WhetServerMiddleware {
 
+    public var hasClients(get, never):Bool;
+
     #if (tink_websocket && tink_http_middleware)
-    var server:TinkServer;
+    public var server:TinkServer;
 
     public function getMiddleware():WebSocket {
-        var server = new TinkServer();
+        server = new TinkServer();
         server.clientConnected.handle(function(client) {
             client.messageReceived.handle(function(msg) {
                 // TODO
@@ -33,6 +35,12 @@ class WebSocketStone extends Whetstone implements WhetServerMiddleware {
             }
         }
     }
+
+    function get_hasClients() return server != null && server.clients.length > 0;
+    #else
+    public function broadcast(msg) { }
+
+    function get_hasClients() return false;
     #end
 
 }
