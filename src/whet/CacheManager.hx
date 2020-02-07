@@ -254,7 +254,7 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
 
     override function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
         var source = WhetSource.fromFile(stone, value.filePath, value.hash);
-        if (source == null || value.fileHash != source.data) {
+        if (source == null || (!stone.ignoreFileHash && value.fileHash != source.data)) {
             remove(stone, value);
             flush();
             return null;

@@ -13,6 +13,9 @@ class Whetstone {
     public var cacheStrategy:CacheStrategy;
     public var defaultFilename:String = "file.dat";
 
+    /** If true, hash of a cached file (not `stone.getHash()` but actual file contents) won't be checked.  */
+    public var ignoreFileHash:Bool = false;
+
     var project:WhetProject;
 
     public function new(project:WhetProject, id:WhetstoneID = null, cacheStrategy = null) {
