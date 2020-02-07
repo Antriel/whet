@@ -1,8 +1,6 @@
 package whet.stones;
 
-import whet.SourceId;
 import whet.Whetstone;
-import sys.io.File;
 
 class BuildStone extends Whetstone {
 
@@ -19,13 +17,13 @@ class BuildStone extends Whetstone {
 
     /** Build the given hxml. */
     @command public function build() {
-        Sys.command('haxe', Lambda.flatten(config.hxml.getArgs()));
+        Sys.command('haxe', Lambda.flatten(config.hxml.getBuildArgs()));
     }
 
     override function generateSource():WhetSource {
         if (config.hxml.isSingleFile()) {
             build();
-            return WhetSource.fromFile(this, CacheManager.getFilePath(this), null);
+            return WhetSource.fromFile(this, CacheManager.getFilePath(this), getHash());
         } else {
             Whet.msg('Warning: Cannot get source of a multi-file build.');
             return null;

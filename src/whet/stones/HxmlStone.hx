@@ -30,11 +30,12 @@ class HxmlStone extends Whetstone {
         return this;
     }
 
-    public function getArgs():Array<Array<String>> {
+    public function getBuildArgs() return getBaseArgs().concat([getPlatform()]);
+
+    function getBaseArgs():Array<Array<String>> {
         var args = config.libs.map(lib -> ['-lib', lib])
             .concat(config.paths.map(path -> ['-cp', path]))
             .concat(config.defines.map(def -> ['-D', def]));
-        args.push(getPlatform());
         if (config.dce != null) args.push(['-dce', config.dce]);
         if (config.main != null) args.push(['-main', config.main]);
         if (config.debug == true) args.push(['-debug']);
@@ -42,11 +43,13 @@ class HxmlStone extends Whetstone {
     }
 
     function getFileContent():String {
-        return '# Generated from Whet library. Do not manually edit.\n' + getArgs().map(line -> line.join(' ')).join('\n');
+        return '# Generated from Whet library. Do not manually edit.\n' + getBuildArgs()
+            .map(line -> line.join(' '))
+            .join('\n');
     }
 
     function getPlatform():Array<String> {
-        var path = CacheManager.getFilePath(build);
+        var path = CacheManager.getFilePath(build, build.getHash());
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];
@@ -88,7 +91,7 @@ class HxmlStone extends Whetstone {
         return WhetSource.fromString(this, getFileContent(), null);
     }
 
-    public override function getHash():WhetSourceHash return getFileContent();
+    public override function getHash():WhetSourceHash return getBaseArgs().map(l -> l.join(' ')).join('\n');
 
 }
 
