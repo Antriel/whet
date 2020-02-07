@@ -27,17 +27,18 @@ class CacheManager {
 
     /** 
      * Get valid path to generate a file in. The path is unique per stone id and fileId.
+     * If hash is supplied, and a path was already assigned, the same path is returned, assuring consistency.
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
      */
-    static public function getFilePath(stone:Whetstone, ?fileId:SourceId):SourceId {
+    static public function getFilePath(stone:Whetstone, ?fileId:SourceId, ?hash:WhetSourceHash):SourceId {
         if (fileId == null) fileId = stone.defaultFilename;
         fileId = fileId.getPutInDir(stone.id + '/');
         if (stone.cacheStrategy.match(None | InMemory(_))) fileId = fileId.getPutInDir('.temp/');
         fileId = fileId.getPutInDir('.whet/');
         return switch stone.cacheStrategy {
             case None: fileId;
-            case InMemory(_): memCache.getUniqueName(stone, fileId);
-            case InFile(_): fileCache.getUniqueName(stone, fileId);
+            case InMemory(_): memCache.getUniqueName(stone, fileId, hash);
+            case InFile(_): fileCache.getUniqueName(stone, fileId, hash);
             case SingleFile(filepath, _): filepath;
         }
         // TODO clean tmp on start/end of process
@@ -93,7 +94,7 @@ enum DurabilityCheck {
 private interface Cache {
 
     public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
-    public function getUniqueName(stone:Whetstone, id:SourceId):SourceId;
+    public function getUniqueName(stone:Whetstone, id:SourceId, ?hash:WhetSourceHash):SourceId;
 
 }
 
@@ -132,7 +133,14 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
         return val;
     }
 
-    public function getUniqueName(stone:Whetstone, id:SourceId):SourceId {
+    public function getUniqueName(stone:Whetstone, id:SourceId, ?hash:WhetSourceHash):SourceId {
+        if (hash != null) {
+            var existingVal = Lambda.find(cache.get(key(stone)), v -> v.hash == hash);
+            if (existingVal != null) {
+                var existingPath = getPathFor(existingVal);
+                if (existingPath != null) return existingPath;
+            }
+        }
         var filenames = getFilenames(stone);
         if (filenames != null) {
             return Utils.makeUnique(id, id -> filenames.indexOf(id) >= 0, (id, v) -> {
@@ -180,6 +188,8 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
 
     function getFilenames(stone:Whetstone):Array<SourceId> return null;
 
+    function getPathFor(value:Value):SourceId return null;
+
 }
 
 private class MemoryCache extends BaseCache<Whetstone, WhetSource> {
@@ -199,6 +209,8 @@ private class MemoryCache extends BaseCache<Whetstone, WhetSource> {
         if (list != null) return list.filter(s -> s.hasFile()).map(s -> s.getFilePath());
         else return null;
     }
+
+    override function getPathFor(value:WhetSource):SourceId return value.hasFile() ? value.getFilePath() : null;
 
 }
 
@@ -273,6 +285,8 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         if (changed) flush();
         return changed;
     }
+
+    override function getPathFor(value:RuntimeFileCacheValue):SourceId return value.filePath;
 
     function flush() {
         var db:DbJson = {};
