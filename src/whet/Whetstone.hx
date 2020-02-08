@@ -27,7 +27,7 @@ class Whetstone {
 
     var router:WhetSourceRouter;
 
-    public function route(routes:Map<SourceId, Whetstone>) {
+    public function route(routes:Map<SourceId, Whetstone>):Whetstone {
         if (router == null) router = routes;
         else for (k => v in routes) router.add(k, v);
         return this;
@@ -42,9 +42,10 @@ class Whetstone {
     private function generateSource():WhetSource throw "Not implemented";
 
     /** Caches this resource under supplied `path` as a single, always up-to-date copy. */
-    public function cacheAsSingleFile(path:SourceId):Void {
+    public function cacheAsSingleFile(path:SourceId):Whetstone {
         this.cacheStrategy = SingleFile(path, KeepForever);
         getSource();
+        return this;
     }
 
 }
