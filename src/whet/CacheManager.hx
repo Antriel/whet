@@ -118,7 +118,8 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
         var src = value != null ? source(stone, value) : null;
         if (src == null) {
             if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-            src = source(stone, set(stone, stone.generateSource()));
+            var newSrc = stone.generateSource();
+            if (newSrc != null) src = source(stone, set(stone, newSrc));
         }
         if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
         return src;
@@ -135,10 +136,13 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
 
     public function getUniqueName(stone:Whetstone, id:SourceId, ?hash:WhetSourceHash):SourceId {
         if (hash != null) {
-            var existingVal = Lambda.find(cache.get(key(stone)), v -> v.hash == hash);
-            if (existingVal != null) {
-                var existingPath = getPathFor(existingVal);
-                if (existingPath != null) return existingPath;
+            var values = cache.get(key(stone));
+            if (values != null) {
+                var existingVal = Lambda.find(values, v -> v.hash == hash);
+                if (existingVal != null) {
+                    var existingPath = getPathFor(existingVal);
+                    if (existingPath != null) return existingPath;
+                }
             }
         }
         var filenames = getFilenames(stone);
