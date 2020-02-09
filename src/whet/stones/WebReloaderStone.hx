@@ -16,7 +16,20 @@ class WebReloaderStone extends Whetstone {
     @command public function launchOrReload() {
         if (config.websocket.hasClients) {
             config.websocket.broadcast('reload');
-        } else config.chrome.launchChrome();
+        } else if (config.chrome != null) {
+            config.chrome.launchChrome();
+        } else {
+            var url = 'http://localhost:7000'; // TODO should be configurable
+            switch Sys.systemName() {
+                case "Linux", "BSD":
+                    Sys.command("xdg-open", [url]);
+                case "Mac":
+                    Sys.command("open", [url]);
+                case "Windows":
+                    Sys.command("cmd", ['/s', '/c', 'start', url, '/b']);
+                case _:
+            }
+        }
     }
 
     function enableWebReload() {
