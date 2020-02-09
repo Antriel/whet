@@ -11,7 +11,8 @@ class HtmlStone extends Whetstone {
         this.config = config != null ? config : {};
         this.defaultFilename = id != null ? '$id.html' : 'index.html';
         if (this.config.title == null) this.config.title = project.config.name;
-        if (this.config.description == null) this.config.description = project.config.description;
+        if (this.config.meta != null && this.config.meta.description == null)
+            this.config.meta.description = project.config.description;
     }
 
     public function addBodyScript(src:String) {
@@ -29,16 +30,19 @@ class HtmlStone extends Whetstone {
             sb.add('\t<title>${config.title}</title>\n');
             sb.add('\t<meta property="og:title" content="${config.title}">\n');
         }
-        if (config.noScaleMeta)
-            sb.add('\t<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">\n');
         if (config.stylePaths != null) for (path in config.stylePaths)
             sb.add('\t<link rel="stylesheet" href="$path">\n');
-        if (config.description != null && config.description != "") {
-            sb.add('\t<meta name="description" content="${config.description}">\n');
-            sb.add('\t<meta property="og:description" content="${config.description}">\n');
-        }
-        if (config.keywords != null && config.keywords.length > 0) {
-            sb.add('\t<meta name="keywords" content="${config.keywords.join(",")}">\n');
+        if (config.meta != null) {
+            var description = config.meta.description;
+            if (description != null && description != "") {
+                sb.add('\t<meta name="description" content="${description}">\n');
+                sb.add('\t<meta property="og:description" content="${description}">\n');
+            }
+            var keywords = config.meta.keywords;
+            if (keywords != null && keywords.length > 0) {
+                sb.add('\t<meta name="keywords" content="${keywords.join(",")}">\n');
+            }
+            if (config.meta.viewport != null) sb.add('\t${config.meta.viewport.getString()}\n');
         }
         if (config.ogUrl != null && config.ogUrl != "")
             sb.add('\t<meta property="og:url" content="${config.ogUrl}">\n');
@@ -71,11 +75,9 @@ class HtmlStone extends Whetstone {
 
     public var headElements:Array<String> = [];
     public var bodyElements:Array<String> = [];
-    public var noScaleMeta:Bool = true;
+    public var meta:HtmlMetaConfig = null;
     public var stylePaths:Array<String> = null;
     public var title:String = null;
-    public var description:String = null;
-    public var keywords:Array<String> = null;
     public var ogUrl:String = null;
     public var ogImage:OgImage = null;
     public var ogType:String = "game";
@@ -89,5 +91,43 @@ class HtmlStone extends Whetstone {
     public var width:Int;
     public var height:Int;
     // TODO construct from asset reference
+
+}
+
+@:structInit class HtmlMetaConfig {
+
+    public var description:String = null;
+    public var keywords:Array<String> = null;
+    public var viewport:HtmlViewportMeta = null;
+
+}
+
+@:structInit class HtmlViewportMeta {
+
+    public static final NoScale:HtmlViewportMeta = {
+        width: 'device-width',
+        initialScale: '1.0',
+        maximumScale: '1.0',
+        minimumScale: '1.0',
+        userScalable: 'no'
+    };
+
+    var width:String = null;
+    var initialScale:String = null;
+    var maximumScale:String = null;
+    var minimumScale:String = null;
+    var userScalable:String = null;
+
+    public function getString() return '<meta name="viewport" content="${getContent().join(", ")}">';
+
+    function getContent() {
+        var content = [];
+        if (width != null) content.push('width=$width');
+        if (initialScale != null) content.push('initial-scale=$initialScale');
+        if (maximumScale != null) content.push('maximum-scale=$maximumScale');
+        if (minimumScale != null) content.push('minimum-scale=$minimumScale');
+        if (userScalable != null) content.push('user-scalable=$userScalable');
+        return content;
+    }
 
 }
