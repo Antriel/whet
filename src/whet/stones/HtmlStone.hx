@@ -20,6 +20,27 @@ class HtmlStone extends Whetstone {
         return this;
     }
 
+    public function addGameCss() {
+        config.headElements.push('<style>
+            html, body {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                width: 100%;
+            }
+            body {
+                -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
+                -webkit-touch-callout: none;
+                -webkit-text-size-adjust: none;
+                -webkit-user-select: none;
+                user-select: none;
+                overflow: hidden;
+                min-height: 100%;
+                min-width: 100%;
+            }</style>'
+        );
+    }
+
     public function getContent():String {
         var sb = new StringBuf();
         sb.add('<!DOCTYPE html>\n');
