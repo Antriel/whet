@@ -9,12 +9,16 @@ class ChromeStone extends Whetstone {
     public function new(project:WhetProject, id:WhetstoneID = null, config:ChromeConfig = null) {
         super(project, id);
         this.config = config != null ? config : {};
+        if (this.config.launchPort == null) {
+            var server = project.stone(ServerStone);
+            this.config.launchPort = server != null ? server.config.port : 7000;
+        }
     }
 
     @command public function launchChrome() {
         #if !macro
         var args = [
-            '--app=http://localhost:7000/${config.launchPath}',
+            '--app=http://localhost:${config.launchPort}/${config.launchPath}',
             '--user-data-dir=${config.userDataDir}',
         ];
         if (config.remoteDebuggingPort != null) args.push('--remote-debugging-port=${config.remoteDebuggingPort}');
@@ -40,6 +44,7 @@ class ChromeStone extends Whetstone {
 
     public var chromePath:String = 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'; // TODO make more crossplatform
     public var launchPath:String = "";
+    public var launchPort:Null<Int> = null;
     public var remoteDebuggingPort:Null<Int> = 9222;
     public var additionalFlags:Array<String> = [];
 

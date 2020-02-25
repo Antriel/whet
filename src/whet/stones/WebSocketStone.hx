@@ -22,7 +22,11 @@ class WebSocketStone extends Whetstone implements WhetServerMiddleware {
         server = new TinkServer();
         server.clientConnected.handle(function(client) {
             client.messageReceived.handle(function(msg) {
-                // TODO
+                switch msg {
+                    case Text('ping'):
+                        client.send(Text('pong'));
+                    case _:
+                }
             });
         });
         return new WebSocket(server.handle);

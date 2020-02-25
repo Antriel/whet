@@ -19,7 +19,7 @@ class WebReloaderStone extends Whetstone {
         } else if (config.chrome != null) {
             config.chrome.launchChrome();
         } else {
-            var url = 'http://localhost:7000'; // TODO should be configurable
+            var url = 'http://localhost:${config.port}';
             switch Sys.systemName() {
                 case "Linux", "BSD":
                     Sys.command("xdg-open", [url]);
@@ -41,6 +41,12 @@ class WebReloaderStone extends Whetstone {
                         location.reload();
                     }
                 }
+                ws.onerror = function(e) {
+                    console.log(e);
+                }
+                ws.onopen = function() {
+                    setInterval(function() {ws.send("ping");}, 60*1000);
+                }
             </script>'
         );
     }
@@ -52,11 +58,17 @@ class WebReloaderStone extends Whetstone {
     public var websocket:WebSocketStone = null;
     public var chrome:ChromeStone = null;
     public var html:HtmlStone = null;
+    public var port:Null<Int> = null;
 
     public function init(project:WhetProject) {
         if (websocket == null) websocket = project.stone(WebSocketStone);
         if (chrome == null) chrome = project.stone(ChromeStone);
         if (html == null) html = project.stone(HtmlStone);
+        if (port == null) {
+            var server = project.stone(ServerStone);
+            if (server != null) port = server.config.port;
+            else port = 7000;
+        }
     }
 
 }
