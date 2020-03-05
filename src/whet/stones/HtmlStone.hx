@@ -79,7 +79,9 @@ class HtmlStone extends Whetstone {
         for (el in config.headElements)
             sb.add(el.split('\n').map(line -> '\t$line').join('\n'));
         sb.add('</head>\n');
-        sb.add('<body>\n');
+        var bodyAtts = config.bodyElementAtts.join(' ');
+        if (bodyAtts.length > 0) bodyAtts = " " + bodyAtts;
+        sb.add('<body$bodyAtts>\n');
 
         for (el in config.bodyElements)
             sb.add(el.split('\n').map(line -> '\t$line').join('\n') + '\n');
@@ -102,6 +104,7 @@ class HtmlStone extends Whetstone {
     public var ogUrl:String = null;
     public var ogImage:OgImage = null;
     public var ogType:String = "game";
+    public var bodyElementAtts:Array<String> = [];
 
 }
 
