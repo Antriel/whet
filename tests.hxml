@@ -1,0 +1,7 @@
+-cp src
+-cp tests
+-D closure_slavemode
+-D tests
+-lib utest
+-main TestsMain
+--interp 
