@@ -42,8 +42,8 @@ class ClosureCompilerStone extends Whetstone {
     }
 
     override function getHash():WhetSourceHash {
-        var hash:WhetSourceHash = getArgs([], "").join('');
-        for (file in getFiles()) hash += file.getHash();
+        var hash = WhetSourceHash.fromString(getArgs([], "").join(''));
+        for (file in getFiles()) hash.add(file.getHash());
         return hash;
     }
 

@@ -37,7 +37,9 @@ class Whetstone {
 
     public final function getSource():WhetSource return CacheManager.getSource(this);
 
-    public function getHash():WhetSourceHash return generateSource().hash;
+    public function getHash():WhetSourceHash {
+        return generateSource().hash;
+    }
 
     private function generateSource():WhetSource throw "Not implemented";
 
@@ -93,7 +95,7 @@ class WhetSource {
     }
 
     public static function fromBytes(stone:Whetstone, data:haxe.io.Bytes, hash:WhetSourceHash, ctime:Float = null):WhetSource {
-        if (hash == null) hash = data;
+        if (hash == null) hash = WhetSourceHash.fromBytes(data);
         return new WhetSource(stone, data, hash, ctime);
     }
 
@@ -113,38 +115,46 @@ class WhetSource {
 
 }
 
-abstract WhetSourceHash(haxe.io.Bytes) {
+@:using(whet.Whetstone.WhetSourceHash)
+class WhetSourceHash {
 
     static inline var HASH_LENGTH:Int = 20;
 
-    @:from public static function fromBytes(data:haxe.io.Bytes):WhetSourceHash {
-        return cast haxe.crypto.Sha1.make(data);
+    final bytes:haxe.io.Bytes;
+
+    function new(bytes:haxe.io.Bytes) {
+        this.bytes = bytes;
     }
 
-    @:from public static function fromString(data:String):WhetSourceHash {
+    public static function fromBytes(data:haxe.io.Bytes):WhetSourceHash {
+        return new WhetSourceHash(haxe.crypto.Sha1.make(data));
+    }
+
+    public static function fromString(data:String):WhetSourceHash {
         return fromBytes(haxe.io.Bytes.ofString(data));
     }
 
-    @:op(A + B) public static function add(a:WhetSourceHash, b:WhetSourceHash):WhetSourceHash {
+    public static function add(a:WhetSourceHash, b:WhetSourceHash):WhetSourceHash {
         var data = haxe.io.Bytes.alloc(HASH_LENGTH * 2);
         data.blit(0, cast a, 0, HASH_LENGTH);
         data.blit(HASH_LENGTH, cast b, 0, HASH_LENGTH);
         return fromBytes(data);
     }
 
-    @:op(A == B) public function equals(other:WhetSourceHash):Bool
-        return this != null && other != null && this.compare(cast other) == 0;
-
-    @:op(A != B) public function notEquals(other:WhetSourceHash):Bool return !equals(other);
-
-    public function toHex():String {
-        return this == null ? "" : this.toHex();
+    public static function equals(a:WhetSourceHash, b:WhetSourceHash):Bool {
+        return a != null && b != null && a.bytes.compare(b.bytes) == 0;
     }
+
+    public static function toHex(hash:WhetSourceHash):String {
+        return hash == null ? "" : hash.toString();
+    }
+
+    @:noCompletion public function toString():String return bytes.toHex();
 
     public static function fromHex(hex:String):WhetSourceHash {
         var hash = haxe.io.Bytes.ofHex(hex);
         if (hash.length != HASH_LENGTH) return null;
-        else return cast hash;
+        else return new WhetSourceHash(hash);
     }
 
 }

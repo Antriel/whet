@@ -108,7 +108,7 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
         var value:Value = null;
         if (values != null && values.length > 0) {
             var hash = stone.getHash();
-            value = Lambda.find(values, v -> v.hash == hash);
+            value = Lambda.find(values, v -> v.hash.equals(hash));
             if (value != null && check.match(SingleOnGet) && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
                 remove(stone, value);
                 value = null;
@@ -138,7 +138,7 @@ private class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float
         if (hash != null) {
             var values = cache.get(key(stone));
             if (values != null) {
-                var existingVal = Lambda.find(values, v -> v.hash == hash);
+                var existingVal = Lambda.find(values, v -> v.hash.equals(hash));
                 if (existingVal != null) {
                     var existingPath = getPathFor(existingVal);
                     if (existingPath != null) return existingPath;
@@ -252,13 +252,13 @@ private class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
     override function value(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue return {
         hash: source.hash,
         ctime: source.ctime,
-        fileHash: source.data,
+        fileHash: WhetSourceHash.fromBytes(source.data),
         filePath: source.getFilePath()
     }
 
     override function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
         var source = WhetSource.fromFile(stone, value.filePath, value.hash);
-        if (source == null || (!stone.ignoreFileHash && value.fileHash != source.data)) {
+        if (source == null || (!stone.ignoreFileHash && !value.fileHash.equals(WhetSourceHash.fromBytes(source.data)))) {
             remove(stone, value);
             flush();
             return null;
