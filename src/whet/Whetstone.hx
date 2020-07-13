@@ -27,13 +27,22 @@ class Whetstone {
 
     var router:WhetSourceRouter;
 
+    public var routeDynamic:SourceId->Whetstone;
+
     public function route(routes:Map<SourceId, Whetstone>):Whetstone {
         if (router == null) router = routes;
-        else for (k => v in routes) router.add(k, v);
+        else if (routes != null) for (k => v in routes) router.add(k, v);
         return this;
     }
 
-    public function findStone(id:SourceId):Whetstone return router == null ? null : router.find(id);
+    public function findStone(id:SourceId):Whetstone {
+        var result = router == null ? null : router.find(id);
+        if (result == null && routeDynamic != null) {
+            result = routeDynamic(id);
+            if (result != null) route([id => result]);
+        }
+        return result;
+    }
 
     public final function getSource():WhetSource return CacheManager.getSource(this);
 

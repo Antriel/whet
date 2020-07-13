@@ -16,6 +16,8 @@ class HxmlStone extends Whetstone {
         defaultFilename = 'build.hxml';
     }
 
+    public function clone(id:WhetstoneID = null):HxmlStone return new HxmlStone(project, id, config.clone());
+
     public function mergeConfig(additionalConfig:HxmlConfig):HxmlStone {
         function merge<T>(from:Array<T>, to:Array<T>)
             if (from != null) for (item in from) if (to.indexOf(item) == -1) to.push(item);
@@ -105,6 +107,17 @@ class HxmlStone extends Whetstone {
     public var debug:Null<Bool> = null;
     public var flags:Array<Array<String>> = [];
     public var platform:BuildPlatform = null;
+
+    public function clone():HxmlConfig return {
+        libs: this.libs.copy(),
+        paths: this.paths.copy(),
+        defines: this.defines.copy(),
+        dce: this.dce,
+        main: this.main,
+        debug: this.debug,
+        flags: [for (fa in this.flags) fa.copy()],
+        platform: this.platform
+    };
 
 }
 

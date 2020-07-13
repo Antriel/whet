@@ -16,6 +16,8 @@ abstract SourceId(String) {
 
     @:to public inline function toRelPath():String return this.substring(1); // Remove start slash -> make relative to CWD.
 
+    public inline function toAbsolutePath():String return this;
+
     public inline function isDir():Bool return this == dir;
 
     public inline function asDir():SourceId return cast this.addTrailingSlash();

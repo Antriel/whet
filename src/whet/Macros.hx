@@ -28,6 +28,7 @@ class Macros {
         var config = null;
         var configDefine = Context.getDefines().get('whet.config');
         if (configDefine != null) config = [for (keyVal in configDefine.split(',').map(c -> c.split('='))) keyVal[0] => keyVal[1]];
+        if (config == null) return fields;
 
         var newFuncExprs = switch Lambda.find(fields, f -> f.name == 'new').kind {
             case FFun({ expr: { expr: EBlock(exprs) } }): exprs;

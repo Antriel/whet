@@ -15,6 +15,8 @@ class HtmlStone extends Whetstone {
             this.config.meta.description = project.config.description;
     }
 
+    public function clone(id:WhetstoneID = null):HtmlStone return new HtmlStone(project, id, config.clone());
+
     public function addBodyScript(src:String) {
         config.bodyElements.push('<script type="text/javascript" src="$src"></script>');
         return this;
@@ -106,6 +108,18 @@ class HtmlStone extends Whetstone {
     public var ogType:String = "game";
     public var bodyElementAtts:Array<String> = [];
 
+    public function clone():HtmlConfig return {
+        headElements: this.headElements.copy(),
+        bodyElements: this.bodyElements.copy(),
+        meta: this.meta == null ? null : this.meta.clone(),
+        stylePaths: this.stylePaths == null ? null : this.stylePaths.copy(),
+        title: this.title,
+        ogUrl: this.ogUrl,
+        ogImage: this.ogImage == null ? null : this.ogImage.clone(),
+        ogType: this.ogType,
+        bodyElementAtts: this.bodyElementAtts.copy()
+    };
+
 }
 
 @:structInit class OgImage {
@@ -114,7 +128,15 @@ class HtmlStone extends Whetstone {
     public var type:String = "image/png";
     public var width:Int;
     public var height:Int;
+
     // TODO construct from asset reference
+
+    public function clone():OgImage return {
+        image: this.image,
+        type: this.type,
+        width: this.width,
+        height: this.height,
+    };
 
 }
 
@@ -123,6 +145,12 @@ class HtmlStone extends Whetstone {
     public var description:String = null;
     public var keywords:Array<String> = null;
     public var viewport:HtmlViewportMeta = null;
+
+    public function clone():HtmlMetaConfig return {
+        description: this.description,
+        keywords: this.keywords == null ? null : this.keywords.copy(),
+        viewport: this.viewport == null ? null : this.viewport.clone()
+    };
 
 }
 
@@ -141,6 +169,14 @@ class HtmlStone extends Whetstone {
     var maximumScale:String = null;
     var minimumScale:String = null;
     var userScalable:String = null;
+
+    public function clone():HtmlViewportMeta return {
+        width: this.width,
+        initialScale: this.initialScale,
+        maximumScale: this.maximumScale,
+        minimumScale: this.minimumScale,
+        userScalable: this.userScalable
+    };
 
     public function getString() return '<meta name="viewport" content="${getContent().join(", ")}">';
 
