@@ -19,8 +19,11 @@ class RemoteFileStone extends Whetstone {
         var file = '' + TestRemoteFileStone.counter++;
         #else
         #if nodejs
-        var file = null;
-        throw "Not implemented.";
+        // Temporary hack...
+        var file = js.node.ChildProcess.execFileSync('curl', ['--silent', '-L', url], {
+            encoding: 'utf8',
+            maxBuffer: (cast Math.POSITIVE_INFINITY:Int)
+        });
         #else
         var file = haxe.Http.requestUrl(url);
         #end
