@@ -18,6 +18,8 @@ abstract SourceId(String) {
 
     public inline function isDir():Bool return this == dir;
 
+    public inline function asDir():SourceId return cast this.addTrailingSlash();
+
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
         assertDir(directory);
         return nested ? dir.toRelPath().indexOf(directory) == 0 : dir == directory;

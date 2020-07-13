@@ -7,7 +7,7 @@ abstract WhetSourceRouter(SourceMap) from SourceMap {
     public function find(id:SourceId):Whetstone {
         for (key => stone in this) {
             if (key == id) return stone;
-            var rel = id.relativeTo(key.dir);
+            var rel = id.relativeTo(key.asDir());
             if (rel != null) {
                 var foundStone = stone.findStone(rel);
                 if (foundStone != null) return foundStone;
