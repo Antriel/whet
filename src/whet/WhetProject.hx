@@ -7,6 +7,7 @@ import haxe.rtti.Meta;
 
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
+@:autoBuild(whet.Macros.injectConfig())
 #end
 class WhetProject {
 

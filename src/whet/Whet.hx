@@ -9,33 +9,20 @@ class Whet {
 
     #if macro
     static var commands:Array<{command:String, argument:String}>;
-    static var config:DynamicAccess<String>;
-
-    static function getProject():WhetProject {
-        return untyped new Project(config);
-        // For some reason Type.resolveClass doesn't work, so we can't do this dynamically.
-    }
 
     static macro function run() {
         commands = [for (key => value in Context.getDefines())
-            if (key.indexOf('whet.') == 0) if (key == 'whet.config') {
-                config = Lambda.fold(value.split(',').map(c -> c.split('=')), (c, r:DynamicAccess<String>) -> {
-                    r.set(c[0], c[1]);
-                    r;
-                }, new DynamicAccess<String>());
-                continue;
-            } else {
+            if (key.indexOf('whet.') == 0 && key != 'whet.config') {
                 command: key.substr('whet.'.length),
                 argument: value
             }
         ];
-        if (config == null) config = {};
 
         Context.defineType(macro class WhetMain {
 
             static function main() {
                 var commands = $v{commands};
-                var project = new Project($v{config});
+                var project = new Project();
                 whet.Whet.executeProject(project, $v{commands});
             }
 
