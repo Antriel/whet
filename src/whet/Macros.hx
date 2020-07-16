@@ -37,6 +37,7 @@ class Macros {
         for (f in fields) if (f.meta != null) {
             if (Lambda.exists(f.meta, m -> m.name == ":config" || m.name == "config")) {
                 var val = config.get(f.name);
+                val = StringTools.replace(val, ';', ',');
                 if (config.remove(f.name)) switch f.kind {
                     case FVar(t, null):
                         newFuncExprs.unshift(macro $i{f.name} = $e{Context.parse(val, f.pos)});
