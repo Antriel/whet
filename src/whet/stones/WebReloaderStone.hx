@@ -9,12 +9,14 @@ class WebReloaderStone extends Whetstone {
     public function new(project:WhetProject, id:WhetstoneID = null, config:WebReloaderConfig = null) {
         super(project, id);
         this.config = config != null ? config : {};
-        this.config.init(project);
-        enableWebReload();
+        project.postInit.handle(_ -> {
+            this.config.init(project);
+            enableWebReload();
+        });
     }
 
     @command public function launchOrReload() {
-        if (config.websocket.hasClients) {
+        if (config.websocket != null && config.websocket.hasClients) {
             config.websocket.broadcast('reload');
         } else if (config.chrome != null) {
             config.chrome.launchChrome();

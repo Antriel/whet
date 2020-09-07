@@ -37,6 +37,7 @@ class Whet {
 
     @:noCompletion
     public static function executeProject(project:WhetProject, commands:Array<{command:String, argument:String}>):Void {
+        project.postInitTrigger.trigger(Noise);
         if (commands.length == 0) {
             msg('No command found. Use `-D whet.<command>=[arg]`.\nAvailable commands:');
             for (meta in project.commandsMeta) {

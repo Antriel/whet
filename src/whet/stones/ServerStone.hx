@@ -39,7 +39,7 @@ class ServerStone extends Whetstone {
     }
 
     function handler(req:IncomingRequest):Future<OutgoingResponse> {
-        var id:SourceId = req.header.url.path;
+        var id:SourceId = req.header.url.path.toString();
         var res:OutgoingResponse = null;
         switch req.header.method {
             case GET:

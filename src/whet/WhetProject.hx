@@ -1,5 +1,6 @@
 package whet;
 
+import tink.CoreApi;
 import haxe.Constraints.Function;
 import whet.Whetstone;
 import haxe.DynamicAccess;
@@ -14,12 +15,15 @@ class WhetProject {
     public final config:WhetProjectConfig;
     public final commands:Map<String, CommandMetadata>;
     public final commandsMeta:Array<CommandMetadata>;
+    public final postInit:Future<Noise>;
 
     final stones:Map<WhetstoneID, Whetstone>;
+    @:allow(whet.Whet) final postInitTrigger:FutureTrigger<Noise>;
 
     public function new(config:WhetProjectConfig) {
         this.config = config;
         if (config.id == null) config.id = StringTools.replace(config.name, ' ', '-').toLowerCase();
+        postInit = postInitTrigger = Future.trigger();
         stones = new Map();
         commands = new Map();
         commandsMeta = [];
