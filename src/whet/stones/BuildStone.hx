@@ -22,8 +22,11 @@ class BuildStone extends Whetstone {
 
     override function generateSource():WhetSource {
         if (config.hxml.isSingleFile()) {
+            var path = CacheManager.getFilePath(this);
+            // Clear the file, so if compilation fails, we don't serve old version.
+            if (sys.FileSystem.exists(path)) sys.FileSystem.deleteFile(path);
             build();
-            return WhetSource.fromFile(this, CacheManager.getFilePath(this), getHash());
+            return WhetSource.fromFile(this, path, getHash());
         } else {
             Whet.msg('Warning: Cannot get source of a multi-file build.');
             return null;
