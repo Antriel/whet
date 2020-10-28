@@ -1,8 +1,9 @@
 function main() {
-    // TODO should clean up .whet before each test.
+    whet.Utils.deleteRecursively('.whet');
     utest.UTest.run([
         new TestRemoteFileStone(),
-        new TestRouter()
+        new TestRouter(),
+        // new TestNpmManager()
     ]);
 
 }

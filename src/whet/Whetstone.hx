@@ -1,8 +1,6 @@
 package whet;
 
 import whet.CacheManager;
-import haxe.DynamicAccess;
-import haxe.rtti.Meta;
 
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
@@ -145,8 +143,8 @@ class WhetSourceHash {
 
     public static function add(a:WhetSourceHash, b:WhetSourceHash):WhetSourceHash {
         var data = haxe.io.Bytes.alloc(HASH_LENGTH * 2);
-        data.blit(0, cast a, 0, HASH_LENGTH);
-        data.blit(HASH_LENGTH, cast b, 0, HASH_LENGTH);
+        data.blit(0, a.bytes, 0, HASH_LENGTH);
+        data.blit(HASH_LENGTH, b.bytes, 0, HASH_LENGTH);
         return fromBytes(data);
     }
 

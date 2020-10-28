@@ -1,5 +1,8 @@
 package whet;
 
+import haxe.io.Path;
+import sys.FileSystem;
+
 using StringTools;
 
 class Utils {
@@ -41,6 +44,18 @@ class Utils {
     public static function saveBytes(path:String, bytes:haxe.io.Bytes):Void {
         ensureDirExist(path);
         sys.io.File.saveBytes(path, bytes);
+    }
+
+    /** Deletes the path, recursively if it's a directory. */
+    public static function deleteRecursively(path:String):Void {
+        if (FileSystem.exists(path)) {
+            if (FileSystem.isDirectory(path)) {
+                for (file in FileSystem.readDirectory(path)) deleteRecursively(Path.join([path, file]));
+                FileSystem.deleteDirectory(path);
+            } else {
+                FileSystem.deleteFile(path);
+            }
+        }
     }
 
 }
