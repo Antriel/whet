@@ -18,7 +18,10 @@ class IconFont extends Whetstone {
         var dir = getDir(getHash());
         // TODO this isn't great. If the input folder content changes, we don't update the dir, which depends on the hash...
         // We could re-route whenever we calculate hash, and it's different than our previous one.
-        this.route([for (ext in config.fontTypes) ('icons.$ext':SourceId) => (new AsyncFileStone(this, dir + 'icons.$ext'):Whetstone)]);
+        this.route([for (ext in config.fontTypes) {
+            var id:SourceId = 'icons.$ext';
+            id => (new AsyncFileStone(this, id.getPutInDir(dir)):Whetstone);
+        }]);
     }
 
     override function getHash():WhetSourceHash {
@@ -31,6 +34,7 @@ class IconFont extends Whetstone {
     }
 
     override function generateSource():WhetSource {
+        trace('Generating icon font.');
         NpmManager.assureInstalled("fantasticon", "1.0.9");
         // TODO should properly think out and implement folder-based caching.
         var hash = getHash();

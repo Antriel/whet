@@ -31,7 +31,8 @@ class NpmManager {
         trace('Installing $module@$version from npm.');
         Utils.ensureDirExist(NODE_ROOT);
         #if hxnodejs
-        js.node.ChildProcess.spawnSync('npm', ['--prefix', NODE_ROOT, 'install', '$module@$version'], { shell: true, stdio: 'inherit' });
+        js.node.ChildProcess.spawnSync('npm', ['--prefix', NODE_ROOT.toRelPath(), 'install', '$module@$version'],
+            { shell: true, stdio: 'inherit' });
         #elseif sys
         var p = new sys.io.Process('npm --prefix $NODE_ROOT install $module@$version');
         p.exitCode(true);

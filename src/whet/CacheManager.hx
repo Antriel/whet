@@ -29,18 +29,26 @@ class CacheManager {
      * Get valid path to generate a file in. The path is unique per stone id and fileId.
      * If hash is supplied, and a path was already assigned, the same path is returned, assuring consistency.
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
+     * If `fileId` is a directory, the returned path is unique directory for this stone. Consistent if the stone
+     * itself has a cached resource.
      */
     static public function getFilePath(stone:Whetstone, ?fileId:SourceId, ?hash:WhetSourceHash):SourceId {
         if (fileId == null) fileId = stone.defaultFilename;
-        fileId = fileId.getPutInDir(stone.id + '/');
-        if (stone.cacheStrategy.match(None | InMemory(_))) fileId = fileId.getPutInDir('.temp/');
-        fileId = fileId.getPutInDir('.whet/');
-        return switch stone.cacheStrategy {
-            case None: fileId;
-            case InMemory(_): memCache.getUniqueName(stone, fileId, hash);
-            case InFile(_): fileCache.getUniqueName(stone, fileId, hash);
+        var baseDir:SourceId = stone.id + '/';
+        if (stone.cacheStrategy.match(None | InMemory(_))) baseDir = baseDir.getPutInDir('.temp/');
+        baseDir = baseDir.getPutInDir('.whet/');
+        var id = fileId.getPutInDir(baseDir);
+        id = switch stone.cacheStrategy {
+            case None: id;
+            case InMemory(_): memCache.getUniqueName(stone, id, hash);
+            case InFile(_): fileCache.getUniqueName(stone, id, hash);
             case SingleFile(filepath, _): filepath;
         }
+        if (fileId.isDir()) { // Wanted a directory, find the root.
+            var rel = id.relativeTo(baseDir);
+            if (rel == null) throw "Cached file was not in expected base directory.";
+            return baseDir + '/' + rel.toRelPath().split('/')[0] + '/'; // First directory after base.
+        } else return id;
         // TODO clean tmp on start/end of process
     }
 
