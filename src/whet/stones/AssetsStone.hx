@@ -1,8 +1,8 @@
 package whet.stones;
 
+import haxe.io.Path;
 import sys.FileSystem;
 import sys.io.File;
-import haxe.io.Path;
 import whet.Whetstone;
 
 class AssetsStone extends Whetstone {

@@ -125,6 +125,12 @@ class WhetSource {
 @:using(whet.Whetstone.WhetSourceHash)
 class WhetSourceHash {
 
+    public static final EMPTY = {
+        var bytes = haxe.io.Bytes.alloc(HASH_LENGTH);
+        bytes.fill(0, HASH_LENGTH, 0);
+        new WhetSourceHash(bytes);
+    }
+
     static inline var HASH_LENGTH:Int = 20;
 
     final bytes:haxe.io.Bytes;

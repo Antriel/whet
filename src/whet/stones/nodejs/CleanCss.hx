@@ -6,15 +6,15 @@ import whet.npm.NpmManager;
 
 class CleanCss extends Whetstone {
 
-    public var css:Whetstone;
+    public var css:Array<Whetstone>;
 
-    public function new(project:WhetProject, id:WhetstoneID = null, css:Whetstone) {
+    public function new(project:WhetProject, id:WhetstoneID = null, css:Array<Whetstone>) {
         super(project, id, CacheManager.defaultFileStrategy);
         this.css = css;
     }
 
     override function getHash():WhetSourceHash {
-        return css.getHash();
+        return Lambda.fold(css.map(s -> s.getHash()), (a, b) -> a.add(b), WhetSourceHash.fromString('clean'));
     }
 
     override function generateSource():WhetSource {
@@ -24,7 +24,7 @@ class CleanCss extends Whetstone {
         // cleancss -o css/bulma.min.css css/bulma.css
         var out = CacheManager.getFilePath(this, 'clean.css', hash);
         Utils.ensureDirExist(out.dir);
-        var args:Array<String> = ['--skip-rebase', '-o', out, css.getSource().getFilePath()];
+        var args:Array<String> = ['--skip-rebase', '-o', out.toRelPath()].concat(css.map(s -> s.getSource().getFilePath().toRelPath()));
         #if hxnodejs
         var cmd = js.node.Path.normalize(NpmManager.NODE_ROOT + 'cleancss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
