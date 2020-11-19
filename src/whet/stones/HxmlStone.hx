@@ -1,8 +1,8 @@
 package whet.stones;
 
+import sys.io.File;
 import whet.SourceId;
 import whet.Whetstone;
-import sys.io.File;
 
 class HxmlStone extends Whetstone {
 
@@ -90,7 +90,7 @@ class HxmlStone extends Whetstone {
 
     override function generateSource():WhetSource {
         Whet.msg('Generating hxml file in ${CacheManager.getFilePath(this)}.');
-        return WhetSource.fromString(this, getFileContent(), null);
+        return WhetSource.fromString(this, getFileContent(), getHash());
     }
 
     public override function getHash():WhetSourceHash return WhetSourceHash.fromString(getBaseArgs().map(l -> l.join(' ')).join('\n'));
