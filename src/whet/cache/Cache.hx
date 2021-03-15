@@ -3,7 +3,7 @@ package whet.cache;
 interface Cache {
 
     public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
-    public function getUniqueName(stone:Whetstone, id:SourceId, ?hash:WhetSourceHash):SourceId;
+    public function getUniqueDir(stone:Whetstone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId;
 
 }
 
@@ -12,7 +12,7 @@ enum CacheStrategy {
     None;
     InMemory(durability:CacheDurability, ?check:DurabilityCheck);
     InFile(durability:CacheDurability, ?check:DurabilityCheck);
-    SingleFile(path:SourceId, durability:CacheDurability);
+    SingleAbsolute(dir:SourceId, durability:CacheDurability);
     // TODO combined file+memory cache?
 
 }

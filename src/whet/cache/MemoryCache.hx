@@ -6,18 +6,18 @@ class MemoryCache extends BaseCache<Whetstone, WhetSource> {
         cache = new Map();
     }
 
-    override function key(stone:Whetstone) return stone;
+    function key(stone:Whetstone) return stone;
 
-    override function value(stone:Whetstone, source:WhetSource) return source;
+    function value(source:WhetSource) return source;
 
-    override function source(stone:Whetstone, value:WhetSource):WhetSource return value;
+    function source(stone:Whetstone, value:WhetSource):WhetSource return value;
 
-    override function getFilenames(stone:Whetstone):Array<SourceId> {
+    function getExistingDirs(stone:Whetstone):Array<SourceId> {
         var list = cache.get(stone);
-        if (list != null) return list.filter(s -> s.hasFile()).map(s -> s.getFilePath());
+        if (list != null) return list.filter(s -> s.hasDir()).map(s -> s.getDirPath());
         else return null;
     }
 
-    override function getPathFor(value:WhetSource):SourceId return value.hasFile() ? value.getFilePath() : null;
+    function getDirFor(value:WhetSource):SourceId return value.hasDir() ? value.getDirPath() : null;
 
 }

@@ -1,7 +1,21 @@
 package whet.cache;
 
+import haxe.DynamicAccess;
+import sys.FileSystem;
+import whet.WhetSource.WhetSourceData;
+import whet.Whetstone.WhetstoneID;
+
 class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
 
+    /**
+     * TODO:
+     * As an optimization, maybe we could re-use the existing runtime value in `source`,
+     * especially if we add multiple formats such as runtime vs in-file, etc.)
+     * TODO: test that with caching rules to only have 1 file, we won't generate
+     * multiple folders for build files. And ideally if 'hinting' the build filename
+     * such as server_standalone.js and replay.js would stay in that same folder?
+     * What about clearing that folder before exporting? We don't want to remove logs...
+     */
     static inline var dbFile:String = '.whet/cache.json';
 
     public function new() {
@@ -11,45 +25,56 @@ class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
             for (key => values in db) cache.set(key, [for (val in values) {
                 hash: WhetSourceHash.fromHex(val.hash),
                 ctime: val.ctime,
-                fileHash: WhetSourceHash.fromHex(val.fileHash),
-                filePath: val.filePath
+                baseDir: val.baseDir,
+                files: [for (file in val.files) {
+                    fileHash: WhetSourceHash.fromHex(file.fileHash),
+                    filePath: file.filePath
+                }]
             }]);
         }
     }
 
-    override function key(stone:Whetstone) return stone.id;
+    function key(stone:Whetstone) return stone.id;
 
-    override function value(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue return {
+    function value(source:WhetSource):RuntimeFileCacheValue return {
         hash: source.hash,
         ctime: source.ctime,
-        fileHash: WhetSourceHash.fromBytes(source.data),
-        filePath: source.getFilePath()
+        baseDir: source.getDirPath(),
+        files: [for (data in source.data) {
+            fileHash: WhetSourceHash.fromBytes(data.data),
+            filePath: data.getFilePath()
+        }]
     }
 
-    override function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
-        var source = WhetSource.fromFile(stone, value.filePath, value.hash);
-        if (source == null || (!stone.ignoreFileHash && !value.fileHash.equals(WhetSourceHash.fromBytes(source.data)))) {
-            remove(stone, value);
-            flush();
-            return null;
-        } else return source;
+    function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
+        var data = [];
+        var source = new WhetSource(data, value.hash, stone, value.ctime);
+        for (file in value.files) {
+            var path = file.filePath;
+            var sourceData = WhetSourceData.fromFile(path.relativeTo(value.baseDir), path);
+            if (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash)) {
+                source = null;
+                break;
+            } else data.push(sourceData);
+        }
+        return source;
     }
 
-    override function set(stone:Whetstone, source:WhetSource):RuntimeFileCacheValue {
-        var val = super.set(stone, source);
+    override function set(source:WhetSource):RuntimeFileCacheValue {
+        var val = super.set(source);
         flush();
         return val;
     }
 
-    override function getFilenames(stone:Whetstone):Array<SourceId> {
+    function getExistingDirs(stone:Whetstone):Array<SourceId> {
         var list = cache.get(stone.id);
-        if (list != null) return list.map(s -> s.filePath);
+        if (list != null) return list.map(s -> s.baseDir);
         else return null;
     }
 
     override function remove(stone:Whetstone, value:RuntimeFileCacheValue):Void {
-        if (sys.FileSystem.exists(value.filePath) && Lambda.count(cache.get(stone.id), v -> v.filePath == value.filePath) == 1)
-            sys.FileSystem.deleteFile(value.filePath);
+        if (FileSystem.exists(value.baseDir) && Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1)
+            Utils.deleteRecursively(value.baseDir);
         super.remove(stone, value);
         flush();
     }
@@ -60,15 +85,18 @@ class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         return changed;
     }
 
-    override function getPathFor(value:RuntimeFileCacheValue):SourceId return value.filePath;
+    function getDirFor(value:RuntimeFileCacheValue):SourceId return value.baseDir;
 
     function flush() {
         var db:DbJson = {};
         for (id => values in cache) db.set(id, [for (val in values) {
             hash: val.hash.toHex(),
             ctime: val.ctime,
-            fileHash: val.fileHash.toHex(),
-            filePath: val.filePath
+            baseDir: val.baseDir,
+            files: [for (file in val.files) {
+                fileHash: file.fileHash.toHex(),
+                filePath: file.filePath
+            }]
         }]);
         Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t'));
     }
@@ -79,8 +107,11 @@ typedef FileCacheValue<H, S> = {
 
     final hash:H;
     final ctime:Float;
-    final fileHash:H;
-    final filePath:S;
+    final baseDir:S;
+    final files:Array<{
+        final fileHash:H;
+        final filePath:S;
+    }>;
 
 };
 
