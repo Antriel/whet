@@ -36,6 +36,13 @@ class WhetSource {
         return dirPath;
     }
 
+    /**
+     * Returns first result if `id` is null, or one equals to it.
+     */
+    public function get(?id:SourceId):WhetSourceData {
+        return id == null ? data[0] : Lambda.find(data, entry -> entry.id == id);
+    }
+
 }
 
 class WhetSourceData {

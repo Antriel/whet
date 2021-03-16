@@ -49,7 +49,7 @@ abstract class Whetstone {
      * Hash passed should be the same as is this stone's current one. Passed in as optimization.
      */
     @:allow(whet.cache) final function generateSource(hash:WhetSourceHash):WhetSource {
-        var data = generate();
+        var data = generate(hash);
         if (data != null) {
             if (hash == null) { // Default hash is byte hash of the generated result.
                 hash = WhetSourceHash.merge(...data.map(d -> WhetSourceHash.fromBytes(d.data)));
@@ -60,7 +60,12 @@ abstract class Whetstone {
 
     public function getHash():WhetSourceHash return null;
 
-    private abstract function generate():Array<WhetSourceData>;
+    /**
+     * Function that actually generates the source. Passed hash is only non-null
+     * if `getHash()` is implemented. It can be used for `CacheManager.getDir` and
+     * is passed mainly as optimization.
+     */
+    private abstract function generate(hash:WhetSourceHash):Array<WhetSourceData>;
 
     /**
      * Returns a list of sources that this stone generates.
