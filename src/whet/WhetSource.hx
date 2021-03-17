@@ -6,14 +6,14 @@ class WhetSource {
 
     public final data:Array<WhetSourceData>;
     public final hash:WhetSourceHash;
-    public final origin:Whetstone;
+    public final origin:Stone;
     public final ctime:Float;
 
     var dirPath:SourceId = null;
 
     @:allow(whet.Whetstone)
     @:allow(whet.cache)
-    private function new(data:Array<WhetSourceData>, hash:WhetSourceHash, origin:Whetstone, ctime:Float) {
+    private function new(data:Array<WhetSourceData>, hash:WhetSourceHash, origin:Stone, ctime:Float) {
         this.data = data;
         this.hash = hash;
         this.origin = origin;

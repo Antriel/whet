@@ -9,8 +9,7 @@ import whet.cache.CacheManager;
 class TestMultiData extends Test {
 
     public function testBasics() {
-        var p = new WhetProject({ name: 'test' });
-        var sub = new MultiStone(p, { vals: ['a', 'b', 'c'] });
+        var sub = new MultiStone({ vals: ['a', 'b', 'c'] });
         var s1 = sub.getSource();
         Assert.isTrue(s1.hash.equals(sub.getSource().hash));
         sub.config.vals = ['1', '2', '3'];
@@ -22,8 +21,7 @@ class TestMultiData extends Test {
     }
 
     public function testRouting() {
-        var p = new WhetProject({ name: 'test' });
-        var sub = new MultiStone(p, { vals: ['a', 'b', 'c'] });
+        var sub = new MultiStone({ vals: ['a', 'b', 'c'] });
         // TODO:
         // p.route([
         //     'all.csv' => sub,
@@ -38,13 +36,11 @@ class TestMultiData extends Test {
 
 }
 
-class MultiStone extends Whetstone {
+class MultiStone extends Whetstone<MultiStoneConfig> {
 
-    public var config:MultiStoneConfig;
-
-    public function new(p:WhetProject, config:MultiStoneConfig) {
-        super(p, null, CacheManager.defaultFileStrategy);
-        this.config = config;
+    public function new(config:MultiStoneConfig) {
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
+        super(config);
     }
 
     override function getHash():WhetSourceHash {
@@ -61,7 +57,7 @@ class MultiStone extends Whetstone {
 
 }
 
-@:structInit class MultiStoneConfig {
+@:structInit class MultiStoneConfig extends WhetstoneConfig {
 
     public var vals:Array<String>;
 

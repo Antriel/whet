@@ -3,9 +3,9 @@ package whet.cache;
 import haxe.DynamicAccess;
 import sys.FileSystem;
 import whet.WhetSource.WhetSourceData;
-import whet.Whetstone.WhetstoneID;
+import whet.Whetstone.WhetstoneId;
 
-class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
+class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
 
     /**
      * TODO:
@@ -34,7 +34,7 @@ class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         }
     }
 
-    function key(stone:Whetstone) return stone.id;
+    function key(stone:Stone) return stone.id;
 
     function value(source:WhetSource):RuntimeFileCacheValue return {
         hash: source.hash,
@@ -46,7 +46,7 @@ class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         }]
     }
 
-    function source(stone:Whetstone, value:RuntimeFileCacheValue):WhetSource {
+    function source(stone:Stone, value:RuntimeFileCacheValue):WhetSource {
         var data = [];
         var source = new WhetSource(data, value.hash, stone, value.ctime);
         for (file in value.files) {
@@ -66,13 +66,13 @@ class FileCache extends BaseCache<WhetstoneID, RuntimeFileCacheValue> {
         return val;
     }
 
-    function getExistingDirs(stone:Whetstone):Array<SourceId> {
+    function getExistingDirs(stone:Stone):Array<SourceId> {
         var list = cache.get(stone.id);
         if (list != null) return list.map(s -> s.baseDir);
         else return null;
     }
 
-    override function remove(stone:Whetstone, value:RuntimeFileCacheValue):Void {
+    override function remove(stone:Stone, value:RuntimeFileCacheValue):Void {
         if (FileSystem.exists(value.baseDir) && Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1)
             Utils.deleteRecursively(value.baseDir);
         super.remove(stone, value);

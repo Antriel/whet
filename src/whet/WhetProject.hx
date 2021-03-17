@@ -1,10 +1,10 @@
 package whet;
 
-import tink.CoreApi;
 import haxe.Constraints.Function;
-import whet.Whetstone;
 import haxe.DynamicAccess;
 import haxe.rtti.Meta;
+import tink.CoreApi;
+import whet.Whetstone;
 
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
@@ -17,14 +17,14 @@ class WhetProject {
     public final commandsMeta:Array<CommandMetadata>;
     public final postInit:Future<Noise>;
 
-    final stones:Map<WhetstoneID, Whetstone>;
+    // final stones:Map<WhetstoneID, Whetstone>;
     @:allow(whet.Whet) final postInitTrigger:FutureTrigger<Noise>;
 
     public function new(config:WhetProjectConfig) {
         this.config = config;
         if (config.id == null) config.id = StringTools.replace(config.name, ' ', '-').toLowerCase();
         postInit = postInitTrigger = Future.trigger();
-        stones = new Map();
+        // stones = new Map();
         commands = new Map();
         commandsMeta = [];
         addCommands(this);
@@ -52,16 +52,14 @@ class WhetProject {
         }
     }
 
-    public function stone<T:Whetstone>(cls:Class<T>):T return
-        cast stones.get(WhetstoneID.fromClass(cast cls)); // Not sure why we need to cast the cls.
-
-    public function stoneByID(id:WhetstoneID) return stones.get(id);
-
-    @:allow(whet.Whetstone) function add(stone:Whetstone, id:WhetstoneID):WhetstoneID {
-        var uniqueId = Utils.makeUniqueString(id, id -> stones.exists(id));
-        stones.set(uniqueId, stone);
-        return uniqueId;
-    }
+    // public function stone<T:Whetstone>(cls:Class<T>):T return
+    //     cast stones.get(WhetstoneID.fromClass(cast cls)); // Not sure why we need to cast the cls.
+    // public function stoneByID(id:WhetstoneID) return stones.get(id);
+    // @:allow(whet.Whetstone) function add(stone:Whetstone, id:WhetstoneID):WhetstoneID {
+    //     var uniqueId = Utils.makeUniqueString(id, id -> stones.exists(id));
+    //     stones.set(uniqueId, stone);
+    //     return uniqueId;
+    // }
 
 }
 

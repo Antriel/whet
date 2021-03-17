@@ -6,7 +6,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
 
     var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
 
-    @:access(whet.Whetstone) public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
+    @:access(whet.Whetstone) public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
         // So, what do we need here, and what do we return?
         // We probably need the stone to have `key(stone)` working, but do we generate the full source or just the structure?
         // Do we add `hash` param here? Probably yeah.
@@ -44,7 +44,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         return val;
     }
 
-    public function getUniqueDir(stone:Whetstone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId {
+    public function getUniqueDir(stone:Stone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId {
         if (hash != null) {
             var values = cache.get(key(stone));
             if (values != null) {
@@ -64,8 +64,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         return ('v$maxNum/':SourceId).getPutInDir(baseDir);
     }
 
-    function checkDurability(stone:Whetstone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
-            ageIndex:Value->Int):Void {
+    function checkDurability(stone:Stone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Void {
         if (values == null || values.length == 0) return;
         var i = values.length;
         while (--i > 0) {
@@ -73,7 +72,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         }
     }
 
-    function shouldKeep(stone:Whetstone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
+    function shouldKeep(stone:Stone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
         return switch durability {
             case KeepForever: true;
             case LimitCountByLastUse(count): useIndex(val) < count;
@@ -92,15 +91,15 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         return true;
     }
 
-    function remove(stone:Whetstone, value:Value):Void cache.get(key(stone)).remove(value);
+    function remove(stone:Stone, value:Value):Void cache.get(key(stone)).remove(value);
 
-    abstract function key(stone:Whetstone):Key;
+    abstract function key(stone:Stone):Key;
 
     abstract function value(source:WhetSource):Value;
 
-    abstract function source(stone:Whetstone, value:Value):WhetSource;
+    abstract function source(stone:Stone, value:Value):WhetSource;
 
-    abstract function getExistingDirs(stone:Whetstone):Array<SourceId>;
+    abstract function getExistingDirs(stone:Stone):Array<SourceId>;
 
     abstract function getDirFor(value:Value):SourceId;
 

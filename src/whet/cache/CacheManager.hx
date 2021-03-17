@@ -16,7 +16,7 @@ class CacheManager {
     static var memCache:MemoryCache = new MemoryCache();
     @:isVar static var fileCache(get, set):FileCache;
 
-    @:access(whet.Whetstone) static public function getSource(stone:Whetstone):WhetSource {
+    @:access(whet.Whetstone) static public function getSource(stone:Stone):WhetSource {
         return switch stone.cacheStrategy {
             case None: stone.generateSource(stone.getHash());
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
@@ -39,7 +39,7 @@ class CacheManager {
      * File cache, as a way of storing a source, through the source, ^ which uses the cache.
      * Stones themselves. Seems like mostly just to get a dir to export to.
      */
-    static public function getDir(stone:Whetstone, ?hash:WhetSourceHash):SourceId {
+    static public function getDir(stone:Stone, ?hash:WhetSourceHash):SourceId {
         var baseDir:SourceId = stone.id + '/';
         if (stone.cacheStrategy.match(None | InMemory(_))) baseDir = baseDir.getPutInDir('.temp/');
         baseDir = baseDir.getPutInDir('.whet/');

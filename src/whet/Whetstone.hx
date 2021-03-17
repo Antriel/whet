@@ -7,22 +7,24 @@ import whet.cache.CacheManager;
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
 #end
-abstract class Whetstone {
+abstract class Whetstone<T:WhetstoneConfig> {
 
-    public final id:WhetstoneID;
-    public var cacheStrategy:CacheStrategy;
-    public var defaultFilename:String = "file.dat";
+    public var config:T;
+
+    // public var defaultFilename:String = "file.dat"; // TODO we don't need this anymore, right?
 
     /** If true, hash of a cached file (not `stone.getHash()` but actual file contents) won't be checked. */
     public var ignoreFileHash:Bool = false;
 
-    var project:WhetProject;
+    // var project:WhetProject;
+    public var id(get, set):WhetstoneId;
+    public var cacheStrategy(get, set):CacheStrategy;
 
-    public function new(project:WhetProject, id:WhetstoneID = null, cacheStrategy = null) {
-        this.project = project;
-        this.cacheStrategy = cacheStrategy != null ? cacheStrategy : CacheManager.defaultStrategy;
-        this.id = project.add(this, id != null ? id : this);
-        project.addCommands(this);
+    public function new(config:T) {
+        this.config = config;
+        if (config.id == null) config.id = this;
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultStrategy;
+        // project.addCommands(this); // TODO search for commands after calling `init`.
     }
 
     // var router:WhetSourceRouter;
@@ -78,25 +80,42 @@ abstract class Whetstone {
     }
 
     /** Caches this resource under supplied `path` as a single, always up-to-date copy. */
-    public function cacheAsSingleFile(path:SourceId):Whetstone {
-        this.cacheStrategy = SingleAbsolute(path, KeepForever);
+    public function cacheAsSingleFile(path:SourceId):Whetstone<T> {
+        config.cacheStrategy = SingleAbsolute(path, KeepForever);
         getSource();
         return this;
     }
 
+    private inline function get_id() return config.id;
+
+    private inline function set_id(id:WhetstoneId) return config.id = id;
+
+    private inline function get_cacheStrategy() return config.cacheStrategy;
+
+    private inline function set_cacheStrategy(cacheStrategy:CacheStrategy) return config.cacheStrategy = cacheStrategy;
+
 }
 
-abstract WhetstoneID(String) from String to String {
+abstract WhetstoneId(String) from String to String {
 
     @:from
-    public static inline function fromClass(v:Class<Whetstone>):WhetstoneID
+    public static inline function fromClass(v:Class<Stone>):WhetstoneId
         return Type.getClassName(v).split('.').pop();
 
     @:from
-    public static inline function fromInstance(v:Whetstone):WhetstoneID
+    public static inline function fromInstance(v:Stone):WhetstoneId
         return fromClass(Type.getClass(v));
 
 }
+
+@:structInit class WhetstoneConfig {
+
+    public var cacheStrategy:CacheStrategy = null;
+    public var id:WhetstoneId = null;
+
+}
+
+typedef Stone = Whetstone<Dynamic>;
 
 // class WhetSource {
 //     public final data:haxe.io.Bytes;

@@ -2,8 +2,8 @@ package whet.cache;
 
 interface Cache {
 
-    public function get(stone:Whetstone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
-    public function getUniqueDir(stone:Whetstone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId;
+    public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
+    public function getUniqueDir(stone:Stone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId;
 
 }
 
