@@ -30,10 +30,6 @@ class JsonStone extends Whetstone<JsonConfig> {
         return [WhetSourceData.fromString(config.filename, Json.stringify(data, null, '  '))];
     }
 
-    override function getHash():WhetSourceHash {
-        return WhetSourceHash.fromString(Json.stringify(data));
-    }
-
 }
 
 @:structInit class JsonConfig extends WhetstoneConfig {

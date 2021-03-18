@@ -7,13 +7,12 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
     var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
 
     @:access(whet.Whetstone) public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
-        // So, what do we need here, and what do we return?
-        // We probably need the stone to have `key(stone)` working, but do we generate the full source or just the structure?
-        // Do we add `hash` param here? Probably yeah.
-        // So, step 1: Change how we generate and store stuff in all caches, from single bytes to handling the structure.
-        // Step 2: Loading _from_ the cache generates the same structure.
-        // Step 3: Win.
         var hash = stone.getHash();
+        var generatedSource = null;
+        if (hash == null) { // Default hash is hash of generated source, but generate it only once as optimization.
+            generatedSource = stone.generateSource(null);
+            hash = generatedSource.hash;
+        }
         var values = cache.get(key(stone));
         var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
         var value:Value = null;
@@ -28,7 +27,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         var src = value != null ? source(stone, value) : null;
         if (src == null) {
             if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-            var generatedSource = stone.generateSource(hash);
+            if (generatedSource == null) generatedSource = stone.generateSource(hash);
             if (generatedSource != null) src = source(stone, set(generatedSource));
         }
         if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);

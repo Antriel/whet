@@ -15,8 +15,6 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
      * multiple folders for build files. And ideally if 'hinting' the build filename
      * such as server_standalone.js and replay.js would stay in that same folder?
      * What about clearing that folder before exporting? We don't want to remove logs...
-     * TODO:
-     * Don't flush if nothing changed!
      */
     static inline var dbFile:String = '.whet/cache.json';
 
