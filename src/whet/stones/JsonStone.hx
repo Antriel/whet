@@ -2,18 +2,18 @@ package whet.stones;
 
 import haxe.DynamicAccess;
 import haxe.Json;
-import whet.Whetstone;
 
-class JsonStone extends Whetstone {
+class JsonStone extends Whetstone<JsonConfig> {
 
     public var data:DynamicAccess<Dynamic> = {};
 
-    public function new(project:WhetProject, id:WhetstoneID = null) {
-        if (id == null) id = project.config.id;
-        super(project, id, CacheManager.defaultFileStrategy);
+    public function new(config:JsonConfig = null) {
+        if (config == null) config = {};
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
+        super(config);
     }
 
-    public function addProjectData():JsonStone {
+    public function addProjectData(project:WhetProject):JsonStone {
         data["name"] = project.config.name;
         data["id"] = project.config.id;
         data["description"] = project.config.description;
@@ -26,8 +26,18 @@ class JsonStone extends Whetstone {
         return this;
     }
 
-    override function generateSource():WhetSource {
-        return WhetSource.fromString(this, Json.stringify(data, null, '  '), null);
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
+        return [WhetSourceData.fromString(config.filename, Json.stringify(data, null, '  '))];
     }
+
+    override function getHash():WhetSourceHash {
+        return WhetSourceHash.fromString(Json.stringify(data));
+    }
+
+}
+
+@:structInit class JsonConfig extends WhetstoneConfig {
+
+    public var filename:SourceId = 'data.json';
 
 }

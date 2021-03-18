@@ -24,7 +24,7 @@ abstract class Whetstone<T:WhetstoneConfig> {
         this.config = config;
         if (config.id == null) config.id = this;
         if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultStrategy;
-        // project.addCommands(this); // TODO search for commands after calling `init`.
+        if (config.project != null) config.project.addCommands(this);
     }
 
     // var router:WhetSourceRouter;
@@ -79,10 +79,17 @@ abstract class Whetstone<T:WhetstoneConfig> {
         return getSource().data.map(sd -> sd.id);
     }
 
-    /** Caches this resource under supplied `path` as a single, always up-to-date copy. */
-    public function cacheAsSingleFile(path:SourceId):Whetstone<T> {
-        config.cacheStrategy = SingleAbsolute(path, KeepForever);
-        getSource();
+    /** 
+     * Caches this resource under supplied `path` as a single copy.
+     * If `path` is not a directory, changes `filename` or `id` of this stone.
+     * If `generate` is true, the source is exported right away.
+     */
+    public function cachePath(path:SourceId, generate:Bool = true):Whetstone<T> {
+        config.cacheStrategy = AbsolutePath(path.dir, LimitCountByAge(1));
+        if (!path.isDir()) if (Reflect.hasField(config, 'filename')) {
+            Reflect.setField(config, 'filename', path.withExt);
+        } else this.id = path.withExt;
+        if (generate) getSource();
         return this;
     }
 
@@ -96,7 +103,7 @@ abstract class Whetstone<T:WhetstoneConfig> {
 
 }
 
-abstract WhetstoneId(String) from String to String {
+@:transitive abstract WhetstoneId(String) from String to String {
 
     @:from
     public static inline function fromClass(v:Class<Stone>):WhetstoneId
@@ -112,6 +119,9 @@ abstract WhetstoneId(String) from String to String {
 
     public var cacheStrategy:CacheStrategy = null;
     public var id:WhetstoneId = null;
+    // TODO: Only project, or full hierarchy, with routing? But standard routing is about sources, not stones/commands.
+    // And one stone could be routed by multiple other stones, which would complicate the CLI commands API.
+    public var project:WhetProject = null;
 
 }
 

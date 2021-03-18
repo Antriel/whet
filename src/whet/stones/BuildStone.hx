@@ -1,18 +1,10 @@
 package whet.stones;
 
-import whet.Whetstone;
+class BuildStone extends Whetstone<BuildConfig> {
 
-class BuildStone extends Whetstone {
-
-    public var config:BuildConfig;
-
-    public function new(project:WhetProject, id:WhetstoneID = null, config:BuildConfig) {
-        if (id == null) id = project.config.id;
-        super(project, id, CacheManager.defaultFileStrategy);
-        if (config.hxml.isSingleFile()) {
-            defaultFilename = 'build.${config.hxml.getBuildExtension()}';
-        }
-        this.config = config;
+    public function new(config:BuildConfig) {
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
+        super(config);
     }
 
     /** Build the given hxml. */
@@ -20,30 +12,29 @@ class BuildStone extends Whetstone {
         Sys.command('haxe', Lambda.flatten(config.hxml.getBuildArgs()));
     }
 
-    override function generateSource():WhetSource {
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         if (config.hxml.isSingleFile()) {
-            var path = CacheManager.getFilePath(this);
+            var path = CacheManager.getDir(this, hash);
             // Clear the file, so if compilation fails, we don't serve old version.
             if (sys.FileSystem.exists(path)) sys.FileSystem.deleteFile(path);
             build();
-            return WhetSource.fromFile(this, path, getHash());
+            return [WhetSourceData.fromFile(path.withExt, path)];
         } else {
-            Whet.msg('Warning: Cannot get source of a multi-file build.');
-            return null;
-            // Multi-file builds should be used by routing the files (not implemented).
-            // That could be wrapped in some ZipStone or something similar, as needed.
+            throw 'Cannot get source of a multi-file build. Not implemented yet.';
         }
     }
 
     override function getHash():WhetSourceHash {
         return config.hxml.getHash();
         // Technically not correct, but real solution isn't feasible.
+        // TODO why not, let's try hashing all the source files! :)
     }
 
 }
 
-@:structInit class BuildConfig {
+@:structInit class BuildConfig extends WhetstoneConfig {
 
     public var hxml:HxmlStone;
+    public var filename:SourceId = null;
 
 }

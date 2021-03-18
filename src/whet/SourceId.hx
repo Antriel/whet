@@ -53,7 +53,10 @@ abstract SourceId(String) {
 
     private inline function get_ext() return this.extension();
 
-    private inline function set_ext(v):String throw "Not implemented.";
+    private inline function set_ext(v):String {
+        var p = new Path(this).ext = v;
+        return this = cast fromString(p.toString());
+    }
 
     private inline function get_withoutExt() return this.withoutDirectory().withoutExtension();
 

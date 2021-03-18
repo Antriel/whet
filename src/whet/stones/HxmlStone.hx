@@ -1,22 +1,23 @@
 package whet.stones;
 
-import sys.io.File;
-import whet.SourceId;
 import whet.Whetstone;
 
-class HxmlStone extends Whetstone {
+class HxmlStone extends Whetstone<HxmlConfig> {
 
-    public var config:HxmlConfig;
     public var build:BuildStone;
 
-    public function new(project:WhetProject, id:WhetstoneID = null, config:HxmlConfig) {
-        super(project, id != null ? id : project.config.id + '.hxml', InFile(LimitCountByLastUse(1)));
-        this.config = config != null ? config : {};
-        build = new BuildStone(project, id != null ? id + '.build' : null, { hxml: this });
-        defaultFilename = 'build.hxml';
+    public function new(config:HxmlConfig) {
+        if (config.id == null) config.id = 'build';
+        if (config.cacheStrategy == null) config.cacheStrategy = InFile(LimitCountByLastUse(1));
+        build = new BuildStone({ hxml: this, id: 'build', project: config.project });
+        super(config);
     }
 
-    public function clone(id:WhetstoneID = null):HxmlStone return new HxmlStone(project, id, config.clone());
+    public function clone(id:WhetstoneId = null):HxmlStone {
+        var cloneConfig = config.clone();
+        cloneConfig.id = id;
+        return new HxmlStone(cloneConfig);
+    }
 
     public function mergeConfig(additionalConfig:HxmlConfig):HxmlStone {
         function merge<T>(from:Array<T>, to:Array<T>)
@@ -51,7 +52,12 @@ class HxmlStone extends Whetstone {
     }
 
     function getPlatform():Array<String> {
-        var path = CacheManager.getFilePath(build, build.getHash());
+        var dir = CacheManager.getDir(build, build.getHash());
+        var path = if (isSingleFile() && build.config.filename != null) {
+            var filename = build.config.filename;
+            if (filename.ext == "") filename.ext = getBuildExtension();
+            filename.getPutInDir(dir);
+        } else dir;
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];
@@ -88,16 +94,19 @@ class HxmlStone extends Whetstone {
         }
     }
 
-    override function generateSource():WhetSource {
-        Whet.msg('Generating hxml file in ${CacheManager.getFilePath(this)}.');
-        return WhetSource.fromString(this, getFileContent(), getHash());
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
+        var filename:SourceId = id;
+        if (filename.ext == "") filename.ext = "hxml";
+        var path = filename.getPutInDir(CacheManager.getDir(this, hash));
+        Whet.msg('Generating hxml file in $path.');
+        return [WhetSourceData.fromString(filename, getFileContent())];
     }
 
     public override function getHash():WhetSourceHash return WhetSourceHash.fromString(getBaseArgs().map(l -> l.join(' ')).join('\n'));
 
 }
 
-@:structInit class HxmlConfig {
+@:structInit class HxmlConfig extends WhetstoneConfig {
 
     public var libs:Array<String> = [];
     public var paths:Array<String> = [];

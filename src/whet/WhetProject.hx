@@ -13,21 +13,25 @@ import whet.Whetstone;
 class WhetProject {
 
     public final config:WhetProjectConfig;
+
     public final commands:Map<String, CommandMetadata>;
     public final commandsMeta:Array<CommandMetadata>;
-    public final postInit:Future<Noise>;
+
+    // public final postInit:Future<Noise>;
+    @:allow(whet.Whet) private static final projects:Array<WhetProject> = [];
 
     // final stones:Map<WhetstoneID, Whetstone>;
-    @:allow(whet.Whet) final postInitTrigger:FutureTrigger<Noise>;
+    // @:allow(whet.Whet) final postInitTrigger:FutureTrigger<Noise>;
 
     public function new(config:WhetProjectConfig) {
         this.config = config;
         if (config.id == null) config.id = StringTools.replace(config.name, ' ', '-').toLowerCase();
-        postInit = postInitTrigger = Future.trigger();
+        // postInit = postInitTrigger = Future.trigger();
         // stones = new Map();
         commands = new Map();
         commandsMeta = [];
-        addCommands(this);
+        // addCommands(this); // TODO parse them from the module fields?
+        projects.push(this);
     }
 
     public function addCommands(ctx:Dynamic) {

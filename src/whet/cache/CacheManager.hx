@@ -20,8 +20,8 @@ class CacheManager {
         return switch stone.cacheStrategy {
             case None: stone.generateSource(stone.getHash());
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
-            case InFile(durability, check): fileCache.get(stone, durability, check != null ? check : AllOnUse);
-            case SingleAbsolute(_, durability): fileCache.get(stone, All([LimitCountByAge(1), durability]), AllOnUse);
+            case InFile(durability, check) | AbsolutePath(_, durability, check):
+                fileCache.get(stone, durability, check != null ? check : AllOnUse);
         }
     }
 
@@ -47,7 +47,7 @@ class CacheManager {
             case None: baseDir; // TODO should we clean the folder? But when?
             case InMemory(_): memCache.getUniqueDir(stone, baseDir, hash);
             case InFile(_): fileCache.getUniqueDir(stone, baseDir, hash);
-            case SingleAbsolute(dir, _): dir;
+            case AbsolutePath(dir, _): dir;
         }
         return id;
         // TODO clean tmp on start/end of process
