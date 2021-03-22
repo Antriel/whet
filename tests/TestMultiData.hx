@@ -5,6 +5,7 @@ import whet.WhetSource;
 import whet.WhetSourceHash;
 import whet.Whetstone;
 import whet.cache.CacheManager;
+import whet.route.Router;
 
 class TestMultiData extends Test {
 
@@ -22,16 +23,15 @@ class TestMultiData extends Test {
 
     public function testRouting() {
         var sub = new MultiStone({ vals: ['a', 'b', 'c'] });
-        // TODO:
-        // p.route([
-        //     'all.csv' => sub,
-        //     'subs/' => [sub, 'sub/']
-        //     'first' => [sub, 'sub/sub0']
-        // ]);
-        // p.find('all.csv') == "a, b, c"
-        // p.find('first') == "a"
-        // p.find('subs/sub1') == "b"
-        // new WhetSourceRouter(['subs/ => [sub, 'sub/]]).getAll().length == 3
+        var r = new Router([
+            'all.csv' => [sub => 'all.csv'],
+            'subs/' => [sub => 'sub/'],
+            'first' => [sub => 'sub/sub0']
+        ]);
+        Assert.equals('a, b, c', r.find('all.csv')[0].get().data.toString());
+        Assert.equals('a', r.find('first')[0].get().data.toString());
+        Assert.equals('b', r.find('subs/sub1')[0].get().data.toString());
+        Assert.equals(3, r.find('subs/').length);
     }
 
 }

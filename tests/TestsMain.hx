@@ -1,9 +1,10 @@
 function main() {
     whet.Utils.deleteRecursively('.whet');
     utest.UTest.run([
-        new TestRemoteFileStone(),
+        // new TestRemoteFileStone(),
         new TestRouter(),
-        // new TestNpmManager()
+        // new TestNpmManager(),
+        new TestMultiData(),
     ]);
 
 }
