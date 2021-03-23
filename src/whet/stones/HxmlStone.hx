@@ -51,13 +51,17 @@ class HxmlStone extends Whetstone<HxmlConfig> {
             .join('\n');
     }
 
-    function getPlatform():Array<String> {
+    @:allow(whet.stones.BuildStone) function getExportPath():SourceId {
         var dir = CacheManager.getDir(build, build.getHash());
-        var path = if (isSingleFile() && build.config.filename != null) {
-            var filename = build.config.filename;
+        return if (isSingleFile()) {
+            var filename:SourceId = build.config.filename != null ? build.config.filename : 'build';
             if (filename.ext == "") filename.ext = getBuildExtension();
             filename.getPutInDir(dir);
         } else dir;
+    }
+
+    function getPlatform():Array<String> {
+        var path = getExportPath();
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];

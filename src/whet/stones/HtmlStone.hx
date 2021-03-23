@@ -1,21 +1,19 @@
 package whet.stones;
 
-import whet.Whetstone;
+class HtmlStone extends Whetstone<HtmlConfig> {
 
-class HtmlStone extends Whetstone {
-
-    public var config:HtmlConfig;
-
-    public function new(project:WhetProject, id:WhetstoneID = null, config:HtmlConfig = null) {
-        super(project, id);
-        this.config = config != null ? config : {};
-        this.defaultFilename = id != null ? '$id.html' : 'index.html';
-        if (this.config.title == null) this.config.title = project.config.name;
-        if (this.config.meta != null && this.config.meta.description == null)
-            this.config.meta.description = project.config.description;
+    public function new(config:HtmlConfig) {
+        if (config.title == null && config.project != null) config.title = config.project.config.name;
+        if (config.meta != null && config.meta.description == null)
+            config.meta.description = config.project.config.description;
+        super(config);
     }
 
-    public function clone(id:WhetstoneID = null):HtmlStone return new HtmlStone(project, id, config.clone());
+    public function clone(id:WhetstoneId = null):HtmlStone {
+        var cloneConfig = config.clone();
+        if (id != null) cloneConfig.id = id;
+        return new HtmlStone(cloneConfig);
+    }
 
     public function addBodyScript(src:String) {
         config.bodyElements.push('<script type="text/javascript" src="$src"></script>');
@@ -41,6 +39,7 @@ class HtmlStone extends Whetstone {
                 min-width: 100%;
             }</style>'
         );
+        return this;
     }
 
     public function getContent():String {
@@ -92,11 +91,11 @@ class HtmlStone extends Whetstone {
         return sb.toString();
     }
 
-    override function generateSource():WhetSource return WhetSource.fromString(this, getContent(), null);
+    function generate(hash):Array<WhetSourceData> return [WhetSourceData.fromString(config.id, getContent())];
 
 }
 
-@:structInit class HtmlConfig {
+@:structInit class HtmlConfig extends WhetstoneConfig {
 
     public var headElements:Array<String> = [];
     public var bodyElements:Array<String> = [];
@@ -109,6 +108,9 @@ class HtmlStone extends Whetstone {
     public var bodyElementAtts:Array<String> = [];
 
     public function clone():HtmlConfig return {
+        project: this.project,
+        id: this.id,
+        cacheStrategy: this.cacheStrategy,
         headElements: this.headElements.copy(),
         bodyElements: this.bodyElements.copy(),
         meta: this.meta == null ? null : this.meta.clone(),

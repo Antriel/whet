@@ -1,37 +1,40 @@
 package whet.stones;
 
 import sys.FileSystem;
-import whet.Whetstone;
 
-class FileStone extends Whetstone {
+class FileStone extends Whetstone<FileStoneConfig> {
 
-    final filePath:String;
-
-    public function new(project:WhetProject, filePath:String) {
-        super(project, filePath);
-        this.filePath = filePath;
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
+        return [for (path in config.paths) {
+            if (path.isDir()) {
+                for (file in FileSystem.readDirectory(path)) {
+                    var filepath = (file:SourceId).getPutInDir(path);
+                    WhetSourceData.fromFile(filepath.relativeTo(path), filepath);
+                }
+            } else WhetSourceData.fromFile(path.withExt, path);
+        }];
     }
-
-    override function generateSource():WhetSource {
-        return WhetSource.fromFile(this, filePath, null);
-    }
+    // TODO should also support nested directories and being able to configure what the sourceId will include.
 
 }
 
-class AsyncFileStone extends Whetstone {
+@:structInit class FileStoneConfig extends WhetstoneConfig {
 
-    final filePath:String;
-    final parent:Whetstone;
-
-    public function new(parent:Whetstone, filePath:String) {
-        super(parent.project, filePath);
-        this.parent = parent;
-        this.filePath = filePath;
-    }
-
-    override function generateSource():WhetSource {
-        if (!FileSystem.exists(filePath)) parent.getSource();
-        return WhetSource.fromFile(this, filePath, null);
-    }
+    /** Can be either a file, or a directory that won't be recursed. */
+    public var paths:Array<SourceId>; // TODO support glob patterns, or regex or something.
 
 }
+
+// class AsyncFileStone extends Whetstone {
+//     final filePath:String;
+//     final parent:Whetstone;
+//     public function new(parent:Whetstone, filePath:String) {
+//         super(parent.project, filePath);
+//         this.parent = parent;
+//         this.filePath = filePath;
+//     }
+//     override function generateSource():WhetSource {
+//         if (!FileSystem.exists(filePath)) parent.getSource();
+//         return WhetSource.fromFile(this, filePath, null);
+//     }
+// }

@@ -4,21 +4,18 @@ import whet.Whetstone;
 #if tink_http
 import tink.CoreApi;
 import tink.http.Handler;
+import tink.http.Header;
 import tink.http.Request;
 import tink.http.Response;
 import tink.http.containers.*;
-import tink.http.Header;
 import tink.io.Source.RealSourceTools;
 #end
 
-class ServerStone extends Whetstone {
+class ServerStone extends Whetstone<ServerConfig> {
 
-    public var config:ServerConfig;
+    public var routeDynamic:SourceId->WhetSourceData = null;
 
-    public function new(project:WhetProject, id:WhetstoneID = null, config:ServerConfig = null) {
-        super(project, id);
-        this.config = config != null ? config : {};
-    }
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> return [];
 
     #if (!macro && tink_http && hxnodejs && mime)
     /** Starts a static server hosting attached resources. */
@@ -27,6 +24,7 @@ class ServerStone extends Whetstone {
         var h:Handler = handler;
         #if tink_http_middleware
         for (middleware in config.middlewares) h = middleware.getMiddleware().apply(h);
+        if (config.project != null) for (middleware in config.middlewares) config.project.addCommands(middleware);
         #end
         container.run(h).handle(function(state) switch state {
             case Running(_):
@@ -45,19 +43,23 @@ class ServerStone extends Whetstone {
             case GET:
                 if (id.isDir()) id.withExt = "index.html";
                 else if (id.ext == '') id = '$id/index.html';
-                var stone = findStone(id);
-                var data = stone == null ? null : stone.getSource();
+                var routeResult = config.router.find(id);
+                var data = if (routeResult.length > 0) routeResult[0].get();
+                else if (routeDynamic != null) routeDynamic(id)
+                else null;
                 if (data != null) {
                     var mime = mime.Mime.lookup(id);
                     res = partial(req.header, data, mime, id.withExt);
-                } else res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
+                } else {
+                    res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
+                }
             case PUT:
                 var cmd = haxe.io.Path.removeTrailingSlashes(id);
-                if (project.commands.exists(cmd)) {
+                if (config.project != null && config.project.commands.exists(cmd)) {
                     return switch req.body {
                         case Plain(source): // TODO: this should all be more async and properly handle errors, possibly return results.
                             RealSourceTools.all(source).next(function(p) {
-                                project.commands.get(cmd).fnc(p.toString());
+                                config.project.commands.get(cmd).fnc(p.toString());
                                 return OutgoingResponse.blob(OK, tink.Chunk.EMPTY, "");
                             }).recover(e -> OutgoingResponse.reportError(new Error(InternalError, 'InternalError')));
                         case Parsed(parts): throw "Not implemented.";
@@ -71,7 +73,7 @@ class ServerStone extends Whetstone {
     }
 
     // Adapted from https://github.com/haxetink/tink_http_middleware/blob/master/src/tink/http/middleware/Static.hx.
-    function partial(header:Header, source:WhetSource, contentType:String, filename:String) {
+    function partial(header:Header, source:WhetSourceData, contentType:String, filename:String) {
         var headers = [
             new HeaderField('Accept-Ranges', 'bytes'),
             new HeaderField('Vary', 'Accept-Encoding'),
@@ -118,11 +120,11 @@ class ServerStone extends Whetstone {
 
 }
 
-@:structInit
-class ServerConfig {
+@:structInit class ServerConfig extends WhetstoneConfig {
 
-    public final port:Int = 7000;
-    public final middlewares:Array<WhetServerMiddleware> = [];
+    public var port:Int = 7000;
+    public var middlewares:Array<WhetServerMiddleware> = [];
+    public var router:Router;
 
 }
 

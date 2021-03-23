@@ -3,21 +3,21 @@ package whet.stones;
 import sys.FileSystem;
 import whet.Whetstone;
 
-class ClosureCompilerStone extends Whetstone {
+class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
 
-    public var config:ClosureCompilerConfig;
+    public static final mergedJs:SourceId = 'merged.js';
 
-    public function new(project:WhetProject, id:WhetstoneID = null, config:ClosureCompilerConfig) {
-        super(project, id, CacheManager.defaultFileStrategy);
-        this.config = config;
+    public function new(config) {
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
+        super(config);
     }
 
     #if closure
     static var compilerPath:String = #if macro getCompilerPathImpl(); #else getCompilerPath(); #end
 
-    override function generateSource():WhetSource {
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         var startTime = Sys.time();
-        var files = getFiles().map(s -> s.getSource());
+        var files = config.sources.getData();
         Whet.msg('Closure compiling ${files.length} file${files.length == 1 ? "" : "s"}.');
         var totalSizeKB = 0;
         for (file in files) {
@@ -25,16 +25,16 @@ class ClosureCompilerStone extends Whetstone {
             Whet.msg('File ${file.getFilePath()} with size ${file.lengthKB} KB.');
         }
 
-        var output = CacheManager.getFilePath(this, 'merged.js');
+        var output = mergedJs.getPutInDir(CacheManager.getDir(this, hash));
         var args = getArgs(files.map(f -> f.getFilePath()), output);
 
         return switch Sys.command('java', args) {
             case 0:
-                var resource = WhetSource.fromFile(this, output, getHash());
+                var resource = WhetSourceData.fromFile(output.withExt, output);
                 var totalTime = Sys.time() - startTime;
                 var secondsRounded = Math.round(totalTime * 1000) / 1000;
                 Whet.msg('Success. Merged in ${secondsRounded}s, final size ${resource.lengthKB} KB (-${totalSizeKB - resource.lengthKB} KB).');
-                return resource;
+                return [resource];
             case error:
                 Whet.msg('Closure compile failed with error code $error.');
                 null;
@@ -43,8 +43,7 @@ class ClosureCompilerStone extends Whetstone {
 
     override function getHash():WhetSourceHash {
         var hash = WhetSourceHash.fromString(getArgs([], "").join(''));
-        for (file in getFiles()) hash.add(file.getHash());
-        return hash;
+        return hash.add(config.sources.getHash());
     }
 
     function getArgs(filePaths:Array<SourceId>, outputPath:String):Array<String> {
@@ -62,17 +61,6 @@ class ClosureCompilerStone extends Whetstone {
         if (config.jscompOff != null) args.push('--jscomp_off=${config.jscompOff}');
         for (path in filePaths) args = args.concat(['--js', path]);
         return args;
-    }
-
-    function getFiles():Array<Whetstone> {
-        return config.files.map(file -> {
-            for (src in config.sources) {
-                var fileStone = src.findStone(file);
-                if (fileStone != null) return fileStone;
-            }
-            Whet.error('Could not find source for $file.');
-            return null;
-        });
     }
 
     macro static function getCompilerPath() return macro $v{getCompilerPathImpl()};
@@ -93,10 +81,9 @@ class ClosureCompilerStone extends Whetstone {
 
 }
 
-@:structInit class ClosureCompilerConfig {
+@:structInit class ClosureCompilerConfig extends WhetstoneConfig {
 
-    public var files:Array<SourceId>;
-    public var sources:Array<Whetstone>;
+    public var sources:Route;
     public var strictMode:Bool = false;
     public var jscompOff:String = "es5Strict";
     public var compilationLevel:String = "SIMPLE";

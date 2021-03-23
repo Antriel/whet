@@ -4,32 +4,32 @@ import sys.io.Process;
 import whet.Whetstone;
 import whet.npm.NpmManager;
 
-class PurifyCss extends Whetstone {
+class PurifyCss extends Whetstone<PurifyCssConfig> {
 
-    public final config:PurifyCssConfig;
+    public static final purifiedCss:SourceId = 'purified.css';
 
-    public function new(project:WhetProject, id:WhetstoneID = null, config:PurifyCssConfig) {
-        super(project, id, CacheManager.defaultFileStrategy);
-        this.config = config;
+    public function new(config:PurifyCssConfig) {
+        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
+        super(config);
     }
 
     override function getHash():WhetSourceHash {
         var whitelist = config.whitelist != null ? config.whitelist.join('') : '';
-        var hash = WhetSourceHash.fromString(config.minify + whitelist);
-        for (content in config.content) hash = hash.add(content.getHash());
-        for (css in config.cssInput) hash = hash.add(css.getHash());
-        return hash;
+        return WhetSourceHash.merge(
+            WhetSourceHash.fromString(config.minify + whitelist),
+            config.content.getHash(),
+            config.cssInput.getHash()
+        );
     }
 
-    override function generateSource():WhetSource {
+    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         trace('Purifying css.');
         NpmManager.assureInstalled("purify-css", "1.2.5");
-        var hash = getHash();
         // purifycss <css> <content> [option]
-        var args:Array<String> = config.cssInput.concat(config.content).map(s -> s.getSource().getFilePath().toRelPath());
+        var args = config.cssInput.getData().concat(config.content.getData()).map(s -> s.getFilePath().toRelPath());
         if (config.minify) args.push('-m');
         if (config.whitelist != null) args = args.concat(['-w']).concat([for (w in config.whitelist) w]);
-        var out = CacheManager.getFilePath(this, 'purified.css', hash);
+        var out = purifiedCss.getPutInDir(CacheManager.getDir(this, hash));
         args = args.concat(['-o', out]);
         Utils.ensureDirExist(out.dir);
         #if hxnodejs
@@ -39,20 +39,20 @@ class PurifyCss extends Whetstone {
         var p = new Process(NpmManager.NODE_ROOT + 'purifycss', args);
         p.exitCode();
         #end
-        return WhetSource.fromFile(this, out, hash);
+        return [WhetSourceData.fromFile(purifiedCss, out)];
     }
 
 }
 
-@:structInit class PurifyCssConfig {
+@:structInit class PurifyCssConfig extends WhetstoneConfig {
 
-    public var cssInput:Array<Whetstone>;
+    public var cssInput:Route;
 
     /** JS or HTML content to use for static analysis of usage. */
-    public var content:Array<Whetstone>;
+    public var content:Route;
 
     /** -m, --min        Minify CSS [boolean] [default: false] */
-    public var minify:Bool = null;
+    public var minify:Null<Bool> = null;
 
     /** -o, --out        Filepath to write purified css to [string] */
     /** -w, --whitelist  List of classes that should not be removed [array] [default: []] */

@@ -14,7 +14,7 @@ class BuildStone extends Whetstone<BuildConfig> {
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         if (config.hxml.isSingleFile()) {
-            var path = CacheManager.getDir(this, hash);
+            var path = config.hxml.getExportPath();
             // Clear the file, so if compilation fails, we don't serve old version.
             if (sys.FileSystem.exists(path)) sys.FileSystem.deleteFile(path);
             build();
