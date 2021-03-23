@@ -2,7 +2,7 @@ package whet.route;
 
 import whet.WhetSource.WhetSourceData;
 
-abstract Route(Array<RouteData>) { // Cannot have implicit `from` cast, see https://github.com/HaxeFoundation/haxe/issues/10187.
+@:transitive abstract Route(Array<RouteData>) { // Cannot have implicit `from` cast, see https://github.com/HaxeFoundation/haxe/issues/10187.
 
     @:from public inline static function fromStone(stone:Stone):Route return fromStoneArray([stone]);
 
@@ -12,11 +12,33 @@ abstract Route(Array<RouteData>) { // Cannot have implicit `from` cast, see http
             path: ('/':SourceId)
         }];
 
+    @:from public inline static function fromSourceIdMap<T:Stone>(m:Map<T, SourceId>):Route
+        return cast [for (stone => path in m) {
+            stone: stone,
+            path: path
+        }];
+
     @:from public inline static function fromMap<T:Stone>(m:Map<T, String>):Route
         return cast [for (stone => path in m) {
             stone: stone,
             path: (path:SourceId)
         }];
+
+    @:from public inline static function fromResult(r:RouteResult):Route return fromResults([r]);
+
+    @:from public inline static function fromResults(r:Array<RouteResult>):Route
+        return cast [for (res in r) {
+            stone: res.source,
+            path: res.sourceId
+        }];
+
+    @:from public inline static function fromResults2(r:Array<Array<RouteResult>>):Route
+        return fromResults(Lambda.flatten(r));
+
+    public function add(r:Route):Route {
+        for (item in (cast r:Array<RouteData>)) this.push(item);
+        return cast this;
+    }
 
     public inline function getHash():WhetSourceHash {
         return WhetSourceHash.merge(...this.map(r -> r.stone.getHash()));

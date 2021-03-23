@@ -54,7 +54,8 @@ abstract SourceId(String) {
     private inline function get_ext() return this.extension();
 
     private inline function set_ext(v):String {
-        var p = new Path(this).ext = v;
+        var p = new Path(this);
+        p.ext = v;
         return this = cast fromString(p.toString());
     }
 

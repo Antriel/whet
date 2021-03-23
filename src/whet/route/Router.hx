@@ -2,7 +2,7 @@ package whet.route;
 
 import whet.WhetSource.WhetSourceData;
 
-abstract Router(Array<RoutePath>) from Array<RoutePath> {
+@:transitive abstract Router(Array<RoutePath>) {
 
     @:from public static inline function fromMap(m:Map<String, Route>):Router return new Router(m);
 
@@ -11,8 +11,8 @@ abstract Router(Array<RoutePath>) from Array<RoutePath> {
         else this = [for (under => route in routes) { routeUnder: under, route: route }];
     }
 
-    public inline function route(under:SourceId, route:Route)
-        this.push({ routeUnder: under, route: route });
+    public inline function route(r:Router)
+        for (path in (cast r:Array<RoutePath>)) this.push(path);
 
     /**
      * Find data sources routed under `id`. By default only single result is returned if `id` 

@@ -87,7 +87,8 @@ abstract class Whetstone<T:WhetstoneConfig> {
     public function cachePath(path:SourceId, generate:Bool = true):Whetstone<T> {
         config.cacheStrategy = AbsolutePath(path.dir, LimitCountByAge(1));
         if (!path.isDir()) if (Reflect.hasField(config, 'filename')) {
-            Reflect.setField(config, 'filename', path.withExt);
+            // Warning: We are setting `SourceId` via reflection. Need to include first slash.
+            Reflect.setField(config, 'filename', '/' + path.withExt);
         } else this.id = path.withExt;
         if (generate) getSource();
         return this;

@@ -28,7 +28,8 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
                 baseDir: val.baseDir,
                 files: [for (file in val.files) {
                     fileHash: WhetSourceHash.fromHex(file.fileHash),
-                    filePath: file.filePath
+                    filePath: file.filePath,
+                    id: file.id
                 }]
             }]);
         }
@@ -42,7 +43,8 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
         baseDir: source.getDirPath(),
         files: [for (data in source.data) {
             fileHash: WhetSourceHash.fromBytes(data.data),
-            filePath: data.getFilePath()
+            filePath: data.getFilePath(),
+            id: data.id
         }]
     }
 
@@ -51,7 +53,7 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
         var source = new WhetSource(data, value.hash, stone, value.ctime);
         for (file in value.files) {
             var path = file.filePath;
-            var sourceData = WhetSourceData.fromFile(path.relativeTo(value.baseDir), path);
+            var sourceData = WhetSourceData.fromFile(file.id, path);
             if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
                 source = null;
                 break;
@@ -95,7 +97,8 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
             baseDir: val.baseDir,
             files: [for (file in val.files) {
                 fileHash: file.fileHash.toHex(),
-                filePath: file.filePath
+                filePath: file.filePath,
+                id: file.id
             }]
         }]);
         Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t'));
@@ -109,6 +112,7 @@ typedef FileCacheValue<H, S> = {
     final ctime:Float;
     final baseDir:S;
     final files:Array<{
+        final id:S;
         final fileHash:H;
         final filePath:S;
     }>;

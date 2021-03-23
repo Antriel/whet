@@ -56,10 +56,12 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         }
         var filenames = getExistingDirs(stone);
         var maxNum = if (filenames != null) Lambda.fold(filenames, (fn, num) -> {
-            var name = fn.dir.toRelPath();
-            name.charAt(0) == 'v' ? Std.parseInt(name.substr(1)) : 0;
-        }, 1);
-        else 1;
+            var parts = fn.dir.toRelPath().split('/');
+            var name = parts.length > 1 ? parts[parts.length - 2] : '';
+            Math.max(num, name.charAt(0) == 'v' ? Std.parseInt(name.substr(1)) : 0);
+        }, 0);
+        else 0;
+        maxNum++;
         return ('v$maxNum/':SourceId).getPutInDir(baseDir);
     }
 
