@@ -27,9 +27,11 @@ class Whet {
             case TInst(_.get() => { kind: KModuleFields(module), statics: _.get() => fields }, _):
                 for (f in fields) if (f.kind.match(FMethod(_))) {
                     var i = Lambda.findIndex(commands, c -> c.command.indexOf(f.name + "(") == 0);
-                    var f = commands.splice(i, 1)[0].command;
-                    f = StringTools.replace(f, ';', ',');
-                    if (i >= 0) funcs.push(Context.parse('Project.' + f, Context.currentPos()));
+                    if (i >= 0) {
+                        var f = commands.splice(i, 1)[0].command;
+                        f = StringTools.replace(f, ';', ',');
+                        funcs.push(Context.parse('Project.' + f, Context.currentPos()));
+                    }
                 }
             case _:
         }
