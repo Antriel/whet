@@ -50,16 +50,14 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
 
     function source(stone:Stone, value:RuntimeFileCacheValue):WhetSource {
         var data = [];
-        var source = new WhetSource(data, value.hash, stone, value.ctime);
         for (file in value.files) {
             var path = file.filePath;
             var sourceData = WhetSourceData.fromFile(file.id, path);
             if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
-                source = null;
-                break;
+                return null;
             } else data.push(sourceData);
         }
-        return source;
+        return new WhetSource(data, value.hash, stone, value.ctime);
     }
 
     override function set(source:WhetSource):RuntimeFileCacheValue {
