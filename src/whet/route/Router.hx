@@ -53,6 +53,21 @@ import whet.WhetSource.WhetSourceData;
         return res;
     }
 
+    /**
+     * Get combined hash of all sources that would be found under supplied id.
+     */
+    public function getHash(id:SourceId, firstOnly:Null<Bool> = null):WhetSourceHash {
+        var uniqueStones = [];
+        for (item in find(id, firstOnly)) {
+            if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
+        }
+        return WhetSourceHash.merge(...uniqueStones.map(s -> s.getHash()));
+    }
+
+    public inline function getHashOfEverything():WhetSourceHash {
+        return WhetSourceHash.merge(...this.map(path -> path.route.getHash()));
+    }
+
 }
 
 typedef RoutePath = {

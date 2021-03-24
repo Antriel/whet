@@ -73,11 +73,13 @@ class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
     }
     #end
     #else
-    override function generateSource():WhetSource {
+    function generate(hash):Array<WhetSourceData> {
         Whet.error('ClosureCompilerStone requires closure library.');
-        return null;
+        return [];
     }
     #end
+
+    override function list():Array<SourceId> return [mergedJs];
 
 }
 

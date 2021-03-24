@@ -40,6 +40,11 @@ abstract SourceId(String) {
         return dir + this;
     }
 
+    public inline function compare(other:SourceId):Int
+        return if (this < (cast other:String)) -1
+        else if (this > (cast other:String)) 1
+        else 0;
+
     public static inline function assertDir(directory:SourceId) {
         if (!directory.isDir()) throw '"$directory" is not a directory.';
     }
