@@ -49,6 +49,7 @@ class WhetSourceHash {
     }
 
     public static function merge(...hash:WhetSourceHash):WhetSourceHash {
+        if (hash.length == 0) return WhetSourceHash.EMPTY;
         var h = hash[0];
         for (i in 1...hash.length) h = h.add(hash[i]);
         return h;

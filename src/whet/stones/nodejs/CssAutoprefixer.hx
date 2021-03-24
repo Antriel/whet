@@ -10,7 +10,7 @@ class CssAutoprefixer extends Whetstone<CssAutoprefixerConfig> {
         super(config);
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return config.css.getHash();
     }
 

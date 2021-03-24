@@ -18,7 +18,7 @@ class CacheManager {
 
     @:access(whet.Whetstone) static public function getSource(stone:Stone):WhetSource {
         return switch stone.cacheStrategy {
-            case None: stone.generateSource(stone.getHash());
+            case None: stone.generateSource(stone.generateHash());
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
             case InFile(durability, check) | AbsolutePath(_, durability, check):
                 fileCache.get(stone, durability, check != null ? check : AllOnUse);

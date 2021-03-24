@@ -32,7 +32,7 @@ class JsonStone extends Whetstone<JsonConfig> {
         return [WhetSourceData.fromString(config.filename, content())];
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return WhetSourceHash.fromString(content());
     }
 

@@ -43,7 +43,7 @@ class MultiStone extends Whetstone<MultiStoneConfig> {
         super(config);
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return WhetSourceHash.merge(...config.vals.map(v -> WhetSourceHash.fromString(v)));
     }
 

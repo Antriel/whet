@@ -15,7 +15,7 @@ class ZipStone extends Whetstone<ZipStoneConfig> {
         Whet.msg(files.join('\n'));
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return WhetSourceHash.merge(
             config.sources.getHashOfEverything(),
             WhetSourceHash.fromString(config.filename.toRelPath() + config.level)

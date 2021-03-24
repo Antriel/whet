@@ -7,7 +7,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
     var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
 
     @:access(whet.Whetstone) public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
-        var hash = stone.getHash();
+        var hash = stone.generateHash();
         var generatedSource = null;
         if (hash == null) { // Default hash is hash of generated source, but generate it only once as optimization.
             generatedSource = stone.generateSource(null);

@@ -30,7 +30,7 @@ class RemoteFileStone extends Whetstone<RemoteFileStoneConfig> {
 
     override function list():Array<SourceId> return [urlToFilename(config.url)];
 
-    override public function getHash():WhetSourceHash {
+    override public function generateHash():WhetSourceHash {
         return WhetSourceHash.fromString(config.url);
     }
 

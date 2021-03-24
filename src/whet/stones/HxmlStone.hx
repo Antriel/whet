@@ -115,7 +115,7 @@ class HxmlStone extends Whetstone<HxmlConfig> {
         return [filename];
     }
 
-    public override function getHash():WhetSourceHash return WhetSourceHash.fromString(getBaseArgs().map(l -> l.join(' ')).join('\n'));
+    public override function generateHash():WhetSourceHash return WhetSourceHash.fromString(getBaseArgs().map(l -> l.join(' ')).join('\n'));
 
 }
 

@@ -41,7 +41,7 @@ class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
         }
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         var hash = WhetSourceHash.fromString(getArgs([], "").join(''));
         return hash.add(config.sources.getHash());
     }

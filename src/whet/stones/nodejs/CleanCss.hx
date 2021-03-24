@@ -12,7 +12,7 @@ class CleanCss extends Whetstone<CleanCssConfig> {
         super(config);
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return config.css.getHash();
     }
 

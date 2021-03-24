@@ -16,7 +16,7 @@ class IconFont extends Whetstone<IconFontConfig> {
         super(config);
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         var hash = WhetSourceHash.fromString(config.getArgs().join(''));
         if (FileSystem.exists(config.inputDirectory))
             for (filehash in FileSystem.readDirectory(config.inputDirectory).map(file ->

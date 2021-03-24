@@ -13,7 +13,7 @@ class PurifyCss extends Whetstone<PurifyCssConfig> {
         super(config);
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         var whitelist = config.whitelist != null ? config.whitelist.join('') : '';
         return WhetSourceHash.merge(
             WhetSourceHash.fromString(config.minify + whitelist),

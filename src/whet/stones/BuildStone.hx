@@ -30,7 +30,7 @@ class BuildStone extends Whetstone<BuildConfig> {
         } else return super.list();
     }
 
-    override function getHash():WhetSourceHash {
+    override function generateHash():WhetSourceHash {
         return config.hxml.getHash();
         // Technically not correct, but real solution isn't feasible.
         // TODO why not, let's try hashing all the source files! :)
