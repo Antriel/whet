@@ -28,6 +28,8 @@ class RemoteFileStone extends Whetstone<RemoteFileStoneConfig> {
         return [WhetSourceData.fromString(urlToFilename(config.url), file)];
     }
 
+    override function list():Array<SourceId> return [urlToFilename(config.url)];
+
     override public function getHash():WhetSourceHash {
         return WhetSourceHash.fromString(config.url);
     }

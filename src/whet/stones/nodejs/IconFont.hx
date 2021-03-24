@@ -46,6 +46,13 @@ class IconFont extends Whetstone<IconFontConfig> {
         return res;
     }
 
+    override function list():Array<SourceId> {
+        return [cssFile].concat([for (ext in config.fontTypes) {
+            var id:SourceId = 'icons.$ext';
+            id.getPutInDir(iconsSource);
+        }]);
+    }
+
 }
 
 @:structInit class IconFontConfig extends WhetstoneConfig {

@@ -42,6 +42,10 @@ class PurifyCss extends Whetstone<PurifyCssConfig> {
         return [WhetSourceData.fromFile(purifiedCss, out)];
     }
 
+    override function list():Array<SourceId> {
+        return [purifiedCss];
+    }
+
 }
 
 @:structInit class PurifyCssConfig extends WhetstoneConfig {

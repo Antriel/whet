@@ -26,9 +26,17 @@ class JsonStone extends Whetstone<JsonConfig> {
         return this;
     }
 
+    function content() return Json.stringify(data, null, '  ');
+
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
-        return [WhetSourceData.fromString(config.filename, Json.stringify(data, null, '  '))];
+        return [WhetSourceData.fromString(config.filename, content())];
     }
+
+    override function getHash():WhetSourceHash {
+        return WhetSourceHash.fromString(content());
+    }
+
+    override function list():Array<SourceId> return [config.filename];
 
 }
 

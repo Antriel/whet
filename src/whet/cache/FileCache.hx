@@ -94,6 +94,7 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
         for (id => values in cache) db.set(id, [for (val in values) {
             hash: val.hash.toHex(),
             ctime: val.ctime,
+            ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
             baseDir: val.baseDir,
             files: [for (file in val.files) {
                 fileHash: file.fileHash.toHex(),
@@ -110,6 +111,7 @@ typedef FileCacheValue<H, S> = {
 
     final hash:H;
     final ctime:Float;
+    @:optional final ctimePretty:String;
     final baseDir:S;
     final files:Array<{
         final id:S;

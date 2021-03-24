@@ -24,6 +24,12 @@ class BuildStone extends Whetstone<BuildConfig> {
         }
     }
 
+    override function list():Array<SourceId> {
+        if (config.hxml.isSingleFile()) {
+            return [config.hxml.getFilename()];
+        } else return super.list();
+    }
+
     override function getHash():WhetSourceHash {
         return config.hxml.getHash();
         // Technically not correct, but real solution isn't feasible.

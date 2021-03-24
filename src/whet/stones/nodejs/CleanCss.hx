@@ -35,6 +35,10 @@ class CleanCss extends Whetstone<CleanCssConfig> {
         return [WhetSourceData.fromFile(cleanCss, out)];
     }
 
+    override function list():Array<SourceId> {
+        return [cleanCss];
+    }
+
 }
 
 @:structInit class CleanCssConfig extends WhetstoneConfig {

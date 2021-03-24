@@ -37,6 +37,10 @@ class CssAutoprefixer extends Whetstone<CssAutoprefixerConfig> {
         }];
     }
 
+    override function list():Array<SourceId> {
+        return [for (item in config.css.getData()) item.id.withExt];
+    }
+
 }
 
 @:structInit class CssAutoprefixerConfig extends WhetstoneConfig {

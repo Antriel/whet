@@ -53,11 +53,15 @@ class HxmlStone extends Whetstone<HxmlConfig> {
 
     @:allow(whet.stones.BuildStone) function getExportPath():SourceId {
         var dir = CacheManager.getDir(build, build.getHash());
-        return if (isSingleFile()) {
+        return if (isSingleFile()) getFilename().getPutInDir(dir) else dir;
+    }
+
+    @:allow(whet.stones.BuildStone) function getFilename():SourceId {
+        if (isSingleFile()) {
             var filename:SourceId = build.config.filename != null ? build.config.filename : 'build';
             if (filename.ext == "") filename.ext = getBuildExtension();
-            filename.getPutInDir(dir);
-        } else dir;
+            return filename;
+        } else throw "Not a single file.";
     }
 
     function getPlatform():Array<String> {
@@ -99,11 +103,16 @@ class HxmlStone extends Whetstone<HxmlConfig> {
     }
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
-        var filename:SourceId = id;
-        if (filename.ext == "") filename.ext = "hxml";
+        var filename = list()[0];
         var path = filename.getPutInDir(CacheManager.getDir(this, hash));
         Whet.msg('Generating hxml file in $path.');
         return [WhetSourceData.fromString(filename, getFileContent())];
+    }
+
+    override function list():Array<SourceId> {
+        var filename:SourceId = id;
+        if (filename.ext == "") filename.ext = "hxml";
+        return [filename];
     }
 
     public override function getHash():WhetSourceHash return WhetSourceHash.fromString(getBaseArgs().map(l -> l.join(' ')).join('\n'));

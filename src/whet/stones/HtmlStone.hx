@@ -93,6 +93,8 @@ class HtmlStone extends Whetstone<HtmlConfig> {
 
     function generate(hash):Array<WhetSourceData> return [WhetSourceData.fromString(config.id, getContent())];
 
+    override function list():Array<SourceId> return [config.id];
+
 }
 
 @:structInit class HtmlConfig extends WhetstoneConfig {
