@@ -3,14 +3,9 @@ package whet.stones.nodejs;
 import sys.io.Process;
 import whet.npm.NpmManager;
 
-class CleanCss extends Whetstone<CleanCssConfig> {
+class CleanCss extends FileWhetstone<CleanCssConfig> {
 
     public static final cleanCss:SourceId = 'clean.css';
-
-    public function new(config) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
 
     override function generateHash():WhetSourceHash {
         return config.css.getHash();
@@ -18,21 +13,23 @@ class CleanCss extends Whetstone<CleanCssConfig> {
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         trace('Cleaning css.');
-        NpmManager.assureInstalled("clean-css-cli", "4.3.0");
+        NpmManager.assureInstalled(project, "clean-css-cli", "4.3.0");
         // cleancss -o css/bulma.min.css css/bulma.css
-        var dir = CacheManager.getDir(this, hash);
+        var dirId = cache.getDir(this, hash);
+        var dir = dirId.toRelPath(project);
         Utils.ensureDirExist(dir);
-        var out = cleanCss.getPutInDir(dir);
-        var args:Array<String> = ['--skip-rebase', '-o', out.toRelPath()].concat(
-            config.css.getData().map(s -> s.getFilePath().toRelPath()));
+        var outId = cleanCss.getPutInDir(dirId);
+        var out = outId.toRelPath(project);
+        var args:Array<String> = ['--skip-rebase', '-o', out].concat(
+            config.css.getData().map(s -> s.getFilePath()));
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.NODE_ROOT + 'cleancss');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'cleancss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.NODE_ROOT + 'cleancss', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'cleancss', args);
         p.exitCode();
         #end
-        return [WhetSourceData.fromFile(cleanCss, out)];
+        return [WhetSourceData.fromFile(cleanCss, out, outId)];
     }
 
     override function list():Array<SourceId> {

@@ -3,25 +3,19 @@ package whet.stones;
 import haxe.DynamicAccess;
 import haxe.Json;
 
-class JsonStone extends Whetstone<JsonConfig> {
+class JsonStone extends FileWhetstone<JsonConfig> {
 
     public var data:DynamicAccess<Dynamic> = {};
 
-    public function new(config:JsonConfig = null) {
-        if (config == null) config = {};
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
-
-    public function addProjectData(project:WhetProject):JsonStone {
-        data["name"] = project.config.name;
-        data["id"] = project.config.id;
-        data["description"] = project.config.description;
+    public function addProjectData():JsonStone {
+        data["name"] = config.project.config.name;
+        data["id"] = config.project.config.id;
+        data["description"] = config.project.config.description;
         return this;
     }
 
-    public function mergeJson(path:String):JsonStone {
-        var obj:DynamicAccess<Dynamic> = Json.parse(sys.io.File.getContent(path));
+    public function mergeJson(path:SourceId):JsonStone {
+        var obj:DynamicAccess<Dynamic> = Json.parse(sys.io.File.getContent(path.toRelPath(project)));
         for (field => val in obj) data[field] = val;
         return this;
     }

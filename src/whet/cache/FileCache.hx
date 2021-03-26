@@ -16,10 +16,13 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
      * such as server_standalone.js and replay.js would stay in that same folder?
      * What about clearing that folder before exporting? We don't want to remove logs...
      */
-    static inline var dbFile:String = '.whet/cache.json';
+    static inline var dbFileBase:String = '.whet/cache.json';
 
-    public function new() {
-        cache = new Map();
+    final dbFile:String;
+
+    public function new(rootDir:RootDir) {
+        super(rootDir, new Map());
+        dbFile = rootDir + dbFileBase;
         if (sys.FileSystem.exists(dbFile)) {
             var db:DbJson = haxe.Json.parse(sys.io.File.getContent(dbFile));
             for (key => values in db) cache.set(key, [for (val in values) {
@@ -37,22 +40,24 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
 
     function key(stone:Stone) return stone.id;
 
-    function value(source:WhetSource):RuntimeFileCacheValue return {
-        hash: source.hash,
-        ctime: source.ctime,
-        baseDir: source.getDirPath(),
-        files: [for (data in source.data) {
-            fileHash: WhetSourceHash.fromBytes(data.data),
-            filePath: data.getFilePath(),
-            id: data.id
-        }]
+    function value(source:WhetSource):RuntimeFileCacheValue {
+        return {
+            hash: source.hash,
+            ctime: source.ctime,
+            baseDir: source.getDirPath(),
+            files: [for (data in source.data) {
+                fileHash: WhetSourceHash.fromBytes(data.data),
+                filePath: data.getFilePathId(),
+                id: data.id
+            }]
+        }
     }
 
     function source(stone:Stone, value:RuntimeFileCacheValue):WhetSource {
         var data = [];
         for (file in value.files) {
-            var path = file.filePath;
-            var sourceData = WhetSourceData.fromFile(file.id, path);
+            var path = file.filePath.toRelPath(rootDir);
+            var sourceData = WhetSourceData.fromFile(file.id, path, file.filePath);
             if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
                 return null;
             } else data.push(sourceData);
@@ -73,8 +78,8 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
     }
 
     override function remove(stone:Stone, value:RuntimeFileCacheValue):Void {
-        if (FileSystem.exists(value.baseDir) && Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1)
-            Utils.deleteRecursively(value.baseDir);
+        if (FileSystem.exists(value.baseDir.toRelPath(rootDir)) && Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1)
+            Utils.deleteRecursively(value.baseDir.toRelPath(rootDir));
         super.remove(stone, value);
         flush();
     }
@@ -93,11 +98,11 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
             hash: val.hash.toHex(),
             ctime: val.ctime,
             ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
-            baseDir: val.baseDir,
+            baseDir: val.baseDir.toRelPath('/'),
             files: [for (file in val.files) {
                 fileHash: file.fileHash.toHex(),
-                filePath: file.filePath,
-                id: file.id
+                filePath: file.filePath.toRelPath('/'),
+                id: file.id.toRelPath('/')
             }]
         }]);
         Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t'));

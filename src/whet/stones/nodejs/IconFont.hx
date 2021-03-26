@@ -6,42 +6,41 @@ import sys.io.File;
 import sys.io.Process;
 import whet.npm.NpmManager;
 
-class IconFont extends Whetstone<IconFontConfig> {
+class IconFont extends FileWhetstone<IconFontConfig> {
 
     public static final cssFile:SourceId = 'icons.css';
     public static final iconsSource:SourceId = 'font/';
 
-    public function new(config:IconFontConfig) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
-
     override function generateHash():WhetSourceHash {
-        var hash = WhetSourceHash.fromString(config.getArgs().join(''));
-        if (FileSystem.exists(config.inputDirectory))
-            for (filehash in FileSystem.readDirectory(config.inputDirectory).map(file ->
-                WhetSourceHash.fromBytes(File.getBytes(Path.join([config.inputDirectory, file])))))
+        var hash = WhetSourceHash.fromString(config.getArgs(true).join(''));
+        var inputDir = config.inputDirectory.toRelPath(project);
+        if (FileSystem.exists(inputDir))
+            for (filehash in FileSystem.readDirectory(inputDir).map(file ->
+                WhetSourceHash.fromBytes(File.getBytes(Path.join([inputDir, file])))))
                 hash = hash.add(filehash);
         return hash;
     }
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         trace('Generating icon font.');
-        NpmManager.assureInstalled("fantasticon", "1.0.9");
-        var out = CacheManager.getDir(this, hash);
+        NpmManager.assureInstalled(project, "fantasticon", "1.0.9");
+        var outSource = cache.getDir(this, hash);
+        var out = outSource.toRelPath(project);
         Utils.ensureDirExist(out);
         var args = config.getArgs().concat(['-o', out]);
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.NODE_ROOT + 'fantasticon');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'fantasticon');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.NODE_ROOT + 'fantasticon', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'fantasticon', args);
         p.exitCode();
         #end
-        var res = [WhetSourceData.fromFile(cssFile, cssFile.getPutInDir(out))];
+        var cssPathId = cssFile.getPutInDir(outSource);
+        var res = [WhetSourceData.fromFile(cssFile, cssPathId.toRelPath(project), cssPathId)];
         for (ext in config.fontTypes) {
             var id:SourceId = 'icons.$ext';
-            res.push(WhetSourceData.fromFile(id.getPutInDir(iconsSource), id.getPutInDir(out)));
+            var pathId = id.getPutInDir(outSource);
+            res.push(WhetSourceData.fromFile(id.getPutInDir(iconsSource), pathId.toRelPath(project), pathId));
         }
         return res;
     }
@@ -85,8 +84,8 @@ class IconFont extends Whetstone<IconFontConfig> {
     /** -u, --fonts-url <value>      public url to the fonts directory (used in the generated CSS) (default: "./") */
     public var fontsUrl:String = null;
 
-    public function getArgs():Array<String> {
-        var args:Array<String> = [inputDirectory];
+    public function getArgs(forHash = false):Array<String> {
+        var args:Array<String> = forHash ? [] : [inputDirectory.toRelPath(project)];
         if (fontTypes != null) args = args.concat(['-t']).concat(fontTypes);
         if (assetTypes != null) args = args.concat(['-g']).concat(assetTypes);
         if (fontHeight != null) args = args.concat(['-h', Std.string(fontHeight)]);

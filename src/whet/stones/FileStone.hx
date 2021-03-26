@@ -7,11 +7,11 @@ class FileStone extends Whetstone<FileStoneConfig> {
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         return [for (path in config.paths) {
             if (path.isDir()) {
-                for (file in FileSystem.readDirectory(path)) {
+                for (file in FileSystem.readDirectory(path.toRelPath(project))) {
                     var filepath = (file:SourceId).getPutInDir(path);
-                    WhetSourceData.fromFile(filepath.relativeTo(path), filepath);
+                    WhetSourceData.fromFile(filepath.relativeTo(path), filepath.toRelPath(project), filepath);
                 }
-            } else WhetSourceData.fromFile(path.withExt, path);
+            } else WhetSourceData.fromFile(path.withExt, path.toRelPath(project), path);
         }];
     }
     // TODO should also support nested directories and being able to configure what the sourceId will include.
@@ -24,17 +24,3 @@ class FileStone extends Whetstone<FileStoneConfig> {
     public var paths:Array<SourceId>; // TODO support glob patterns, or regex or something.
 
 }
-
-// class AsyncFileStone extends Whetstone {
-//     final filePath:String;
-//     final parent:Whetstone;
-//     public function new(parent:Whetstone, filePath:String) {
-//         super(parent.project, filePath);
-//         this.parent = parent;
-//         this.filePath = filePath;
-//     }
-//     override function generateSource():WhetSource {
-//         if (!FileSystem.exists(filePath)) parent.getSource();
-//         return WhetSource.fromFile(this, filePath, null);
-//     }
-// }

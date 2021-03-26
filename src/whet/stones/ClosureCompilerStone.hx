@@ -3,14 +3,9 @@ package whet.stones;
 import sys.FileSystem;
 import whet.Whetstone;
 
-class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
+class ClosureCompilerStone extends FileWhetstone<ClosureCompilerConfig> {
 
     public static final mergedJs:SourceId = 'merged.js';
-
-    public function new(config) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
 
     #if closure
     static var compilerPath:String = #if macro getCompilerPathImpl(); #else getCompilerPath(); #end
@@ -25,12 +20,13 @@ class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
             Whet.msg('File ${file.getFilePath()} with size ${file.lengthKB} KB.');
         }
 
-        var output = mergedJs.getPutInDir(CacheManager.getDir(this, hash));
+        var outputId = mergedJs.getPutInDir(cache.getDir(this, hash));
+        var output = outputId.toRelPath(project);
         var args = getArgs(files.map(f -> f.getFilePath()), output);
 
         return switch Sys.command('java', args) {
             case 0:
-                var resource = WhetSourceData.fromFile(output.withExt, output);
+                var resource = WhetSourceData.fromFile(outputId.withExt, output, outputId);
                 var totalTime = Sys.time() - startTime;
                 var secondsRounded = Math.round(totalTime * 1000) / 1000;
                 Whet.msg('Success. Merged in ${secondsRounded}s, final size ${resource.lengthKB} KB (-${totalSizeKB - resource.lengthKB} KB).');
@@ -46,7 +42,7 @@ class ClosureCompilerStone extends Whetstone<ClosureCompilerConfig> {
         return hash.add(config.sources.getHash());
     }
 
-    function getArgs(filePaths:Array<SourceId>, outputPath:String):Array<String> {
+    function getArgs(filePaths:Array<String>, outputPath:String):Array<String> {
         var args = [
             '-jar', compilerPath,
             '--strict_mode_input=${config.strictMode}',

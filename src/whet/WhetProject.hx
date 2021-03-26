@@ -2,13 +2,11 @@ package whet;
 
 import haxe.Constraints.Function;
 import haxe.DynamicAccess;
+import haxe.PosInfos;
 import haxe.rtti.Meta;
-import tink.CoreApi;
-import whet.Whetstone;
 
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
-@:autoBuild(whet.Macros.injectConfig())
 #end
 class WhetProject {
 
@@ -17,21 +15,18 @@ class WhetProject {
     public final commands:Map<String, CommandMetadata>;
     public final commandsMeta:Array<CommandMetadata>;
 
-    // public final postInit:Future<Noise>;
-    @:allow(whet.Whet) private static final projects:Array<WhetProject> = [];
+    public var rootDir(get, never):SourceId;
 
-    // final stones:Map<WhetstoneID, Whetstone>;
-    // @:allow(whet.Whet) final postInitTrigger:FutureTrigger<Noise>;
+    @:allow(whet) private static final projects:Map<String, WhetProject> = [];
 
-    public function new(config:WhetProjectConfig) {
+    public function new(config:WhetProjectConfig, ?posInfos:PosInfos) {
         this.config = config;
         if (config.id == null) config.id = StringTools.replace(config.name, ' ', '-').toLowerCase();
-        // postInit = postInitTrigger = Future.trigger();
-        // stones = new Map();
+        if (config.rootDir == null) config.rootDir = (posInfos.fileName:SourceId).dir;
+        if (config.cache == null) config.cache = { project: this };
         commands = new Map();
         commandsMeta = [];
-        // addCommands(this); // TODO parse them from the module fields?
-        projects.push(this);
+        projects.set(posInfos.fileName, this);
     }
 
     public function addCommands(ctx:Dynamic) {
@@ -56,22 +51,17 @@ class WhetProject {
         }
     }
 
-    // public function stone<T:Whetstone>(cls:Class<T>):T return
-    //     cast stones.get(WhetstoneID.fromClass(cast cls)); // Not sure why we need to cast the cls.
-    // public function stoneByID(id:WhetstoneID) return stones.get(id);
-    // @:allow(whet.Whetstone) function add(stone:Whetstone, id:WhetstoneID):WhetstoneID {
-    //     var uniqueId = Utils.makeUniqueString(id, id -> stones.exists(id));
-    //     stones.set(uniqueId, stone);
-    //     return uniqueId;
-    // }
+    inline function get_rootDir() return config.rootDir;
 
 }
 
-typedef WhetProjectConfig = {
+@:structInit class WhetProjectConfig {
 
-    var name:String;
-    @:optional var id:String;
-    @:optional var description:String;
+    public var name:String;
+    public var id:String = null;
+    public var description:String = null;
+    public var cache:CacheManager = null;
+    public var rootDir:SourceId = null;
 
 }
 

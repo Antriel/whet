@@ -2,11 +2,10 @@ package whet.stones;
 
 class HtmlStone extends Whetstone<HtmlConfig> {
 
-    public function new(config:HtmlConfig) {
-        if (config.title == null && config.project != null) config.title = config.project.config.name;
+    override function initConfig() {
+        if (config.title == null) config.title = config.project.config.name;
         if (config.meta != null && config.meta.description == null)
             config.meta.description = config.project.config.description;
-        super(config);
     }
 
     public function clone(id:WhetstoneId = null):HtmlStone {

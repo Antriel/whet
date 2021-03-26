@@ -4,9 +4,8 @@ import whet.Whetstone;
 
 class RemoteFileStone extends Whetstone<RemoteFileStoneConfig> {
 
-    public function new(config) {
+    override function initConfig() {
         if (config.cacheStrategy == null) config.cacheStrategy = InFile(KeepForever);
-        super(config);
     }
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {

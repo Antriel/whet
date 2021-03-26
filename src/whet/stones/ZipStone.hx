@@ -1,11 +1,6 @@
 package whet.stones;
 
-class ZipStone extends Whetstone<ZipStoneConfig> {
-
-    public function new(config:ZipStoneConfig) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
+class ZipStone extends FileWhetstone<ZipStoneConfig> {
 
     /** Print contents of this ZipStone to console. */
     @command public function print() {
@@ -18,7 +13,7 @@ class ZipStone extends Whetstone<ZipStoneConfig> {
     override function generateHash():WhetSourceHash {
         return WhetSourceHash.merge(
             config.sources.getHashOfEverything(),
-            WhetSourceHash.fromString(config.filename.toRelPath() + config.level)
+            WhetSourceHash.fromString((cast config.filename:String) + config.level)
         );
     }
 
@@ -29,7 +24,7 @@ class ZipStone extends Whetstone<ZipStoneConfig> {
         for (file in files) {
             var data = file.get();
             var entry:haxe.zip.Entry = {
-                fileName: file.serveId,
+                fileName: file.serveId.toRelPath('/'),
                 fileSize: data.data.length,
                 fileTime: Date.fromTime(data.source.ctime * 1000),
                 compressed: false,

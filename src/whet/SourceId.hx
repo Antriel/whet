@@ -10,13 +10,14 @@ abstract SourceId(String) {
     public var dir(get, set):SourceId;
 
     @:from public inline static function fromString(s:String):SourceId {
-        var norm = '/$s'.normalize();
+        var norm = '/' + (if (s.charAt(0) == '/') s.substr(1) else s).normalize();
         return (s.lastIndexOf('/') == s.length - 1) ? cast norm.addTrailingSlash() : cast norm;
     }
 
-    @:to public inline function toRelPath():String return this.substring(1); // Remove start slash -> make relative to CWD.
-
-    public inline function toAbsolutePath():String return this;
+    public inline function toRelPath(root:RootDir):String // Remove start slash -> make relative to CWD.
+        return if ((cast root:String).length == 1) this.substring(1);
+        // Remove start and end slash of root and join with `this` which starts with slash.
+        else (cast root:String).substring(1, (cast root:String).length - 1) + this;
 
     public inline function isDir():Bool return this == dir;
 
@@ -24,13 +25,12 @@ abstract SourceId(String) {
 
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
         assertDir(directory);
-        return nested ? dir.toRelPath().indexOf(directory) == 0 : dir == directory;
+        return nested ? (cast dir:String).indexOf((cast directory:String)) == 0 : dir == directory;
     }
 
     public function relativeTo(directory:SourceId):SourceId {
         if (isInDir(directory, true)) {
-            var rel = (dir.toRelPath().substr(directory.toRelPath().length):SourceId);
-            rel.withExt = withExt;
+            var rel:SourceId = cast this.substr((cast directory:String).length - 1);
             return rel;
         } else return null;
     }
@@ -52,7 +52,7 @@ abstract SourceId(String) {
     private inline function get_withExt() return this.withoutDirectory();
 
     private inline function set_withExt(v:String):String {
-        if (v.length > 0) this = cast fromString(Path.join([dir, v]));
+        if (v.length > 0) this = (cast dir:String) + v;
         return v;
     }
 
@@ -71,5 +71,11 @@ abstract SourceId(String) {
     private inline function get_dir():SourceId return this.directory().addTrailingSlash();
 
     private inline function set_dir(v):SourceId throw "Not implemented";
+
+}
+
+@:forward abstract RootDir(SourceId) from SourceId to SourceId {
+
+    @:from public static function fromProject(p:WhetProject):RootDir return p.rootDir;
 
 }

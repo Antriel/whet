@@ -1,24 +1,23 @@
 package whet.stones;
 
-class BuildStone extends Whetstone<BuildConfig> {
-
-    public function new(config:BuildConfig) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
+class BuildStone extends FileWhetstone<BuildConfig> {
 
     /** Build the given hxml. */
     @command public function build() {
+        var cwd = Sys.getCwd();
+        Sys.setCwd(haxe.io.Path.join([cwd, project.rootDir.toRelPath('/')]));
         Sys.command('haxe', Lambda.flatten(config.hxml.getBuildArgs()));
+        Sys.setCwd(cwd);
     }
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         if (config.hxml.isSingleFile()) {
-            var path = config.hxml.getExportPath();
+            var pathId = config.hxml.getExportPath();
+            var path = pathId.toRelPath(project);
             // Clear the file, so if compilation fails, we don't serve old version.
             if (sys.FileSystem.exists(path)) sys.FileSystem.deleteFile(path);
             build();
-            return [WhetSourceData.fromFile(path.withExt, path)];
+            return [WhetSourceData.fromFile(pathId.withExt, path, pathId)];
         } else {
             throw 'Cannot get source of a multi-file build. Not implemented yet.';
         }

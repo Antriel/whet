@@ -4,7 +4,14 @@ import whet.cache.Cache;
 
 abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float;}> implements Cache {
 
-    var cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
+    final cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
+    final rootDir:RootDir;
+
+    public function new(rootDir:RootDir, cache) {
+        if (!rootDir.isDir()) throw "Root dir is a not a dir.";
+        this.rootDir = rootDir;
+        this.cache = cache;
+    }
 
     @:access(whet.Whetstone) public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
         var hash = stone.generateHash();
@@ -56,7 +63,7 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         }
         var filenames = getExistingDirs(stone);
         var maxNum = if (filenames != null) Lambda.fold(filenames, (fn, num) -> {
-            var parts = fn.dir.toRelPath().split('/');
+            var parts = fn.dir.toRelPath(rootDir).split('/');
             var name = parts.length > 1 ? parts[parts.length - 2] : '';
             Math.max(num, name.charAt(0) == 'v' ? Std.parseInt(name.substr(1)) : 0);
         }, 0);

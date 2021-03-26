@@ -29,8 +29,8 @@ class WhetSource {
      */
     public function getDirPath():SourceId {
         if (dirPath == null) {
-            dirPath = CacheManager.getDir(origin, hash);
-            Utils.ensureDirExist(dirPath);
+            dirPath = origin.cache.getDir(origin, hash);
+            Utils.ensureDirExist(dirPath.toRelPath(origin.project));
             // TODO: Should also store all the data entries? Or do we do that on per-data case.
         }
         return dirPath;
@@ -55,39 +55,51 @@ class WhetSourceData {
     public var lengthKB(get, never):Int;
     @:allow(whet.WhetSource) public var source(default, null):WhetSource;
 
-    var filePath:SourceId = null;
+    var filePathId:SourceId = null;
+    var filePath:String = null;
 
-    private function new(/* source, */ id, data) {
-        // this.source = source;
+    private function new(id, data) {
         this.data = data;
         this.id = id;
         this.hash = WhetSourceHash.fromBytes(data);
     }
 
-    public static function fromFile(/* source:WhetSource,  */ id:SourceId, path:String):WhetSourceData {
+    /**
+     * `path` is the actual cwd-relative path. `pathId` is the project-relative source Id.
+     */
+    public static function fromFile(id:SourceId, path:String, pathId:SourceId):WhetSourceData {
         if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
-        var source = fromBytes(/* source, */ id, sys.io.File.getBytes(path));
+        var source = fromBytes(id, sys.io.File.getBytes(path));
         source.filePath = path;
+        source.filePathId = pathId;
         return source;
     }
 
-    public static function fromString(/* source:WhetSource,  */ id:SourceId, s:String) {
-        return fromBytes(/* source, */ id, haxe.io.Bytes.ofString(s));
+    public static function fromString(id:SourceId, s:String) {
+        return fromBytes(id, haxe.io.Bytes.ofString(s));
     }
 
-    public static function fromBytes(/* source:WhetSource,  */ id:SourceId, data:haxe.io.Bytes):WhetSourceData {
-        return new WhetSourceData(/* source, */ id, data);
+    public static function fromBytes(id:SourceId, data:haxe.io.Bytes):WhetSourceData {
+        return new WhetSourceData(id, data);
     }
 
     public function hasFile():Bool return this.filePath != null;
 
-    public function getFilePath():SourceId {
-        if (this.filePath == null) {
+    /** Same as `getFilePath` but relative to project, not CWD. */
+    public function getFilePathId():SourceId {
+        if (filePathId == null) getFilePath();
+        return filePathId;
+    }
+
+    /** Path to a file for this source, relative to CWD. */
+    public function getFilePath():String {
+        if (filePath == null) {
             if (source == null) throw "Not implemented."; // Do we even want to allow such state?
-            this.filePath = id.getPutInDir(source.getDirPath());
-            Utils.saveBytes(this.filePath, this.data);
+            filePathId = id.getPutInDir(source.getDirPath());
+            filePath = filePathId.toRelPath(source.origin.project);
+            Utils.saveBytes(filePath, this.data);
         }
-        return this.filePath;
+        return filePath;
     }
 
     inline function get_length() return data.length;

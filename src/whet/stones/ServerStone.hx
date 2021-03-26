@@ -48,13 +48,13 @@ class ServerStone extends Whetstone<ServerConfig> {
                 else if (routeDynamic != null) routeDynamic(id)
                 else null;
                 if (data != null) {
-                    var mime = mime.Mime.lookup(id);
+                    var mime = mime.Mime.lookup(id.toRelPath('/'));
                     res = partial(req.header, data, mime, id.withExt);
                 } else {
                     res = OutgoingResponse.reportError(new Error(NotFound, 'File Not Found'));
                 }
             case PUT:
-                var cmd = haxe.io.Path.removeTrailingSlashes(id);
+                var cmd = haxe.io.Path.removeTrailingSlashes(id.toRelPath('/'));
                 if (config.project != null && config.project.commands.exists(cmd)) {
                     return switch req.body {
                         case Plain(source): // TODO: this should all be more async and properly handle errors, possibly return results.

@@ -2,8 +2,8 @@ package whet.cache;
 
 class MemoryCache extends BaseCache<Stone, WhetSource> {
 
-    public function new() {
-        cache = new Map();
+    public function new(rootDir) {
+        super(rootDir, new Map());
     }
 
     function key(stone:Stone) return stone;

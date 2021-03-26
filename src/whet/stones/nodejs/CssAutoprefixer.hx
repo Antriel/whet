@@ -3,12 +3,7 @@ package whet.stones.nodejs;
 import sys.io.Process;
 import whet.npm.NpmManager;
 
-class CssAutoprefixer extends Whetstone<CssAutoprefixerConfig> {
-
-    public function new(config:CssAutoprefixerConfig) {
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultFileStrategy;
-        super(config);
-    }
+class CssAutoprefixer extends FileWhetstone<CssAutoprefixerConfig> {
 
     override function generateHash():WhetSourceHash {
         return config.css.getHash();
@@ -16,24 +11,26 @@ class CssAutoprefixer extends Whetstone<CssAutoprefixerConfig> {
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         trace('Auto-prefixing css.');
-        NpmManager.assureInstalled("postcss-cli", "7.1.1");
-        NpmManager.assureInstalled("autoprefixer", "9.8.0");
+        NpmManager.assureInstalled(project, "postcss-cli", "7.1.1");
+        NpmManager.assureInstalled(project, "autoprefixer", "9.8.0");
         // postcss --use autoprefixer --map false --dir out-css/ css/bulma.css [...css]
-        var dir = CacheManager.getDir(this, hash);
+        var dirId = cache.getDir(this, hash);
+        var dir = dirId.toRelPath(project);
         Utils.ensureDirExist(dir);
         var args:Array<String> = ['--use', 'autoprefixer', '--map', 'false', '--dir', dir];
         var data = config.css.getData();
         for (item in data) args.push(item.getFilePath());
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.NODE_ROOT + 'postcss');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'postcss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.NODE_ROOT + 'postcss', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'postcss', args);
         p.exitCode();
         #end
         return [for (item in data) {
             var baseId:SourceId = item.id.withExt;
-            WhetSourceData.fromFile(baseId, baseId.getPutInDir(dir));
+            var pathid = baseId.getPutInDir(dirId);
+            WhetSourceData.fromFile(baseId, pathId.toRelPath(project), pathId);
         }];
     }
 

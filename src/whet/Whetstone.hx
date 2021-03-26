@@ -1,5 +1,6 @@
 package whet;
 
+import haxe.PosInfos;
 import whet.WhetSource;
 import whet.cache.Cache;
 import whet.cache.CacheManager;
@@ -11,40 +12,30 @@ abstract class Whetstone<T:WhetstoneConfig> {
 
     public var config:T;
 
-    // public var defaultFilename:String = "file.dat"; // TODO we don't need this anymore, right?
-
     /** If true, hash of a cached file (not `stone.getHash()` but actual file contents) won't be checked. */
     public var ignoreFileHash:Bool = false;
 
-    // var project:WhetProject;
     public var id(get, set):WhetstoneId;
     public var cacheStrategy(get, set):CacheStrategy;
+    public var cache(get, set):CacheManager;
+    public var project(get, never):WhetProject;
 
-    public function new(config:T) {
+    public final function new(config:T, ?posInfos:PosInfos) {
         this.config = config;
+        if (config.project == null) config.project = WhetProject.projects.get(posInfos.fileName);
+        if (config.project == null) throw "Did not find a project. Did you create one before making this instance?";
+        // TODO ^ Might want to do look for parent dirs? Or do we want to keep that explicit by making the user register the project for other files too?
+        initConfig();
         if (config.id == null) config.id = this;
-        if (config.cacheStrategy == null) config.cacheStrategy = CacheManager.defaultStrategy;
-        if (config.project != null) config.project.addCommands(this);
+        if (config.cacheStrategy == null) config.cacheStrategy = cache.defaultStrategy;
+        config.project.addCommands(this);
     }
 
-    // var router:WhetSourceRouter;
-    // public var routeDynamic:SourceId->Whetstone;
-    // public function route(routes:Map<SourceId, Whetstone>):Whetstone {
-    //     if (router == null) router = routes;
-    //     else if (routes != null) for (k => v in routes) router.add(k, v);
-    //     return this;
-    // }
-    // public function findStone(id:SourceId):Whetstone {
-    //     var result = router == null ? null : router.find(id);
-    //     if (result == null && routeDynamic != null) {
-    //         result = routeDynamic(id);
-    //         if (result != null) route([id => result]);
-    //     }
-    //     return result;
-    // }
+    /** Override this to set config defaults. */
+    function initConfig():Void { }
 
     /** Get WhetSource for this stone. Goes through the cache. */
-    public final function getSource():WhetSource return CacheManager.getSource(this);
+    public final function getSource():WhetSource return cache.getSource(this);
 
     /** Hash of this stone with its current config. Defaults to hash of generated source. */
     public final function getHash():WhetSourceHash {
@@ -111,6 +102,12 @@ abstract class Whetstone<T:WhetstoneConfig> {
 
     private inline function set_cacheStrategy(cacheStrategy:CacheStrategy) return config.cacheStrategy = cacheStrategy;
 
+    private inline function get_cache() return config.project.config.cache;
+
+    private inline function set_cache(cache:CacheManager) return config.project.config.cache = cache;
+
+    private inline function get_project() return config.project;
+
 }
 
 @:transitive abstract WhetstoneId(String) from String to String {
@@ -129,49 +126,16 @@ abstract class Whetstone<T:WhetstoneConfig> {
 
     public var cacheStrategy:CacheStrategy = null;
     public var id:WhetstoneId = null;
-    // TODO: Only project, or full hierarchy, with routing? But standard routing is about sources, not stones/commands.
-    // And one stone could be routed by multiple other stones, which would complicate the CLI commands API.
     public var project:WhetProject = null;
 
 }
 
 typedef Stone = Whetstone<Dynamic>;
 
-// class WhetSource {
-//     public final data:haxe.io.Bytes;
-//     public final origin:Whetstone;
-//     public final hash:WhetSourceHash;
-//     public final ctime:Float;
-//     public var length(get, never):Int;
-//     public var lengthKB(get, never):Int;
-//     var filePath:SourceId = null;
-//     private function new(origin, data, hash, ctime = null) {
-//         this.data = data;
-//         this.hash = hash;
-//         this.origin = origin;
-//         this.ctime = ctime != null ? ctime : Sys.time();
-//     }
-//     public static function fromFile(stone:Whetstone, path:String, hash:WhetSourceHash, ctime:Float = null):WhetSource {
-//         if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
-//         var source = fromBytes(stone, sys.io.File.getBytes(path), hash);
-//         source.filePath = path;
-//         return source;
-//     }
-//     public static function fromString(stone:Whetstone, s:String, hash:WhetSourceHash) {
-//         return fromBytes(stone, haxe.io.Bytes.ofString(s), hash);
-//     }
-//     public static function fromBytes(stone:Whetstone, data:haxe.io.Bytes, hash:WhetSourceHash, ctime:Float = null):WhetSource {
-//         if (hash == null) hash = WhetSourceHash.fromBytes(data);
-//         return new WhetSource(stone, data, hash, ctime);
-//     }
-//     public function hasFile():Bool return this.filePath != null;
-//     public function getFilePath():SourceId {
-//         if (this.filePath == null) {
-//             this.filePath = CacheManager.getFilePath(origin);
-//             Utils.saveBytes(this.filePath, this.data);
-//         }
-//         return this.filePath;
-//     }
-//     inline function get_length() return data.length;
-//     inline function get_lengthKB() return Math.round(length / 1024);
-// }
+abstract class FileWhetstone<T:WhetstoneConfig> extends Whetstone<T> {
+
+    override function initConfig() {
+        if (config.cacheStrategy == null) config.cacheStrategy = cache.defaultFileStrategy;
+    }
+
+}

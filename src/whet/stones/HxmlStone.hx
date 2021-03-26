@@ -6,11 +6,10 @@ class HxmlStone extends Whetstone<HxmlConfig> {
 
     public var build:BuildStone;
 
-    public function new(config:HxmlConfig) {
+    override function initConfig() {
         if (config.id == null) config.id = 'build';
         if (config.cacheStrategy == null) config.cacheStrategy = InFile(LimitCountByLastUse(1));
         build = new BuildStone({ hxml: this, id: 'build', project: config.project });
-        super(config);
     }
 
     public function clone(id:WhetstoneId = null):HxmlStone {
@@ -52,7 +51,7 @@ class HxmlStone extends Whetstone<HxmlConfig> {
     }
 
     @:allow(whet.stones.BuildStone) function getExportPath():SourceId {
-        var dir = CacheManager.getDir(build, build.getHash());
+        var dir = cache.getDir(build, build.getHash());
         return if (isSingleFile()) getFilename().getPutInDir(dir) else dir;
     }
 
@@ -65,7 +64,7 @@ class HxmlStone extends Whetstone<HxmlConfig> {
     }
 
     function getPlatform():Array<String> {
-        var path = getExportPath();
+        var path = getExportPath().toRelPath('/'); // Not using `project` rel path, as we launch haxe in correct cwd.
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];
@@ -104,7 +103,7 @@ class HxmlStone extends Whetstone<HxmlConfig> {
 
     function generate(hash:WhetSourceHash):Array<WhetSourceData> {
         var filename = list()[0];
-        var path = filename.getPutInDir(CacheManager.getDir(this, hash));
+        var path = filename.getPutInDir(cache.getDir(this, hash));
         Whet.msg('Generating hxml file in $path.');
         return [WhetSourceData.fromString(filename, getFileContent())];
     }

@@ -1,3 +1,4 @@
+import whet.SourceId.RootDir;
 import whet.SourceId;
 import whet.Whetstone.Stone;
 import whet.Whetstone.WhetstoneId;
