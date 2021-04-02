@@ -101,7 +101,7 @@ class HtmlStone extends Whetstone<HtmlConfig> {
     public var headElements:Array<String> = [];
     public var bodyElements:Array<String> = [];
     public var meta:HtmlMetaConfig = null;
-    public var stylePaths:Array<String> = null;
+    public var stylePaths:Array<String> = [];
     public var title:String = null;
     public var ogUrl:String = null;
     public var ogImage:OgImage = null;
