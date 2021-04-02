@@ -37,7 +37,8 @@ abstract SourceId(String) {
 
     public function getPutInDir(dir:SourceId):SourceId {
         assertDir(dir);
-        return dir + this;
+        if (dir == '/') return this; // Don't put '/' in front.
+        else return dir + this;
     }
 
     public inline function compare(other:SourceId):Int
