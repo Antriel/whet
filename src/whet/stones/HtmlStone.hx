@@ -65,6 +65,13 @@ class HtmlStone extends Whetstone<HtmlConfig> {
             }
             if (config.meta.viewport != null) sb.add('\t${config.meta.viewport.getString()}\n');
         }
+        if (config.twitterCard != null) {
+            sb.add('\t<meta name="twitter:card" content="${config.twitterCard.type}">\n');
+            if (config.twitterCard.site != null)
+                sb.add('\t<meta name="twitter:site" content="${config.twitterCard.site}">\n');
+            if (config.twitterCard.creator != null)
+                sb.add('\t<meta name="twitter:creator" content="${config.twitterCard.creator}">\n');
+        }
         if (config.ogUrl != null && config.ogUrl != "")
             sb.add('\t<meta property="og:url" content="${config.ogUrl}">\n');
         if (config.ogImage != null) {
@@ -106,6 +113,7 @@ class HtmlStone extends Whetstone<HtmlConfig> {
     public var ogUrl:String = null;
     public var ogImage:OgImage = null;
     public var ogType:String = "game";
+    public var twitterCard:TwitterCardConfig = null;
     public var bodyElementAtts:Array<String> = [];
 
     public function clone():HtmlConfig return {
@@ -192,5 +200,21 @@ class HtmlStone extends Whetstone<HtmlConfig> {
         if (userScalable != null) content.push('user-scalable=$userScalable');
         return content;
     }
+
+}
+
+@:structInit class TwitterCardConfig {
+
+    public var type:TwitterCardType = SummaryImage;
+    public var site:String = null;
+    public var creator:String = null;
+
+}
+
+enum abstract TwitterCardType(String) {
+
+    var Summary = "summary";
+    var SummaryImage = "summary_large_image";
+    // App, Player not implemented.
 
 }
