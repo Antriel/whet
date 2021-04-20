@@ -130,6 +130,7 @@ class HxmlStone extends Whetstone<HxmlConfig> {
     public var platform:BuildPlatform = null;
 
     public function clone():HxmlConfig return {
+        project: this.project,
         libs: this.libs.copy(),
         paths: this.paths.copy(),
         defines: this.defines.copy(),
