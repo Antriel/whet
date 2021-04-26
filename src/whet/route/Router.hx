@@ -68,6 +68,21 @@ import whet.WhetSource.WhetSourceData;
         return WhetSourceHash.merge(...this.map(path -> path.route.getHash()));
     }
 
+    /**
+     * Save files filtered by `searchId` into provided `saveInto` folder.
+     */
+    public function saveInto(searchId:SourceId, saveInto:String, clearFirst:Bool = true):Void {
+        if (clearFirst && sys.FileSystem.exists(saveInto)) {
+            Utils.deleteRecursively(saveInto);
+        }
+        var result = find(searchId);
+        for (r in result) {
+            var p = haxe.io.Path.join([saveInto, r.serveId.toRelPath('/')]);
+            Utils.ensureDirExist(p);
+            sys.io.File.saveBytes(p, r.get().data);
+        }
+    }
+
 }
 
 typedef RoutePath = {
