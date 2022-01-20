@@ -77,6 +77,6 @@ abstract SourceId(String) {
 
 @:forward abstract RootDir(SourceId) from SourceId to SourceId {
 
-    @:from public static function fromProject(p:WhetProject):RootDir return p.rootDir;
+    @:from public static function fromProject(p:Project):RootDir return p.rootDir;
 
 }

@@ -1,0 +1,25 @@
+{
+    "name": "whet",
+    "version": "0.0.1",
+    "description": "NodeJS based Project configuration, build, deployment, assets management and tooling library.",
+    "scripts": {
+        "build": "npx haxe build.hxml"
+    },
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/Antriel/whet.git"
+    },
+    "files": [
+        "bin"
+    ],
+    "type": "module",
+    "author": "Peter Achberger",
+    "license": "MIT",
+    "bugs": {
+        "url": "https://github.com/Antriel/whet/issues"
+    },
+    "homepage": "https://github.com/Antriel/whet#readme",
+    "devDependencies": {
+        "lix": "^15.11.6"
+    }
+}

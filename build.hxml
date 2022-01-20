@@ -1,0 +1,11 @@
+-lib hxnodejs
+-lib genes
+-D js-es=6
+-D dts
+-D analyzer-optimize
+-cp src
+--dce full
+whet.Project
+whet.foo.Bar
+
+-js bin/whet.js
