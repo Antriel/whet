@@ -47,7 +47,7 @@ abstract SourceId(String) {
         else 0;
 
     public static inline function assertDir(directory:SourceId) {
-        if (!directory.isDir()) throw '"$directory" is not a directory.';
+        if (!directory.isDir()) throw new js.lib.Error('"$directory" is not a directory.');
     }
 
     private inline function get_withExt() return this.withoutDirectory();
@@ -71,7 +71,7 @@ abstract SourceId(String) {
 
     private inline function get_dir():SourceId return this.directory().addTrailingSlash();
 
-    private inline function set_dir(v):SourceId throw "Not implemented";
+    private inline function set_dir(v):SourceId throw new js.lib.Error("Not implemented");
 
 }
 

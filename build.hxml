@@ -6,6 +6,7 @@
 -cp src
 --dce full
 whet.Project
-whet.foo.Bar
+--macro addGlobalMetadata('whet.stones', '@:expose')
+--macro include('whet.stones')
 
 -js bin/whet.js

@@ -9,9 +9,10 @@ class Project {
     public final rootDir:SourceId;
 
     // public final cache:CacheManager = null;
+    @:allow(whet) private static final projects:Array<Project> = [];
 
     public function new(config:ProjectConfig) {
-        if (config == null || config.name == null) throw "Must supply config and a name.";
+        if (config == null || config.name == null) throw new js.lib.Error("Must supply config and a name.");
         name = config.name;
         if (config.id == null) id = StringTools.replace(config.name, ' ', '-').toLowerCase();
         else id = config.id;
@@ -30,7 +31,7 @@ class Project {
         // if (config.cache == null) config.cache = { project: this };
         // commands = new Map();
         // commandsMeta = [];
-        // projects.set(posInfos.fileName, this);
+        projects.push(this);
     }
 
 }
