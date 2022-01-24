@@ -29,10 +29,10 @@ class IconFont extends FileWhetstone<IconFontConfig> {
         Utils.ensureDirExist(out);
         var args = config.getArgs().concat(['-o', out]);
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'fantasticon');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'node_modules/.bin/fantasticon');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.getNodeRoot(project) + 'fantasticon', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'node_modules/.bin/fantasticon', args);
         p.exitCode();
         #end
         var cssPathId = cssFile.getPutInDir(outSource);

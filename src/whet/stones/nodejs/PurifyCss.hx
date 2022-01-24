@@ -29,10 +29,10 @@ class PurifyCss extends FileWhetstone<PurifyCssConfig> {
         args = args.concat(['-o', out]);
         Utils.ensureDirExist(outId.dir.toRelPath(project));
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'purifycss');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'node_modules/.bin/purifycss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.getNodeRoot(project) + 'purifycss', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'node_modules/.bin/purifycss', args);
         p.exitCode();
         #end
         return [WhetSourceData.fromFile(purifiedCss, out, outId)];

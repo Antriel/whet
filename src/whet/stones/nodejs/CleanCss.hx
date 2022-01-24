@@ -23,10 +23,10 @@ class CleanCss extends FileWhetstone<CleanCssConfig> {
         var args:Array<String> = ['--skip-rebase', '-o', out].concat(
             config.css.getData().map(s -> s.getFilePath()));
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'cleancss');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'node_modules/.bin/cleancss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.getNodeRoot(project) + 'cleancss', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'node_modules/.bin/cleancss', args);
         p.exitCode();
         #end
         return [WhetSourceData.fromFile(cleanCss, out, outId)];

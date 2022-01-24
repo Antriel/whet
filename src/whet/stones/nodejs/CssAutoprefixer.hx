@@ -21,10 +21,10 @@ class CssAutoprefixer extends FileWhetstone<CssAutoprefixerConfig> {
         var data = config.css.getData();
         for (item in data) args.push(item.getFilePath());
         #if hxnodejs
-        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'postcss');
+        var cmd = js.node.Path.normalize(NpmManager.getNodeRoot(project) + 'node_modules/.bin/postcss');
         js.node.ChildProcess.spawnSync(cmd, args, { shell: true, stdio: 'inherit' });
         #elseif sys
-        var p = new Process(NpmManager.getNodeRoot(project) + 'postcss', args);
+        var p = new Process(NpmManager.getNodeRoot(project) + 'node_modules/.bin/postcss', args);
         p.exitCode();
         #end
         return [for (item in data) {
