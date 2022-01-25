@@ -12,6 +12,7 @@ class Project {
     @:allow(whet) private static final projects:Array<Project> = [];
 
     public function new(config:ProjectConfig) {
+        Log.trace('Instantiating new Project.');
         if (config == null || config.name == null) throw new js.lib.Error("Must supply config and a name.");
         name = config.name;
         if (config.id == null) id = StringTools.replace(config.name, ' ', '-').toLowerCase();
@@ -32,7 +33,10 @@ class Project {
         // commands = new Map();
         // commandsMeta = [];
         projects.push(this);
+        Log.info('New project created.', { project: this, projectCount: projects.length });
     }
+
+    public function toString() return '$name@$rootDir';
 
 }
 

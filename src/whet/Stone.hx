@@ -22,6 +22,7 @@ abstract class Stone<T:StoneConfig> {
     public final project:Project;
 
     public final function new(config:T) {
+        Log.trace('Instantiating new Stone.');
         if (config == null) throw new js.lib.Error('Config must be supplied.');
         this.config = config;
         initConfig();
@@ -38,10 +39,14 @@ abstract class Stone<T:StoneConfig> {
 
     /** Get Source for this stone. Goes through the cache. */
     // public final function getSource():Promise<Source> cache.getSource(this);
-    public final function getSource():Promise<Source> return generate(null).then(ss -> new Source(ss, null, this, null));
+    public final function getSource():Promise<Source> {
+        Log.trace('Getting source.', { stone: this });
+        return generate(null).then(ss -> new Source(ss, null, this, null));
+    }
 
     /** Hash of this stone with its current config. Defaults to hash of generated source. */
     public final function getHash():Promise<SourceHash> {
+        Log.debug('Generating hash.', { stone: this });
         var hash = generateHash();
         return if (hash != null) hash else getSource().then(s -> s.hash);
     }
@@ -104,6 +109,10 @@ abstract class Stone<T:StoneConfig> {
     // private inline function set_cache(cache:CacheManager) return config.project.config.cache = cache;
 
     private inline function get_project() return config.project;
+
+    public function toString():String {
+        return '$id:${Type.getClassName(Type.getClass(this))}';
+    }
 
 }
 
