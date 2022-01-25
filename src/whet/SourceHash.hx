@@ -10,7 +10,7 @@ class SourceHash {
         new SourceHash(bytes);
     }
 
-    static inline var HASH_LENGTH:Int = 20;
+    static inline var HASH_LENGTH:Int = 32;
 
     final bytes:Buffer;
 

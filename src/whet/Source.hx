@@ -23,18 +23,15 @@ class Source {
         for (entry in data) entry.source = this;
     }
 
-    public function hasDir():Bool return dirPath != null;
+    public function tryDirPath():Null<SourceId> return dirPath;
 
     /**
      * Returns a directory path where this source data is stored.
-     * If none exists yet, generates one through cache.
+     * If none exists yet, generates a usable path through cache.
      */
     public function getDirPath():SourceId {
-        // if (dirPath == null) {
-        //     dirPath = origin.cache.getDir(origin, hash);
-        //     Utils.ensureDirExist(dirPath.toRelPath(origin.project));
-        //     // TODO: Should also store all the data entries? Or do we do that on per-data case.
-        // }
+        if (dirPath == null)
+            dirPath = origin.cache.getDir(origin, hash);
         return dirPath;
     }
 
@@ -91,20 +88,20 @@ class SourceData {
     public function hasFile():Bool return this.filePath != null;
 
     /** Same as `getFilePath` but relative to project, not CWD. */
-    public function getFilePathId():SourceId {
-        if (filePathId == null) getFilePath();
-        return filePathId;
+    public function getFilePathId():Promise<SourceId> {
+        return if (filePathId == null) getFilePath().then(_ -> filePathId);
+        else Promise.resolve(filePathId);
     }
 
     /** Path to a file for this source, relative to CWD. */
-    public function getFilePath():String {
-        if (filePath == null) {
+    public function getFilePath():Promise<String> {
+        return if (filePath == null) {
             if (source == null) new js.lib.Error("Data without source.");
-            filePathId = id.getPutInDir(source.getDirPath());
+            var dir = source.getDirPath();
+            filePathId = id.getPutInDir(dir);
             filePath = filePathId.toRelPath(source.origin.project);
-            Utils.saveBytes(filePath, this.data);
-        }
-        return filePath;
+            Utils.saveBytes(filePath, this.data).then(_ -> filePath);
+        } else Promise.resolve(filePath);
     }
 
     inline function get_length() return data.length;

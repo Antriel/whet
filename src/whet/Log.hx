@@ -42,10 +42,8 @@ import haxe.Json;
     }
 
     static function replacer(key:Dynamic, val:Dynamic):Dynamic {
-        if (val != null) {
-            var cls = Type.getClass(val);
-            if (cls != null && Type.getInstanceFields(cls).contains('toString')) return val.toString();
-        }
+        if (val != null && js.Lib.typeof(val.toString) == 'function' && val.toString != js.lib.Object.prototype.toString)
+            return val.toString();
         return val;
     }
 

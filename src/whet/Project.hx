@@ -7,8 +7,8 @@ class Project {
     public final id:String;
     public final description:String;
     public final rootDir:SourceId;
+    public final cache:CacheManager = null;
 
-    // public final cache:CacheManager = null;
     @:allow(whet) private static final projects:Array<Project> = [];
 
     public function new(config:ProjectConfig) {
@@ -29,7 +29,7 @@ class Project {
             rootDir = (js.node.Path.relative(js.Node.process.cwd(), file):SourceId).dir;
             // TODO write tests for this.
         } else rootDir = config.rootDir;
-        // if (config.cache == null) config.cache = { project: this };
+        cache = config.cache == null ? new CacheManager(this) : config.cache;
         // commands = new Map();
         // commandsMeta = [];
         projects.push(this);
@@ -45,7 +45,7 @@ typedef ProjectConfig = {
     public var name:String;
     public var ?id:String;
     public var ?description:String;
-    // public var cache:CacheManager = null;
+    public var ?cache:CacheManager;
     public var ?rootDir:String;
 
 }

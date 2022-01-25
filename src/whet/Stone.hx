@@ -4,8 +4,6 @@ import whet.Source;
 import whet.magic.StoneId.StoneIdType;
 import whet.magic.StoneId.makeStoneId;
 
-// import whet.cache.Cache;
-// import whet.cache.CacheManager;
 #if !macro
 @:autoBuild(whet.Macros.addDocsMeta())
 #end
@@ -16,9 +14,9 @@ abstract class Stone<T:StoneConfig> {
     /** If true, hash of a cached file (not `stone.getHash()` but actual file contents) won't be checked. */
     public var ignoreFileHash:Bool = false;
 
-    public final id:String;
-    // public var cacheStrategy(get, set):CacheStrategy;
-    // public var cache(get, set):CacheManager;
+    public var id(default, null):String;
+    public var cacheStrategy:CacheStrategy;
+    public var cache(get, never):CacheManager;
     public final project:Project;
 
     public final function new(config:T) {
@@ -29,26 +27,23 @@ abstract class Stone<T:StoneConfig> {
         id = if (config.id != null) makeStoneId(config.id) else makeStoneId(this);
         project = if (config.project != null) config.project else Project.projects[Project.projects.length - 1];
         if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
+        cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
         // config.project.addCommands(this);
     }
 
     /** Override this to set config defaults. */
-    function initConfig():Void {
-        // if (config.cacheStrategy == null) config.cacheStrategy = cache.defaultStrategy;
-    }
+    function initConfig():Void { }
 
     /** Get Source for this stone. Goes through the cache. */
-    // public final function getSource():Promise<Source> cache.getSource(this);
     public final function getSource():Promise<Source> {
         Log.trace('Getting source.', { stone: this });
-        return generate(null).then(ss -> new Source(ss, null, this, null));
+        return cache.getSource(this);
     }
 
     /** Hash of this stone with its current config. Defaults to hash of generated source. */
     public final function getHash():Promise<SourceHash> {
         Log.debug('Generating hash.', { stone: this });
-        var hash = generateHash();
-        return if (hash != null) hash else getSource().then(s -> s.hash);
+        return generateHash().then(hash -> if (hash != null) hash else cast getSource().then(s -> s.hash));
     }
 
     /**
@@ -56,6 +51,7 @@ abstract class Stone<T:StoneConfig> {
      * Hash passed should be the same as is this stone's current one. Passed in as optimization.
      */
     @:allow(whet.cache) final function generateSource(hash:SourceHash):Promise<Source> {
+        Log.debug('Generating source.', { stone: this, hash: hash });
         var dataPromise = generate(hash);
         return if (dataPromise != null) dataPromise.then(data -> {
             if (hash == null) { // Default hash is byte hash of the generated result.
@@ -68,7 +64,7 @@ abstract class Stone<T:StoneConfig> {
     /**
      * Optionally overridable hash generation as optimization.
      */
-    @:allow(whet.cache) function generateHash():Promise<SourceHash> return null;
+    @:allow(whet.cache) function generateHash():Promise<SourceHash> return Promise.resolve(null);
 
     /**
      * Function that actually generates the source. Passed hash is only non-null
@@ -101,16 +97,10 @@ abstract class Stone<T:StoneConfig> {
     //     if (generate) getSource();
     //     return this;
     // }
-    // private inline function get_id() return makeStoneId(config.id);
-    // private inline function set_id(id:StoneIdType) return config.id = id;
-    // private inline function get_cacheStrategy() return config.cacheStrategy;
-    // private inline function set_cacheStrategy(cacheStrategy:CacheStrategy) return config.cacheStrategy = cacheStrategy;
-    // private inline function get_cache() return config.project.config.cache;
-    // private inline function set_cache(cache:CacheManager) return config.project.config.cache = cache;
 
-    private inline function get_project() return config.project;
+    private inline function get_cache() return project.cache;
 
-    public function toString():String {
+    @:keep public function toString():String {
         return '$id:${Type.getClassName(Type.getClass(this))}';
     }
 
@@ -118,7 +108,7 @@ abstract class Stone<T:StoneConfig> {
 
 typedef StoneConfig = {
 
-    // public var cacheStrategy:CacheStrategy = null;
+    var ?cacheStrategy:CacheStrategy;
 
     /** Defaults to the Stone's class name. */
     var ?id:StoneIdType;
