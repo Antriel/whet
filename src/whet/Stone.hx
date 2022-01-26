@@ -85,18 +85,14 @@ abstract class Stone<T:StoneConfig> {
 
     /** 
      * Caches this resource under supplied `path` as a single copy.
-     * If `path` is not a directory, changes `filename` or `id` of this stone.
+     * If `path` is a directory, stores the file(s) under that path, using their standard names.
+     * If `path` is a file and this stone generates only single data source, stores it under the supplied path.
      * If `generate` is true, the source is exported right away.
      */
-    // public function cachePath(path:SourceId, generate:Bool = true):Stone<T> {
-    //     config.cacheStrategy = AbsolutePath(path.dir, LimitCountByAge(1));
-    //     if (!path.isDir()) if (Reflect.hasField(config, 'filename')) {
-    //         // Warning: We are setting `SourceId` via reflection. Need to include first slash.
-    //         Reflect.setField(config, 'filename', '/' + path.withExt);
-    //     } else this.id = path.withExt;
-    //     if (generate) getSource();
-    //     return this;
-    // }
+    @:keep public function setAbsolutePath(path:String, generate:Bool = true):Promise<Source> {
+        cacheStrategy = AbsolutePath(path, LimitCountByAge(1));
+        return if (generate) getSource() else Promise.resolve(null);
+    }
 
     private inline function get_cache() return project.cache;
 

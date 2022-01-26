@@ -67,13 +67,14 @@ class SourceData {
      * `path` is the actual cwd-relative path. `pathId` is the project-relative source Id.
      */
     public static function fromFile(id:SourceId, path:String, pathId:SourceId):Promise<SourceData> {
-        if (!sys.FileSystem.exists(path) || sys.FileSystem.isDirectory(path)) return null;
         return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
             if (err != null) res(null);
-            var source = fromBytes(id, buffer);
-            source.filePath = path;
-            source.filePathId = pathId;
-            res(source);
+            else {
+                var source = fromBytes(id, buffer);
+                source.filePath = path;
+                source.filePathId = pathId;
+                res(source);
+            }
         }));
     }
 
@@ -88,17 +89,17 @@ class SourceData {
     public function hasFile():Bool return this.filePath != null;
 
     /** Same as `getFilePath` but relative to project, not CWD. */
-    public function getFilePathId():Promise<SourceId> {
-        return if (filePathId == null) getFilePath().then(_ -> filePathId);
+    public function getFilePathId(idOverride:SourceId = null):Promise<SourceId> {
+        return if (filePathId == null) getFilePath(idOverride).then(_ -> filePathId);
         else Promise.resolve(filePathId);
     }
 
     /** Path to a file for this source, relative to CWD. */
-    public function getFilePath():Promise<String> {
+    public function getFilePath(idOverride:SourceId = null):Promise<String> {
         return if (filePath == null) {
             if (source == null) new js.lib.Error("Data without source.");
             var dir = source.getDirPath();
-            filePathId = id.getPutInDir(dir);
+            filePathId = (idOverride != null ? idOverride : id).getPutInDir(dir);
             filePath = filePathId.toRelPath(source.origin.project);
             Utils.saveBytes(filePath, this.data).then(_ -> filePath);
         } else Promise.resolve(filePath);

@@ -41,7 +41,11 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     function key(stone:AnyStone) return stone.id;
 
     function value(source:Source):Promise<RuntimeFileCacheValue> {
-        return Promise.all([for (data in source.data) data.getFilePathId().then(filePath -> {
+        var idOverride:SourceId = switch source.origin.cacheStrategy {
+            case AbsolutePath(path, _) if (source.data.length == 1): path.withExt;
+            case _: null;
+        }
+        return Promise.all([for (data in source.data) data.getFilePathId(idOverride).then(filePath -> {
             fileHash: SourceHash.fromBytes(data.data),
             filePath: filePath,
             id: data.id
@@ -55,6 +59,16 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     }
 
     function source(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Source> {
+        switch stone.cacheStrategy {
+            case AbsolutePath(path, _):
+                var invalidPath = if (value.files.length == 1) {
+                    value.files[0].filePath != path;
+                } else {
+                    value.baseDir != path.dir;
+                }
+                if (invalidPath) return Promise.resolve(null);
+            case _:
+        }
         return Promise.all([for (file in value.files) new Promise(function(res, rej) {
             var path = file.filePath.toRelPath(rootDir);
             SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
@@ -64,7 +78,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             });
         })]).then(
             data -> new Source(cast data, value.hash, stone, value.ctime),
-            rejected -> rejected == 'Wrong hash.' ? null : throw rejected
+            rejected -> rejected == 'Wrong hash.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
         );
     }
 
@@ -82,17 +96,31 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     }
 
     override function remove(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Nothing> {
-        final dirPath = value.baseDir.toRelPath(rootDir);
+        Log.debug('Removing stone from file cache.', { stone: stone, valueHash: value.hash.toHex() });
+        // Only remove if there's nothing else in the cache with the same path, as a precaution against
+        // invalid cache state.
         final isAlone = Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1;
         return super.remove(stone, value).then(_ -> {
             flush();
-            return new Promise((res, rej) -> Fs.stat(dirPath, (err, stats) -> {
-                if (err == null && isAlone) {
-                    js.Syntax.code('{0}.rm({1}, {2}, {3})', Fs, dirPath, { recursive: true, force: true },
-                        err -> if (err != null) res(null) else rej(err));
-                } else res(null);
-            }));
-        });
+            if (!isAlone) Promise.resolve(null) else
+                Promise.all([for (file in value.files) new Promise((res, rej) -> {
+                    Log.trace('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
+                    Fs.unlink(file.filePath.toRelPath(rootDir), err -> {
+                        if (err != null) Log.error(err);
+                        res(null);
+                    });
+                })]);
+        }).then(_ -> new Promise((res, rej) -> Fs.readdir(value.baseDir.toRelPath(rootDir), (err, files) -> {
+            if (err != null) {
+                Log.error(err);
+                res(null);
+            } else if (files.length == 0)
+                Fs.rmdir(value.baseDir.toRelPath(rootDir), err -> {
+                    if (err != null) Log.error(err);
+                    res(null);
+                })
+            else res(null);
+        })));
     }
 
     override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Bool {
@@ -106,7 +134,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     function flush() {
         if (flushQueued) return;
         flushQueued = true;
-        js.Node.setImmediate(function() {
+        js.Node.setTimeout(function() {
             flushQueued = false;
             var db:DbJson = {};
             for (id => values in cache) db.set(id, [for (val in values) {
@@ -124,7 +152,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 _ -> Log.trace('FileCache DB saved.'),
                 err -> Log.error('FileCache DB save error.', err)
             );
-        });
+        }, 100);
     }
 
 }

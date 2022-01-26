@@ -1,7 +1,6 @@
 package whet.stones;
 
 import js.node.Fs;
-import sys.FileSystem;
 import whet.magic.MaybeArray.makeArray;
 
 class Files extends Stone<FilesConfig> {

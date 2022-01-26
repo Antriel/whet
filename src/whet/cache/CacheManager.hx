@@ -43,7 +43,7 @@ class CacheManager {
             case None: baseDir; // TODO should we clean the folder? But when?
             case InMemory(_): memCache.getUniqueDir(stone, baseDir, hash);
             case InFile(_): fileCache.getUniqueDir(stone, baseDir, hash);
-            case AbsolutePath(dir, _): dir;
+            case AbsolutePath(path, _): path.dir;
         }
         return id;
         // TODO clean tmp on start/end of process

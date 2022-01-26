@@ -44,9 +44,12 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
             var srcPromise = (value != null ? source(stone, value) : Promise.resolve(null)).then(src -> {
                 return if (src == null) {
                     Log.trace('Not cached.', { stone: stone, cache: this });
-                    if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-                    (generatedSource != null ? Promise.resolve(generatedSource) : stone.generateSource(hash))
-                        .then(src -> set(src)).then(val -> source(stone, val));
+                    (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
+                        if (check.match(AllOnSet)) checkDurability(stone, values, durability,
+                            v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
+                        (generatedSource != null ? Promise.resolve(generatedSource) : stone.generateSource(hash))
+                            .then(src -> set(src)).then(val -> source(stone, val));
+                    });
                 } else {
                     Log.trace('Found in cache', { stone: stone, cache: this });
                     Promise.resolve(src);
@@ -93,6 +96,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
 
     function checkDurability(stone:AnyStone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
             ageIndex:Value->Int):Void {
+        Log.trace("Checking durability.", { stone: stone, durability: Std.string(durability) });
         if (values == null || values.length == 0) return;
         var i = values.length;
         while (--i > 0) {

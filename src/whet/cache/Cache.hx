@@ -12,7 +12,7 @@ enum CacheStrategy {
     None;
     InMemory(durability:CacheDurability, ?check:DurabilityCheck);
     InFile(durability:CacheDurability, ?check:DurabilityCheck);
-    AbsolutePath(dir:SourceId, durability:CacheDurability, ?check:DurabilityCheck);
+    AbsolutePath(path:SourceId, durability:CacheDurability, ?check:DurabilityCheck);
     // TODO combined file+memory cache?
 
 }
