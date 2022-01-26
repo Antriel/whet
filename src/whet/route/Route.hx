@@ -1,5 +1,7 @@
 package whet.route;
 
+import whet.magic.RouteType;
+
 class Route {
 
     private final routes:Array<RouteData>;
@@ -16,29 +18,8 @@ class Route {
             path: ('/':SourceId)
         }]);
 
-    // TODO handle the Maps/RouteResults.
-    // public inline static function fromSourceIdMap<T:AnyStone>(m:Map<T, SourceId>):Route
-    //     return new Route([for (stone => path in m) {
-    //         stone: stone,
-    //         path: path
-    //     }]);
-    // public inline static function fromMap<T:AnyStone>(m:Map<T, String>):Route
-    //     return new Route([for (stone => path in m) {
-    //         stone: stone,
-    //         path: (path:SourceId)
-    //     }]);
-    // public inline static function fromResult(r:RouteResult):Route return fromResults([r]);
-    // public inline static function fromResults(r:Array<RouteResult>):Route
-    //     return new Route([for (res in r) {
-    //         stone: res.source,
-    //         path: res.sourceId
-    //     }]);
-    // public inline static function fromResults2(r:Array<Array<RouteResult>>):Route
-    //     return fromResults(Lambda.flatten(r));
-
-    public function add(r:Route):Route {
-        // for (item in (cast r:Array<RouteData>)) routes.push(item);
-        // TODO no casting anymore.
+    public function add(r:RouteType):Route {
+        for (item in makeRoute(r).routes) routes.push(item);
         return this;
     }
 

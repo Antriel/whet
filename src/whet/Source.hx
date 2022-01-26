@@ -68,8 +68,10 @@ class SourceData {
      */
     public static function fromFile(id:SourceId, path:String, pathId:SourceId):Promise<SourceData> {
         return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
-            if (err != null) res(null);
-            else {
+            if (err != null) {
+                Log.error("File does not exist.", { id: id, path: path });
+                res(null);
+            } else {
                 var source = fromBytes(id, buffer);
                 source.filePath = path;
                 source.filePathId = pathId;

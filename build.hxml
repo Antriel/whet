@@ -6,6 +6,7 @@
 -cp src
 --dce full
 whet.Project
+whet.route.Router
 --macro addGlobalMetadata('whet.stones', '@:expose')
 --macro include('whet.stones')
 

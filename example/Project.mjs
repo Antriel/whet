@@ -1,4 +1,4 @@
-import { Project, JsonStone, Log } from "../bin/whet.js";
+import { Project, JsonStone, Router, Log } from "../bin/whet.js";
 import { CacheDurability, CacheStrategy, DurabilityCheck } from "../bin/whet/cache/Cache.js";
 
 // Log.logLevel = 10;
@@ -14,4 +14,13 @@ console.log((await json.getSource()).get().data.toString(('utf-8')));
 json.data.foo = 'bar';
 console.log((await json.getSource()).get().data.toString(('utf-8')));
 
-await new JsonStone({id: 'unique'}).addProjectData().setAbsolutePath('myJson.json');
+const unique = new JsonStone({id: 'unique'}).addProjectData()
+await unique.setAbsolutePath('myJson.json');
+
+const router = new Router([
+    ['myUnique.json', unique],
+    ['filtered/', '/data/', 'sample.json'],
+    ['prepended/', '/data/'],
+    ['rewired.json', '/data/', 'sample2.json'],
+]);
+console.log(await router.listContents());

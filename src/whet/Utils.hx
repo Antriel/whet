@@ -45,6 +45,12 @@ class Utils {
         ));
     }
 
+    public static function deleteAll(path:String):Promise<Nothing> {
+        return new Promise((res,
+                rej) -> js.Syntax.code(
+                '{0}.rm({1}, {2}, {3})', Fs, path, { recursive: true, force: true }, _ -> res(null)));
+    }
+
 }
 
 enum abstract Nothing(Dynamic) {
