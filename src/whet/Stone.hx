@@ -20,7 +20,7 @@ abstract class Stone<T:StoneConfig> {
     public final project:Project;
 
     public final function new(config:T) {
-        Log.trace('Instantiating new Stone.');
+        Log.trace('Instantiating new Stone.', { type: Type.getClassName(Type.getClass(this)) });
         if (config == null) throw new js.lib.Error('Config must be supplied.');
         this.config = config;
         initConfig();

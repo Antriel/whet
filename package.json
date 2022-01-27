@@ -19,6 +19,9 @@
         "url": "https://github.com/Antriel/whet/issues"
     },
     "homepage": "https://github.com/Antriel/whet#readme",
+    "dependencies": {
+        "mime": "^3.0.0"
+    },
     "devDependencies": {
         "lix": "^15.11.6"
     }

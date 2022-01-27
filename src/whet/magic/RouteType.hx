@@ -28,7 +28,10 @@ private function getRoute(t:BaseRouteType, ?path:SourceId) {
     return if (t is String) {
         {
             stone: new Files({ paths: [t] }),
-            path: if (path != null) path else (t:SourceId)
+            path: if (path != null) path else {
+                var p:SourceId = t;
+                p.relativeTo(p.dir);
+            }
         }
     } else if (t is AnyStone) {
         {

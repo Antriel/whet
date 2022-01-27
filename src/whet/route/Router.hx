@@ -9,7 +9,7 @@ class Router {
     private var routes:Array<RoutePath>;
 
     public function new(routes:RoutePathType = null) {
-        if (routes != null) this.routes = makeRoutePath(routes);
+        this.routes = if (routes != null) makeRoutePath(routes) else [];
     }
 
     public inline function route(r:RoutePathType)
