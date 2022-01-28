@@ -1,3 +1,5 @@
+import { RemoteFile } from "../bin/whet.js";
+import { ZipStone } from "../bin/whet.js";
 import { Project, JsonStone, Router, Log } from "../bin/whet.js";
 import { CacheDurability, CacheStrategy, DurabilityCheck } from "../bin/whet/cache/Cache.js";
 import { Server } from "../bin/whet/stones/Server.js";
@@ -18,14 +20,19 @@ json.data.foo = 'bar';
 const unique = new JsonStone({id: 'unique'}).addProjectData()
 await unique.setAbsolutePath('myJson.json');
 
+const phaser = new RemoteFile({url: 'https://cdn.jsdelivr.net/npm/phaser@3.55.2/dist/phaser.min.js' });
+
 const router = new Router([
     ['myUnique.json', unique],
     ['filtered/', '/data/', 'sample.json'],
     ['prepended/', '/data/'],
     ['rewired.json', '/data/', 'sample2.json'],
     ['picked.json', '/data/sample2.json'],
+    ['phaser.js', phaser]
 ]);
 console.log(await router.listContents());
+
+await new ZipStone({sources: router}).setAbsolutePath('bundle.zip');
 
 const s = new Server({router: router});
 // s.serve();
