@@ -3,6 +3,7 @@
     "version": "0.0.1",
     "description": "NodeJS based Project configuration, build, deployment, assets management and tooling library.",
     "scripts": {
+        "devinit": "npx dts commander --modular --noLibWrap",
         "build": "npx haxe build.hxml"
     },
     "repository": {
@@ -12,6 +13,7 @@
     "files": [
         "bin"
     ],
+    "bin": "bin/whet.js",
     "type": "module",
     "author": "Peter Achberger",
     "license": "MIT",
@@ -20,9 +22,11 @@
     },
     "homepage": "https://github.com/Antriel/whet#readme",
     "dependencies": {
+        "commander": "^9.0.0",
         "mime": "^3.0.0"
     },
     "devDependencies": {
+        "dts2hx": "^0.18.1",
         "lix": "^15.11.6"
     }
 }

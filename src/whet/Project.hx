@@ -30,10 +30,13 @@ class Project {
             // TODO write tests for this.
         } else rootDir = config.rootDir;
         cache = config.cache == null ? new CacheManager(this) : config.cache;
-        // commands = new Map();
-        // commandsMeta = [];
         projects.push(this);
         Log.info('New project created.', { project: this, projectCount: projects.length });
+    }
+
+    public function addCommand(stone:AnyStone, cmd:commander.Command):Void {
+        cmd.alias(stone.id + '.' + cmd.name());
+        whet.Whet.program.addCommand(cmd);
     }
 
     public function toString() return '$name@$rootDir';

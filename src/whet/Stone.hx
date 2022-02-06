@@ -4,9 +4,6 @@ import whet.Source;
 import whet.magic.StoneId.StoneIdType;
 import whet.magic.StoneId.makeStoneId;
 
-#if !macro
-@:autoBuild(whet.Macros.addDocsMeta())
-#end
 abstract class Stone<T:StoneConfig> {
 
     public var config:T;
@@ -28,11 +25,14 @@ abstract class Stone<T:StoneConfig> {
         project = if (config.project != null) config.project else Project.projects[Project.projects.length - 1];
         if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
-        // config.project.addCommands(this);
+        for (cmd in getCommands()) project.addCommand(this, cmd);
     }
 
     /** Override this to set config defaults. */
     function initConfig():Void { }
+
+    /** Override this to register commands. */
+    function getCommands():Array<commander.Command> return [];
 
     /** Get Source for this stone. Goes through the cache. */
     public final function getSource():Promise<Source> {

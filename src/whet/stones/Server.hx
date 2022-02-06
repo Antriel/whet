@@ -16,10 +16,25 @@ class Server extends Stone<ServerConfig> {
     function generate(hash:SourceHash):Promise<Array<SourceData>> throw new js.lib.Error("Does not generate.");
 
     /** Starts a static server hosting attached resources. */
-    @command public function serve() {
+    public function serve() {
         final server = Http.createServer(handler);
-        final port = if (config.port != null) config.port else 7000;
-        server.listen(port, () -> Log.info('Started web server.', { port: port }));
+        server.listen(config.port, () -> Log.info('Started web server.', { port: config.port }));
+    }
+
+    override function initConfig() {
+        super.initConfig();
+        if (config.port == null) config.port = 7000;
+    }
+
+    override function getCommands():Array<commander.Command> {
+        return [new commander.Command('serve')
+            .option('-p, --port <port>', 'server port', '' + config.port)
+            .action((args) -> {
+                if (args[0].port != null) config.port = Std.parseInt(args[0].port);
+                serve();
+                return null;
+            })
+        ];
     }
 
     function handler(req:IncomingMessage, res:ServerResponse) {
