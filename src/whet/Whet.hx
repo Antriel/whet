@@ -9,6 +9,7 @@ function main() {
         .description('Project tooling.')
         .usage('[options] [command] [+ [command]...]')
         .version(Macros.getVersion(), '-v, --version')
+        .allowUnknownOption(true)
         .showSuggestionAfterError(true)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info');
@@ -26,15 +27,16 @@ function main() {
 
 private function init(options:Dynamic) {
     if (Project.projects.length > 0) { // Project already loaded.
-        initProject();
+        initProjects();
     } else { // Load project.
         Log.info('Loading project.', { file: options.project });
         var path = js.node.Url.pathToFileURL(options.project).href;
-        Log.trace('Resolved project path.', { path: path });
+        Log.debug('Resolved project path.', { path: path });
 
         var projectProm:Promise<js.node.Module> = js.Syntax.code('import({0})', path);
         projectProm.then(module -> {
-            initProject();
+            Log.trace('Project module imported.');
+            initProjects();
         }).catchError(e -> {
             Log.error("Error loading project.", { error: e });
             program.help();
@@ -42,14 +44,32 @@ private function init(options:Dynamic) {
     }
 }
 
-private function initProject() {
+private function initProjects() {
     Log.trace('Parsing remaining arguments.', { args: program.args });
+    for (project in Project.projects) {
+        for (opt in project.options) program.addOption(opt);
+    }
+    program.allowUnknownOption(false);
 
     var commands = getCommands(program.args);
-    for (c in commands) {
+    var initProm = if (commands.length > 0) {
+        var res = program.parseOptions(commands[0]);
+        commands[0] = res.operands.concat(res.unknown);
+
+        var promises:Array<Promise<Any>> = [];
+        for (p in Project.projects) if (p.onInit != null) {
+            var prom = p.onInit(program.opts());
+            if (prom != null) promises.push(prom);
+        }
+        Promise.all(promises);
+    } else Promise.resolve();
+    function nextCommand() {
+        if (commands.length == 0) return;
+        final c = commands.shift();
         Log.trace('Executing command.', { commandArgs: c });
-        program.parse(c, { from: 'user' });
+        program.parseAsync(c, { from: 'user' }).then(_ -> nextCommand());
     }
+    initProm.then(_ -> nextCommand());
 }
 
 private function getCommands(args:Array<String>):Array<Array<String>> {

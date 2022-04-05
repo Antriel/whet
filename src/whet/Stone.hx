@@ -25,7 +25,7 @@ abstract class Stone<T:StoneConfig> {
         project = if (config.project != null) config.project else Project.projects[Project.projects.length - 1];
         if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
-        for (cmd in getCommands()) project.addCommand(this, cmd);
+        for (cmd in getCommands()) project.addCommand(cmd, this);
     }
 
     /** Override this to set config defaults. */
@@ -36,7 +36,7 @@ abstract class Stone<T:StoneConfig> {
 
     /** Get Source for this stone. Goes through the cache. */
     public final function getSource():Promise<Source> {
-        Log.trace('Getting source.', { stone: this });
+        Log.debug('Getting source.', { stone: this });
         return cache.getSource(this);
     }
 

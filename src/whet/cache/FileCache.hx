@@ -104,7 +104,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             flush();
             if (!isAlone) Promise.resolve(null) else
                 Promise.all([for (file in value.files) new Promise((res, rej) -> {
-                    Log.trace('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
+                    Log.debug('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
                     Fs.unlink(file.filePath.toRelPath(rootDir), err -> {
                         if (err != null) Log.error(err);
                         res(null);

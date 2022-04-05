@@ -1,5 +1,7 @@
 package whet;
 
+import commander.Option;
+
 @:expose
 class Project {
 
@@ -8,16 +10,21 @@ class Project {
     public final description:String;
     public final rootDir:SourceId;
     public final cache:CacheManager = null;
+    public var onInit:(config:Dynamic) -> Promise<Any>;
+
+    @:allow(whet) private final options:Array<Option>;
 
     @:allow(whet) private static final projects:Array<Project> = [];
 
     public function new(config:ProjectConfig) {
-        Log.trace('Instantiating new Project.');
+        Log.debug('Instantiating new Project.');
         if (config == null || config.name == null) throw new js.lib.Error("Must supply config and a name.");
         name = config.name;
         if (config.id == null) id = StringTools.replace(config.name, ' ', '-').toLowerCase();
         else id = config.id;
         description = config.description;
+        this.options = if (config.options == null) [] else config.options;
+        this.onInit = config.onInit;
 
         if (config.rootDir == null) {
             final oldValue = js.Syntax.code('Error').prepareStackTrace;
@@ -34,8 +41,8 @@ class Project {
         Log.info('New project created.', { project: this, projectCount: projects.length });
     }
 
-    public function addCommand(stone:AnyStone, cmd:commander.Command):Void {
-        cmd.alias(stone.id + '.' + cmd.name());
+    public function addCommand(cmd:commander.Command, ?stone:AnyStone):Void {
+        if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
         whet.Whet.program.addCommand(cmd);
     }
 
@@ -50,5 +57,15 @@ typedef ProjectConfig = {
     public var ?description:String;
     public var ?cache:CacheManager;
     public var ?rootDir:String;
+
+    /**
+     * Array of Commander.js options this project supports.
+     */
+    public var ?options:Array<Option>;
+
+    /**
+     * Called before first command is executed, but after configuration was parsed.
+     */
+    public var ?onInit:(config:Dynamic) -> Promise<Any>;
 
 }
