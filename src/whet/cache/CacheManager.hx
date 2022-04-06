@@ -1,12 +1,18 @@
 package whet.cache;
 
-import whet.Whetstone;
-import whet.cache.Cache;
+class CacheManager {
 
-@:structInit class CacheManager {
-
-    public final project:WhetProject;
+    public final project:Project;
     public var defaultStrategy:CacheStrategy = None;
+
+    final memCache:MemoryCache = null;
+    final fileCache:FileCache = null;
+
+    public function new(project:Project) {
+        this.project = project;
+        fileCache = new FileCache(project);
+        memCache = new MemoryCache(project);
+    }
 
     /** Keep last used 5 for a day and last used 1 indefinitely. */
     public var defaultFileStrategy:CacheStrategy = InFile(Any([
@@ -14,12 +20,10 @@ import whet.cache.Cache;
         All([MaxAge(24 * 60 * 60), LimitCountByLastUse(5)])
     ]), AllOnUse);
 
-    @:isVar var memCache:MemoryCache = null;
-    @:isVar var fileCache(get, set):FileCache = null;
-
-    @:access(whet.Whetstone) public function getSource(stone:Stone):WhetSource {
+    @:access(whet.Stone) public function getSource(stone:AnyStone):Promise<Source> {
+        Log.trace('Looking for cached value.', { stone: stone, strategy: stone.cacheStrategy.getName() });
         return switch stone.cacheStrategy {
-            case None: stone.generateSource(stone.generateHash());
+            case None: stone.generateHash().then(hash -> stone.generateSource(hash));
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
             case InFile(durability, check) | AbsolutePath(_, durability, check):
                 fileCache.get(stone, durability, check != null ? check : AllOnUse);
@@ -31,7 +35,7 @@ import whet.cache.Cache;
      * If hash is supplied, and a path was already assigned, the same path is returned, assuring consistency.
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
      */
-    public function getDir(stone:Stone, ?hash:WhetSourceHash):SourceId {
+    public function getDir(stone:AnyStone, ?hash:SourceHash):SourceId {
         var baseDir:SourceId = stone.id + '/';
         if (stone.cacheStrategy.match(None | InMemory(_))) baseDir = baseDir.getPutInDir('.temp/');
         baseDir = baseDir.getPutInDir('.whet/');
@@ -39,18 +43,10 @@ import whet.cache.Cache;
             case None: baseDir; // TODO should we clean the folder? But when?
             case InMemory(_): memCache.getUniqueDir(stone, baseDir, hash);
             case InFile(_): fileCache.getUniqueDir(stone, baseDir, hash);
-            case AbsolutePath(dir, _): dir;
+            case AbsolutePath(path, _): path.dir;
         }
         return id;
         // TODO clean tmp on start/end of process
     }
-
-    function get_fileCache():FileCache return fileCache != null ? fileCache : (fileCache = new FileCache(project));
-
-    function set_fileCache(v):FileCache return fileCache = v;
-
-    function get_memoryCache():MemoryCache return memCache != null ? memCache : (memCache = new MemoryCache(project));
-
-    function set_memoryCache(v):MemoryCache return memCache = v;
 
 }

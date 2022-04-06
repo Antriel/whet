@@ -1,86 +1,101 @@
 package whet.route;
 
-import whet.WhetSource.WhetSourceData;
+import js.node.Path;
+import whet.magic.RoutePathType;
 
-@:transitive abstract Router(Array<RoutePath>) {
+@:expose
+class Router {
 
-    @:from public static inline function fromMap(m:Map<String, Route>):Router return new Router(m);
+    private var routes:Array<RoutePath>;
 
-    public inline function new(routes:Map<String, Route> = null) {
-        if (routes == null) this = []
-        else this = [for (under => route in routes) { routeUnder: under, route: route }];
+    public function new(routes:RoutePathType = null) {
+        this.routes = if (routes != null) makeRoutePath(routes) else [];
     }
 
-    public inline function route(r:Router)
-        for (path in (cast r:Array<RoutePath>)) this.push(path);
+    public inline function route(r:RoutePathType)
+        for (path in makeRoutePath(r)) routes.push(path);
 
     /**
-     * Find data sources routed under `id`. By default only single result is returned if `id` 
+     * Find data sources routed under `id`. By default only single result is returned if `id`
      * is not a directory, all results otherwise. This can be overriden by providing a second argument.
      */
-    public function find(id:SourceId, firstOnly:Null<Bool> = null):Array<RouteResult> {
-        if (firstOnly == null) firstOnly = !id.isDir();
-        var res:Array<RouteResult> = [];
-        for (path in this) {
-            inline function check(item:RouteResult) {
-                if (id.isDir()) { // Everything in this dir.
-                    var rel = item.serveId.relativeTo(id);
-                    if (rel != null) {
-                        item.serveId = rel;
-                        res.push(item);
+    public function find(id:String, firstOnly:Null<Bool> = null):Promise<Array<RouteResult>> {
+        var sourceId:SourceId = id;
+        return new Promise((res, rej) -> {
+            if (firstOnly == null) firstOnly = !sourceId.isDir();
+            var result:Array<RouteResult> = [];
+            Promise.all([for (path in routes) {
+                inline function check(item:RouteResult) {
+                    if (sourceId.isDir()) { // Everything in this dir.
+                        var rel = item.serveId.relativeTo(sourceId);
+                        if (rel != null) {
+                            item.serveId = rel;
+                            result.push(item);
+                        }
+                    } else { // Everything with that exact name.
+                        if (sourceId == item.serveId) {
+                            item.serveId = sourceId.withExt;
+                            result.push(item);
+                        }
                     }
-                } else { // Everything with that exact name.
-                    if (id == item.serveId) {
-                        item.serveId = id.withExt;
-                        res.push(item);
+                }
+                path.route.list().then(list -> {
+                    if (path.routeUnder.isDir()) {
+                        for (item in list) {
+                            item.serveId = item.serveId.getPutInDir(path.routeUnder);
+                            check(item);
+                        }
+                    } else {
+                        for (item in list) {
+                            item.serveId = path.routeUnder;
+                            check(item);
+                        }
                     }
-                }
-            }
-            var list = path.route.list();
-            if (path.routeUnder.isDir()) {
-                for (item in list) {
-                    item.serveId = item.serveId.getPutInDir(path.routeUnder);
-                    check(item);
-                }
-            } else {
-                for (item in list) {
-                    item.serveId = path.routeUnder;
-                    check(item);
-                }
-            }
-        }
-        if (firstOnly && res.length > 1) res.resize(1);
-        return res;
+                });
+            }]).then(_ -> {
+                if (firstOnly && result.length > 1) result.resize(1);
+                res(result);
+            });
+        });
     }
 
     /**
      * Get combined hash of all sources that would be found under supplied id.
      */
-    public function getHash(id:SourceId, firstOnly:Null<Bool> = null):WhetSourceHash {
-        var uniqueStones = [];
-        for (item in find(id, firstOnly)) {
-            if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
-        }
-        return WhetSourceHash.merge(...uniqueStones.map(s -> s.getHash()));
+    public function getHash(id:String, firstOnly:Null<Bool> = null):Promise<SourceHash> {
+        return find(id, firstOnly).then(items -> {
+            var uniqueStones = [];
+            for (item in items)
+                if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
+            Promise.all(uniqueStones.map(s -> s.getHash()))
+                .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
+        });
     }
 
-    public inline function getHashOfEverything():WhetSourceHash {
-        return WhetSourceHash.merge(...this.map(path -> path.route.getHash()));
+    public inline function getHashOfEverything():Promise<SourceHash> {
+        return Promise.all(routes.map(path -> path.route.getHash()))
+            .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
     }
 
     /**
      * Save files filtered by `searchId` into provided `saveInto` folder.
      */
-    public function saveInto(searchId:SourceId, saveInto:String, clearFirst:Bool = true):Void {
-        if (clearFirst && sys.FileSystem.exists(saveInto)) {
-            Utils.deleteRecursively(saveInto);
-        }
-        var result = find(searchId);
-        for (r in result) {
-            var p = haxe.io.Path.join([saveInto, r.serveId.toRelPath('/')]);
-            Utils.ensureDirExist(p);
-            sys.io.File.saveBytes(p, r.get().data);
-        }
+    public function saveInto(searchId:String, saveInto:String, clearFirst:Bool = true):Promise<Nothing> {
+        return (if (clearFirst) Utils.deleteAll(saveInto) else Promise.resolve(null))
+            .then(_ -> find(searchId)).then(result -> {
+                cast Promise.all([for (r in result) {
+                    final p = Path.join(saveInto, r.serveId.toRelPath('/'));
+                    r.get().then(src -> Utils.saveBytes(p, src.data));
+                }]);
+            });
+    }
+
+    public function listContents(search:String = "/"):Promise<String> {
+        return find(search).then(files -> {
+            var ids = files.map(f -> f.serveId);
+            ids.sort((a, b) -> a.compare(b));
+            ids.join('\n');
+        });
     }
 
 }

@@ -1,109 +1,85 @@
 package whet;
 
-import haxe.macro.Compiler;
-import haxe.macro.Context;
-import haxe.macro.Expr;
-import sys.FileSystem;
+import whet.Log.LogLevel;
 
-class Whet {
+var program = new commander.Command('whet');
 
-    #if macro
-    static var commands:Array<{command:String, argument:String}>;
+function main() {
+    program.enablePositionalOptions().passThroughOptions()
+        .description('Project tooling.')
+        .usage('[options] [command] [+ [command]...]')
+        .version(Macros.getVersion(), '-v, --version')
+        .allowUnknownOption(true)
+        .showSuggestionAfterError(true)
+        .option('-p, --project <file>', 'project to run', 'Project.mjs')
+        .option('-l, --log-level <level>', 'log level, a string/number', 'info');
 
-    static macro function run() {
-        // This is all ugly, based on previous design, but will do for now...
-        // Assuming commands are just functions to execute, if they exists, or commands if not.
-        // All this compiles into a main function with set of functions to execute, so we can export
-        // and run plain js, without having to pass commands to it.
-        // In the future we should maybe use tink_cli for the commands and stuff, and handle running node
-        // with the same commands instead of this mess.
-        commands = [for (key => value in Context.getDefines())
-            if (key.indexOf('whet.') == 0 && key != 'whet.project') {
-                command: key.substr('whet.'.length),
-                argument: value
-            }
-        ];
-        var funcs = [];
-        var project = Context.definedValue('whet.project');
-        if (project == null) {
-            var projects = FileSystem.readDirectory('.')
-                .filter(s -> StringTools.endsWith(s, '.hx') && StringTools.contains(s, 'Project'))
-                .map(s -> StringTools.replace(s, '.hx', ''));
-            switch projects.length {
-                case 0: Context.error('No project to run found.', Context.currentPos());
-                case 1: project = projects[0];
-                case _: Context.error('Multiple projects found, specify one using `-D whet.project=Project`.', Context.currentPos());
-            }
-        }
-        for (t in Context.getModule(project)) switch t {
-            case TInst(_.get() => { kind: KModuleFields(module), statics: _.get() => fields }, _):
-                for (f in fields) if (f.kind.match(FMethod(_))) {
-                    var i = Lambda.findIndex(commands, c -> c.command.indexOf(f.name + "(") == 0);
-                    if (i >= 0) {
-                        var f = commands.splice(i, 1)[0].command;
-                        f = StringTools.replace(f, ';', ',');
-                        funcs.push(Context.parse('$project.$f', Context.currentPos()));
-                    }
-                }
-            case _:
-        }
+    program.parse();
+    final options = program.opts();
+    if (options.logLevel != null) { // Handle logLevel immediately.
+        var n = Std.parseInt(options.logLevel);
+        if (n == null) n = LogLevel.fromString(options.logLevel);
+        if (n == null) program.error('Invalid value for --log-level');
+        else Log.logLevel = n;
+    }
+    js.Node.setImmediate(init, options); // Init next tick, in case the project file was executed directly.
+}
 
-        Context.defineType(macro class WhetMain {
+private function init(options:Dynamic) {
+    if (Project.projects.length > 0) { // Project already loaded.
+        initProjects();
+    } else { // Load project.
+        Log.info('Loading project.', { file: options.project });
+        var path = js.node.Url.pathToFileURL(options.project).href;
+        Log.debug('Resolved project path.', { path: path });
 
-            static function main() {
-                var commands = $v{commands};
-                $b{funcs};
-                whet.Whet.executeProjects($v{commands});
-            }
-
+        var projectProm:Promise<js.node.Module> = js.Syntax.code('import({0})', path);
+        projectProm.then(module -> {
+            Log.trace('Project module imported.');
+            initProjects();
+        }).catchError(e -> {
+            Log.error("Error loading project.", { error: e });
+            program.help();
         });
-        if (Context.defined('hxnodejs') && Sys.args().indexOf('--no-output') == -1) // Don't run in diagnostics/display context.
-            Context.onAfterGenerate(function() {
-                Sys.command('node', [Compiler.getOutput()]);
-            });
-        return null;
     }
-    #end
+}
 
-    @:noCompletion
-    public static function executeProjects(commands:Array<{command:String, argument:String}>):Void {
-        if (commands.length == 0) {
-            msg('No command found. Use `-D whet.<command>=[arg]`.\nAvailable commands:');
-            for (project in WhetProject.projects) for (meta in project.commandsMeta) {
-                msg(meta.names.join(', '));
-                if (meta.description != null) msg('   ' + meta.description);
-            }
+private function initProjects() {
+    Log.trace('Parsing remaining arguments.', { args: program.args });
+    for (project in Project.projects) {
+        for (opt in project.options) program.addOption(opt);
+    }
+    program.allowUnknownOption(false);
+
+    var commands = getCommands(program.args);
+    var initProm = if (commands.length > 0) {
+        var res = program.parseOptions(commands[0]);
+        commands[0] = res.operands.concat(res.unknown);
+
+        var promises:Array<Promise<Any>> = [];
+        for (p in Project.projects) if (p.onInit != null) {
+            var prom = p.onInit(program.opts());
+            if (prom != null) promises.push(prom);
         }
-        for (cmd in commands) {
-            var executed = false;
-            for (project in WhetProject.projects) {
-                if (!project.commands.exists(cmd.command)) continue;
-                project.commands.get(cmd.command).fnc(cmd.argument);
-                executed = true;
-                break;
-            }
-            if (!executed) error('Command "${cmd.command}" is not defined.');
-        }
+        Promise.all(promises);
+    } else Promise.resolve();
+    function nextCommand() {
+        if (commands.length == 0) return;
+        final c = commands.shift();
+        Log.trace('Executing command.', { commandArgs: c });
+        program.parseAsync(c, { from: 'user' }).then(_ -> nextCommand());
     }
+    initProm.then(_ -> nextCommand());
+}
 
-    public static function error(msg:String):Void {
-        #if (sys || hxnodejs)
-        Sys.stderr().writeString('Error: ' + msg);
-        Sys.exit(1);
-        #else
-        throw 'Error: $msg';
-        #end
-    }
-
-    public static function msg(msg:String):Void {
-        #if (sys || hxnodejs)
-        Sys.stdout().writeString(msg + '\n');
-        #if sys
-        Sys.stdout().flush();
-        #end
-        #else
-        trace(msg);
-        #end
-    }
-
+private function getCommands(args:Array<String>):Array<Array<String>> {
+    var commands = [];
+    var from = 0;
+    var to;
+    do {
+        to = args.indexOf('+', from);
+        commands.push(to < 0 ? args.slice(from) : args.slice(from, to));
+        from = to + 1;
+    } while (to >= 0);
+    return commands;
 }

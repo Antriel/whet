@@ -9,8 +9,10 @@ package whet.route;
     public final sourceId:SourceId;
 
     /** Stone providing this item. */
-    public final source:Stone;
+    public final source:AnyStone;
 
-    public inline function get() return source.getSource().get(sourceId);
+    public function get():Promise<SourceData> {
+        return source.getSource().then(data -> data.get(sourceId));
+    }
 
 }

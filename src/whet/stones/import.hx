@@ -1,4 +1,3 @@
-import whet.WhetSource.WhetSourceData;
-import whet.Whetstone.FileWhetstone;
-import whet.Whetstone.Whetstone;
-import whet.Whetstone.WhetstoneConfig;
+import whet.Source.SourceData;
+import whet.Stone.StoneConfig;
+import whet.magic.*;

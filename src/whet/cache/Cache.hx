@@ -2,8 +2,8 @@ package whet.cache;
 
 interface Cache {
 
-    public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource;
-    public function getUniqueDir(stone:Stone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId;
+    public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source>;
+    public function getUniqueDir(stone:AnyStone, baseDir:SourceId, ?hash:SourceHash):SourceId;
 
 }
 
@@ -12,7 +12,7 @@ enum CacheStrategy {
     None;
     InMemory(durability:CacheDurability, ?check:DurabilityCheck);
     InFile(durability:CacheDurability, ?check:DurabilityCheck);
-    AbsolutePath(dir:SourceId, durability:CacheDurability, ?check:DurabilityCheck);
+    AbsolutePath(path:SourceId, durability:CacheDurability, ?check:DurabilityCheck);
     // TODO combined file+memory cache?
 
 }
@@ -23,7 +23,7 @@ enum CacheDurability {
     LimitCountByLastUse(count:Int);
     LimitCountByAge(count:Int);
     MaxAge(seconds:Int);
-    Custom(keep:WhetSource->Bool);
+    Custom(keep:AnyStone->Dynamic->Bool);
     All(keepIfAll:Array<CacheDurability>);
     Any(keepIfAny:Array<CacheDurability>);
 

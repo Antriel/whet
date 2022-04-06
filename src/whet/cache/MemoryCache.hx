@@ -1,23 +1,23 @@
 package whet.cache;
 
-class MemoryCache extends BaseCache<Stone, WhetSource> {
+class MemoryCache extends BaseCache<AnyStone, Source> {
 
     public function new(rootDir) {
         super(rootDir, new Map());
     }
 
-    function key(stone:Stone) return stone;
+    function key(stone:AnyStone) return stone;
 
-    function value(source:WhetSource) return source;
+    function value(source:Source) return Promise.resolve(source);
 
-    function source(stone:Stone, value:WhetSource):WhetSource return value;
+    function source(stone:AnyStone, value:Source):Promise<Source> return Promise.resolve(value);
 
-    function getExistingDirs(stone:Stone):Array<SourceId> {
+    function getExistingDirs(stone:AnyStone):Array<SourceId> {
         var list = cache.get(stone);
-        if (list != null) return list.filter(s -> s.hasDir()).map(s -> s.getDirPath());
+        if (list != null) return list.map(s -> s.tryDirPath()).filter(p -> p != null);
         else return null;
     }
 
-    function getDirFor(value:WhetSource):SourceId return value.hasDir() ? value.getDirPath() : null;
+    function getDirFor(value:Source):SourceId return value.tryDirPath();
 
 }

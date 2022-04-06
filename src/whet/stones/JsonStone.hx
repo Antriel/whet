@@ -1,41 +1,60 @@
 package whet.stones;
 
 import haxe.DynamicAccess;
-import haxe.Json;
+import whet.magic.MaybeArray.makeArray;
+import whet.magic.RouteType.makeRoute;
 
-class JsonStone extends FileWhetstone<JsonConfig> {
+class JsonStone extends Stone<JsonStoneConfig> {
 
     public var data:DynamicAccess<Dynamic> = {};
 
     public function addProjectData():JsonStone {
-        data["name"] = config.project.config.name;
-        data["id"] = config.project.config.id;
-        data["description"] = config.project.config.description;
+        data["name"] = project.name;
+        data["id"] = project.id;
+        data["description"] = project.description;
         return this;
     }
 
-    public function mergeJson(path:SourceId):JsonStone {
-        var obj:DynamicAccess<Dynamic> = Json.parse(sys.io.File.getContent(path.toRelPath(project)));
-        for (field => val in obj) data[field] = val;
+    public function addMergeFiles(files:MaybeArray<RouteType>):JsonStone {
+        config.mergeFiles = makeArray(config.mergeFiles).concat(makeArray(files));
         return this;
     }
 
-    function content() return Json.stringify(data, null, '  ');
-
-    function generate(hash:WhetSourceHash):Array<WhetSourceData> {
-        return [WhetSourceData.fromString(config.filename, content())];
+    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+        var obj:DynamicAccess<Dynamic> = { }
+        for (field => val in data) obj[field] = val; // Copy our data first.
+        return Promise.all(makeArray(config.mergeFiles).map(rt -> makeRoute(rt).getData()))
+            .then((dataArr:Array<Array<SourceData>>) -> {
+                for (data in dataArr) for (d in data) {
+                    var file:DynamicAccess<Dynamic> = haxe.Json.parse(d.data.toString());
+                    for (field => val in file) obj[field] = val;
+                }
+                return [SourceData.fromString(config.name, haxe.Json.stringify(obj, null, '  '))];
+            });
     }
 
-    override function generateHash():WhetSourceHash {
-        return WhetSourceHash.fromString(content());
+    override function generateHash():Promise<SourceHash> {
+        return Promise.all(makeArray(config.mergeFiles).map(rt -> makeRoute(rt).getHash()))
+            .then((hashes:Array<SourceHash>) -> {
+                hashes.push(SourceHash.fromString(haxe.Json.stringify(data)));
+                return SourceHash.merge(...hashes);
+            });
     }
 
-    override function list():Array<SourceId> return [config.filename];
+    override function list():Promise<Array<SourceId>>
+        return Promise.resolve([(config.name:SourceId)]);
+
+    override function initConfig() {
+        if (config.name == null) config.name = 'data.json';
+        if (config.mergeFiles == null) config.mergeFiles = [];
+        super.initConfig();
+    }
 
 }
 
-@:structInit class JsonConfig extends WhetstoneConfig {
+typedef JsonStoneConfig = StoneConfig & {
 
-    public var filename:SourceId = 'data.json';
+    public var ?name:String;
+    public var ?mergeFiles:MaybeArray<RouteType>;
 
 }

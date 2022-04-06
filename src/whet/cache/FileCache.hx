@@ -1,11 +1,10 @@
 package whet.cache;
 
 import haxe.DynamicAccess;
-import sys.FileSystem;
-import whet.WhetSource.WhetSourceData;
-import whet.Whetstone.WhetstoneId;
+import js.node.Fs;
+import whet.Source.SourceData;
 
-class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
+class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     /**
      * TODO:
@@ -19,69 +18,109 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
     static inline var dbFileBase:String = '.whet/cache.json';
 
     final dbFile:String;
+    var flushQueued:Bool = false;
 
     public function new(rootDir:RootDir) {
         super(rootDir, new Map());
-        dbFile = rootDir + dbFileBase;
-        if (sys.FileSystem.exists(dbFile)) {
-            var db:DbJson = haxe.Json.parse(sys.io.File.getContent(dbFile));
+        dbFile = (dbFileBase:SourceId).toRelPath(rootDir);
+        try {
+            var db:DbJson = haxe.Json.parse(Fs.readFileSync(dbFile, { encoding: 'utf-8' }));
             for (key => values in db) cache.set(key, [for (val in values) {
-                hash: WhetSourceHash.fromHex(val.hash),
+                hash: SourceHash.fromHex(val.hash),
                 ctime: val.ctime,
                 baseDir: val.baseDir,
                 files: [for (file in val.files) {
-                    fileHash: WhetSourceHash.fromHex(file.fileHash),
+                    fileHash: SourceHash.fromHex(file.fileHash),
                     filePath: file.filePath,
                     id: file.id
                 }]
             }]);
-        }
+        } catch (_) { }
     }
 
-    function key(stone:Stone) return stone.id;
+    function key(stone:AnyStone) return stone.id;
 
-    function value(source:WhetSource):RuntimeFileCacheValue {
-        return {
+    function value(source:Source):Promise<RuntimeFileCacheValue> {
+        var idOverride:SourceId = switch source.origin.cacheStrategy {
+            case AbsolutePath(path, _) if (source.data.length == 1): path.withExt;
+            case _: null;
+        }
+        return Promise.all([for (data in source.data) data.getFilePathId(idOverride).then(filePath -> {
+            fileHash: SourceHash.fromBytes(data.data),
+            filePath: filePath,
+            id: data.id
+        })]).then(files -> {
             hash: source.hash,
             ctime: source.ctime,
             baseDir: source.getDirPath(),
-            files: [for (data in source.data) {
-                fileHash: WhetSourceHash.fromBytes(data.data),
-                filePath: data.getFilePathId(),
-                id: data.id
-            }]
-        }
+            ctimePretty: null, // For some reason Haxe doesn't like this missing.
+            files: cast files
+        });
     }
 
-    function source(stone:Stone, value:RuntimeFileCacheValue):WhetSource {
-        var data = [];
-        for (file in value.files) {
+    function source(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Source> {
+        switch stone.cacheStrategy {
+            case AbsolutePath(path, _):
+                var invalidPath = if (value.files.length == 1) {
+                    value.files[0].filePath != path;
+                } else {
+                    value.baseDir != path.dir;
+                }
+                if (invalidPath) return Promise.resolve(null);
+            case _:
+        }
+        return Promise.all([for (file in value.files) new Promise(function(res, rej) {
             var path = file.filePath.toRelPath(rootDir);
-            var sourceData = WhetSourceData.fromFile(file.id, path, file.filePath);
-            if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
-                return null;
-            } else data.push(sourceData);
-        }
-        return new WhetSource(data, value.hash, stone, value.ctime);
+            SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
+                if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
+                    rej('Wrong hash.');
+                } else res(sourceData);
+            });
+        })]).then(
+            data -> new Source(cast data, value.hash, stone, value.ctime),
+            rejected -> rejected == 'Wrong hash.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
+        );
     }
 
-    override function set(source:WhetSource):RuntimeFileCacheValue {
-        var val = super.set(source);
-        flush();
-        return val;
+    override function set(source:Source):Promise<RuntimeFileCacheValue> {
+        return super.set(source).then(vals -> {
+            flush();
+            vals;
+        });
     }
 
-    function getExistingDirs(stone:Stone):Array<SourceId> {
+    function getExistingDirs(stone:AnyStone):Array<SourceId> {
         var list = cache.get(stone.id);
         if (list != null) return list.map(s -> s.baseDir);
         else return null;
     }
 
-    override function remove(stone:Stone, value:RuntimeFileCacheValue):Void {
-        if (FileSystem.exists(value.baseDir.toRelPath(rootDir)) && Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1)
-            Utils.deleteRecursively(value.baseDir.toRelPath(rootDir));
-        super.remove(stone, value);
-        flush();
+    override function remove(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Nothing> {
+        Log.debug('Removing stone from file cache.', { stone: stone, valueHash: value.hash.toHex() });
+        // Only remove if there's nothing else in the cache with the same path, as a precaution against
+        // invalid cache state.
+        final isAlone = Lambda.count(cache.get(stone.id), v -> v.baseDir == value.baseDir) == 1;
+        return super.remove(stone, value).then(_ -> {
+            flush();
+            if (!isAlone) Promise.resolve(null) else
+                Promise.all([for (file in value.files) new Promise((res, rej) -> {
+                    Log.debug('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
+                    Fs.unlink(file.filePath.toRelPath(rootDir), err -> {
+                        if (err != null) Log.error(err);
+                        res(null);
+                    });
+                })]);
+        }).then(_ -> new Promise((res, rej) -> Fs.readdir(value.baseDir.toRelPath(rootDir), (err, files) -> {
+            if (err != null) {
+                Log.error(err);
+                res(null);
+            } else if (files.length == 0)
+                Fs.rmdir(value.baseDir.toRelPath(rootDir), err -> {
+                    if (err != null) Log.error(err);
+                    res(null);
+                })
+            else res(null);
+        })));
     }
 
     override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Bool {
@@ -93,19 +132,27 @@ class FileCache extends BaseCache<WhetstoneId, RuntimeFileCacheValue> {
     function getDirFor(value:RuntimeFileCacheValue):SourceId return value.baseDir;
 
     function flush() {
-        var db:DbJson = {};
-        for (id => values in cache) db.set(id, [for (val in values) {
-            hash: val.hash.toHex(),
-            ctime: val.ctime,
-            ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
-            baseDir: val.baseDir.toRelPath('/'),
-            files: [for (file in val.files) {
-                fileHash: file.fileHash.toHex(),
-                filePath: file.filePath.toRelPath('/'),
-                id: file.id.toRelPath('/')
-            }]
-        }]);
-        Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t'));
+        if (flushQueued) return;
+        flushQueued = true;
+        js.Node.setTimeout(function() {
+            flushQueued = false;
+            var db:DbJson = {};
+            for (id => values in cache) db.set(id, [for (val in values) {
+                hash: val.hash.toHex(),
+                ctime: val.ctime,
+                ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
+                baseDir: val.baseDir.toRelPath('/'),
+                files: [for (file in val.files) {
+                    fileHash: file.fileHash.toHex(),
+                    filePath: file.filePath.toRelPath('/'),
+                    id: file.id.toRelPath('/')
+                }]
+            }]);
+            Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(
+                _ -> Log.trace('FileCache DB saved.'),
+                err -> Log.error('FileCache DB save error.', err)
+            );
+        }, 100);
     }
 
 }
@@ -114,7 +161,7 @@ typedef FileCacheValue<H, S> = {
 
     final hash:H;
     final ctime:Float;
-    @:optional final ctimePretty:String;
+    final ?ctimePretty:String;
     final baseDir:S;
     final files:Array<{
         final id:S;
@@ -125,4 +172,4 @@ typedef FileCacheValue<H, S> = {
 };
 
 typedef DbJson = DynamicAccess<Array<FileCacheValue<String, String>>>;
-typedef RuntimeFileCacheValue = FileCacheValue<WhetSourceHash, SourceId>;
+typedef RuntimeFileCacheValue = FileCacheValue<SourceHash, SourceId>;

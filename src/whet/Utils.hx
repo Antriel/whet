@@ -1,19 +1,12 @@
 package whet;
 
-import haxe.io.Path;
-import sys.FileSystem;
+import js.node.Buffer;
+import js.node.Fs;
+import js.node.Path;
 
 using StringTools;
 
 class Utils {
-
-    public static function argToArray(arg:String):Array<String> {
-        if (arg == '1') return [];
-        if (arg.startsWith('[') && arg.endsWith(']')) {
-            arg = arg.substring(1, arg.length - 1);
-        }
-        return arg.split(',').map(a -> a.replace(' ', '')).filter(a -> a.length > 0);
-    }
 
     public static inline function makeUnique<T>(val:T, isNotUnique:T->Bool, modify:(val:T, variant:Int) -> T):T {
         var unique = val;
@@ -26,36 +19,42 @@ class Utils {
     public static inline function makeUniqueString(s:String, isNotUnique:String->Bool):String
         return makeUnique(s, isNotUnique, (s, v) -> s + v);
 
-    public static function ensureDirExist(path:String):Void {
-        var fullPath = "";
-        for (dir in haxe.io.Path.directory(path).split('/')) {
-            fullPath += '$dir/';
-            if (!sys.FileSystem.exists(fullPath)) sys.FileSystem.createDirectory(fullPath);
-        }
+    public static function ensureDirExist(path:String):Promise<Nothing> {
+        final dir = Path.dirname(path);
+        Log.trace('Ensuring directory $dir exists.');
+        return new Promise((res, rej) -> Fs.stat(dir, (err, stats) -> {
+            if (err != null) {
+                Fs.mkdir(dir, untyped { recursive: true },
+                    err -> if (err != null) rej(err) else res(Nil));
+            } else if (!stats.isDirectory()) {
+                rej(new js.lib.Error("Path exists, but is not a directory."));
+            } else res(null);
+        }));
     }
 
-    /** Same as `sys.io.File.saveContent`, but also creates missing directories. */
-    public static function saveContent(path:String, content:String):Void {
-        ensureDirExist(path);
-        sys.io.File.saveContent(path, content);
+    /** Saves string as UTF-8, creates missing directories if needed. */
+    public static function saveContent(path:String, content:String):Promise<Nothing> {
+        return saveBytes(path, Buffer.from(content, 'utf-8'));
     }
 
-    /** Same as `sys.io.File.saveBytes`, but also creates missing directories. */
-    public static function saveBytes(path:String, bytes:haxe.io.Bytes):Void {
-        ensureDirExist(path);
-        sys.io.File.saveBytes(path, bytes);
+    /** Saves bytes Buffer, creates missing directories if needed. */
+    public static function saveBytes(path:String, bytes:Buffer):Promise<Nothing> {
+        Log.trace('Writing bytes to $path.');
+        return ensureDirExist(path).then(_ -> new Promise((res,
+                rej) -> Fs.writeFile(path, bytes, err -> if (err != null) rej(err) else res(null))
+        ));
     }
 
-    /** Deletes the path, recursively if it's a directory. */
-    public static function deleteRecursively(path:String):Void {
-        if (FileSystem.exists(path)) {
-            if (FileSystem.isDirectory(path)) {
-                for (file in FileSystem.readDirectory(path)) deleteRecursively(Path.join([path, file]));
-                FileSystem.deleteDirectory(path);
-            } else {
-                FileSystem.deleteFile(path);
-            }
-        }
+    public static function deleteAll(path:String):Promise<Nothing> {
+        return new Promise((res,
+                rej) -> js.Syntax.code(
+                '{0}.rm({1}, {2}, {3})', Fs, path, { recursive: true, force: true }, _ -> res(null)));
     }
+
+}
+
+enum abstract Nothing(Dynamic) {
+
+    var Nil = null;
 
 }

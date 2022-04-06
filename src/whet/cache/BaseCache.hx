@@ -2,55 +2,77 @@ package whet.cache;
 
 import whet.cache.Cache;
 
-abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Float;}> implements Cache {
+abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}> implements Cache {
 
     final cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
     final rootDir:RootDir;
 
     public function new(rootDir:RootDir, cache) {
-        if (!rootDir.isDir()) throw "Root dir is a not a dir.";
+        if (!rootDir.isDir()) throw new js.lib.Error("Root dir is a not a dir.");
         this.rootDir = rootDir;
         this.cache = cache;
     }
 
-    @:access(whet.Whetstone) public function get(stone:Stone, durability:CacheDurability, check:DurabilityCheck):WhetSource {
-        var hash = stone.generateHash();
-        var generatedSource = null;
-        if (hash == null) { // Default hash is hash of generated source, but generate it only once as optimization.
-            generatedSource = stone.generateSource(null);
-            hash = generatedSource.hash;
-        }
-        var values = cache.get(key(stone));
-        var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
-        var value:Value = null;
-        if (values != null && values.length > 0) {
-            value = Lambda.find(values, v -> v.hash.equals(hash));
-            if (value != null && check.match(SingleOnGet) && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
-                remove(stone, value);
-                value = null;
+    @:access(whet.Stone)
+    public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
+        Log.debug('Looking for cached source.', { stone: stone, cache: this });
+        return stone.generateHash().then(hash -> {
+            // Default hash is hash of generated source, but generate it only once as optimization.
+            if (hash == null)
+                Log.trace('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
+            return if (hash == null) stone.generateSource(null).then(generatedSource -> {
+                generatedSource: generatedSource,
+                hash: generatedSource.hash
+            }) else Promise.resolve({
+                generatedSource: null,
+                hash: hash
+            });
+        }).then(data -> {
+            var generatedSource = data.generatedSource;
+            var hash = data.hash;
+            var values = cache.get(key(stone));
+            var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
+            var value:Value = null;
+            if (values != null && values.length > 0) {
+                value = Lambda.find(values, v -> v.hash.equals(hash));
+                if (value != null && check.match(SingleOnGet) && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
+                    remove(stone, value);
+                    value = null;
+                }
+                if (value != null) setRecentUseOrder(values, value);
             }
-            if (value != null) setRecentUseOrder(values, value);
-        }
-        var src = value != null ? source(stone, value) : null;
-        if (src == null) {
-            if (check.match(AllOnSet)) checkDurability(stone, values, durability, v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-            if (generatedSource == null) generatedSource = stone.generateSource(hash);
-            if (generatedSource != null) src = source(stone, set(generatedSource));
-        }
-        if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
-        return src;
+            var srcPromise = (value != null ? source(stone, value) : Promise.resolve(null)).then(src -> {
+                return if (src == null) {
+                    Log.trace('Not cached.', { stone: stone, cache: this });
+                    (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
+                        if (check.match(AllOnSet)) checkDurability(stone, values, durability,
+                            v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
+                        (generatedSource != null ? Promise.resolve(generatedSource) : stone.generateSource(hash))
+                            .then(src -> set(src)).then(val -> source(stone, val));
+                    });
+                } else {
+                    Log.trace('Found in cache', { stone: stone, cache: this });
+                    Promise.resolve(src);
+                }
+            });
+            srcPromise.then(_ -> {
+                if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
+            });
+            return srcPromise;
+        });
     }
 
-    function set(source:WhetSource):Value {
+    function set(source:Source):Promise<Value> {
         var k = key(source.origin);
         if (!cache.exists(k)) cache.set(k, []);
-        var values = cache.get(k);
-        var val = value(source);
-        values.unshift(val);
-        return val;
+        return value(source).then(val -> {
+            var values = cache.get(k);
+            values.unshift(val);
+            return val;
+        });
     }
 
-    public function getUniqueDir(stone:Stone, baseDir:SourceId, ?hash:WhetSourceHash):SourceId {
+    public function getUniqueDir(stone:AnyStone, baseDir:SourceId, ?hash:SourceHash):SourceId {
         if (hash != null) {
             var values = cache.get(key(stone));
             if (values != null) {
@@ -72,7 +94,9 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         return ('v$maxNum/':SourceId).getPutInDir(baseDir);
     }
 
-    function checkDurability(stone:Stone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Void {
+    function checkDurability(stone:AnyStone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
+            ageIndex:Value->Int):Void {
+        Log.trace("Checking durability.", { stone: stone, durability: Std.string(durability) });
         if (values == null || values.length == 0) return;
         var i = values.length;
         while (--i > 0) {
@@ -80,13 +104,13 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         }
     }
 
-    function shouldKeep(stone:Stone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
+    function shouldKeep(stone:AnyStone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
         return switch durability {
             case KeepForever: true;
             case LimitCountByLastUse(count): useIndex(val) < count;
             case LimitCountByAge(count): ageIndex(val) < count;
             case MaxAge(seconds): (Sys.time() - val.ctime) <= seconds;
-            case Custom(keep): keep(source(stone, val));
+            case Custom(keep): keep(stone, val);
             case All(keepIfAll): Lambda.foreach(keepIfAll, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
             case Any(keepIfAny): Lambda.exists(keepIfAny, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
         }
@@ -99,16 +123,23 @@ abstract class BaseCache<Key, Value:{final hash:WhetSourceHash; final ctime:Floa
         return true;
     }
 
-    function remove(stone:Stone, value:Value):Void cache.get(key(stone)).remove(value);
+    function remove(stone:AnyStone, value:Value):Promise<Nothing> {
+        cache.get(key(stone)).remove(value);
+        return Promise.resolve(null);
+    }
 
-    abstract function key(stone:Stone):Key;
+    abstract function key(stone:AnyStone):Key;
 
-    abstract function value(source:WhetSource):Value;
+    abstract function value(source:Source):Promise<Value>;
 
-    abstract function source(stone:Stone, value:Value):WhetSource;
+    abstract function source(stone:AnyStone, value:Value):Promise<Source>;
 
-    abstract function getExistingDirs(stone:Stone):Array<SourceId>;
+    abstract function getExistingDirs(stone:AnyStone):Array<SourceId>;
 
     abstract function getDirFor(value:Value):SourceId;
+
+    @:keep public function toString() {
+        return Type.getClassName(Type.getClass(this));
+    }
 
 }

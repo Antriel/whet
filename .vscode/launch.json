@@ -5,9 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-			"name": "Haxe Interpreter",
-			"type": "haxe-eval",
-			"request": "launch"
+            "name": "Launch Project Directly",
+            "program": "${workspaceFolder}/example/Project.mjs",
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "outputCapture": "std",
+            "type": "node"
+        },
+        {
+            "name": "Launch Whet",
+            "program": "${workspaceFolder}/bin/whet.js",
+            "args": ["--project=example/Project.mjs", "--build=debug"],
+            "request": "launch",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "outputCapture": "std",
+            "type": "node"
         }
     ]
 }

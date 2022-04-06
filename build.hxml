@@ -1,0 +1,15 @@
+-lib hxnodejs
+-lib genes
+# -D js-es=6 # Cannot use this as genes generates `var` and the generated code can shadow varaibles. See also https://github.com/benmerckx/genes/issues/20.
+-D dts
+-D analyzer-optimize
+-cp src
+-cp externs
+--dce full
+--main whet.Whet
+whet.Project
+whet.route.Router
+--macro addGlobalMetadata('whet.stones', '@:expose')
+--macro include('whet.stones')
+
+-js bin/whet.js
