@@ -1,8 +1,0 @@
--cp src
--cp tests
--D closure_slavemode
--D tests
--lib utest
--lib tink_core
--main TestsMain
---interp 
