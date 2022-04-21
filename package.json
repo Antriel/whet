@@ -1,9 +1,9 @@
 {
     "name": "whet",
-    "version": "0.0.1",
+    "version": "0.0.2",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
-        "devinit": "npx dts commander --modular --noLibWrap",
+        "devinit": "npx dts2hx commander --modular --noLibWrap",
         "build": "npx haxe build.hxml"
     },
     "repository": {
@@ -14,6 +14,7 @@
         "bin"
     ],
     "bin": "bin/whet.js",
+    "main": "bin/whet.js",
     "type": "module",
     "author": "Peter Achberger",
     "license": "MIT",

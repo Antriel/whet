@@ -11,5 +11,6 @@ whet.Project
 whet.route.Router
 --macro addGlobalMetadata('whet.stones', '@:expose')
 --macro include('whet.stones')
+--macro whet.Macros.postprocess()
 
 -js bin/whet.js
