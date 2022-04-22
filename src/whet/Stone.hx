@@ -4,6 +4,7 @@ import whet.Source;
 import whet.magic.StoneId.StoneIdType;
 import whet.magic.StoneId.makeStoneId;
 
+@:expose
 abstract class Stone<T:StoneConfig> {
 
     public var config:T;
