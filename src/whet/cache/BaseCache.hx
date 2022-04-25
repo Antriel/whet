@@ -15,18 +15,20 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
 
     @:access(whet.Stone)
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
-        Log.debug('Looking for cached source.', { stone: stone, cache: this });
         return stone.generateHash().then(hash -> {
             // Default hash is hash of generated source, but generate it only once as optimization.
             if (hash == null)
-                Log.trace('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
+                Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
             return if (hash == null) stone.generateSource(null).then(generatedSource -> {
                 generatedSource: generatedSource,
                 hash: generatedSource.hash
-            }) else Promise.resolve({
-                generatedSource: null,
-                hash: hash
-            });
+            }) else {
+                Log.debug('Stone provided hash.', { stone: stone, hash: hash.toHex() });
+                Promise.resolve({
+                    generatedSource: null,
+                    hash: hash
+                });
+            }
         }).then(data -> {
             var generatedSource = data.generatedSource;
             var hash = data.hash;
@@ -63,6 +65,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
     }
 
     function set(source:Source):Promise<Value> {
+        Log.trace('Setting source in cache.', { source: source });
         var k = key(source.origin);
         if (!cache.exists(k)) cache.set(k, []);
         return value(source).then(val -> {
@@ -96,7 +99,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
 
     function checkDurability(stone:AnyStone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
             ageIndex:Value->Int):Void {
-        Log.trace("Checking durability.", { stone: stone, durability: Std.string(durability) });
+        Log.debug("Checking durability.", { stone: stone, durability: Std.string(durability) });
         if (values == null || values.length == 0) return;
         var i = values.length;
         while (--i > 0) {
@@ -124,6 +127,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
     }
 
     function remove(stone:AnyStone, value:Value):Promise<Nothing> {
+        Log.debug('Removing cached value.', { stone: stone, valueHash: value.hash.toHex() });
         cache.get(key(stone)).remove(value);
         return Promise.resolve(null);
     }

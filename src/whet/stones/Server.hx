@@ -40,6 +40,7 @@ class Server extends Stone<ServerConfig> {
     function handler(req:IncomingMessage, res:ServerResponse) {
         Log.info('Handling request.', { url: req.url, method: req.method });
         inline function err(e) {
+            Log.warn("Server error.", { error: e });
             res.writeHead(500, 'Error happened.');
             res.write(Std.string(e), 'utf-8');
             res.end();

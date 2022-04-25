@@ -61,7 +61,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     function source(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Source> {
         switch stone.cacheStrategy {
             case AbsolutePath(path, _):
-                var invalidPath = if (value.files.length == 1) {
+                var invalidPath = if (value.files.length == 1 && !path.isDir()) {
                     value.files[0].filePath != path;
                 } else {
                     value.baseDir != path.dir;
@@ -106,17 +106,17 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 Promise.all([for (file in value.files) new Promise((res, rej) -> {
                     Log.debug('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
                     Fs.unlink(file.filePath.toRelPath(rootDir), err -> {
-                        if (err != null) Log.error(err);
+                        if (err != null) Log.error("Error deleting file.", { file: file, error: err });
                         res(null);
                     });
                 })]);
         }).then(_ -> new Promise((res, rej) -> Fs.readdir(value.baseDir.toRelPath(rootDir), (err, files) -> {
             if (err != null) {
-                Log.error(err);
+                Log.error("Error reading directory", { dir: value.baseDir.toRelPath(rootDir), error: err });
                 res(null);
             } else if (files.length == 0)
                 Fs.rmdir(value.baseDir.toRelPath(rootDir), err -> {
-                    if (err != null) Log.error(err);
+                    if (err != null) Log.error("Error removing directory.", { dir: value.baseDir.toRelPath(rootDir), error: err });
                     res(null);
                 })
             else res(null);

@@ -21,7 +21,7 @@ class CacheManager {
     ]), AllOnUse);
 
     @:access(whet.Stone) public function getSource(stone:AnyStone):Promise<Source> {
-        Log.trace('Looking for cached value.', { stone: stone, strategy: stone.cacheStrategy.getName() });
+        Log.trace('Determining cache status.', { stone: stone, strategy: stone.cacheStrategy.getName() });
         return switch stone.cacheStrategy {
             case None: stone.generateHash().then(hash -> stone.generateSource(hash));
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
