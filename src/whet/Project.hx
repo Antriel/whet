@@ -32,6 +32,7 @@ class Project {
             // 0 us, 1 genes.Register, 2 us again, 3 is the caller.
             var file:String = untyped new js.lib.Error().stack[3].getFileName();
             js.Syntax.code('Error').prepareStackTrace = oldValue;
+            file = js.Syntax.code('decodeURI({0})', file);
             file = StringTools.replace(file, 'file:///', '');
             rootDir = (js.node.Path.relative(js.Node.process.cwd(), file):SourceId).dir;
             // TODO write tests for this.
