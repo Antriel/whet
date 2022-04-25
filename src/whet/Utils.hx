@@ -51,6 +51,31 @@ class Utils {
                 '{0}.rm({1}, {2}, {3})', Fs, path, { recursive: true, force: true }, _ -> res(null)));
     }
 
+    public static function listDirectoryRecursively(dir:String):Promise<Array<String>> {
+        return new Promise((res, rej) -> {
+            var result = [];
+            js.Syntax.code('{0}.readdir({1}, {2}, {3})', Fs, dir, { withFileTypes: true }, (err, files:Array<Dynamic>) -> {
+                if (err != null) {
+                    rej(err);
+                } else {
+                    var otherDirs = [];
+                    for (file in files) {
+                        var path = Path.join(dir, file.name);
+                        if (file.isDirectory()) {
+                            otherDirs.push(listDirectoryRecursively(path));
+                        } else {
+                            result.push(path);
+                        }
+                    }
+                    Promise.all(otherDirs).then((arr:Array<Array<String>>) -> {
+                        for (a in arr) for (f in a) result.push(f);
+                        res(result);
+                    });
+                }
+            });
+        });
+    }
+
 }
 
 enum abstract Nothing(Dynamic) {

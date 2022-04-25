@@ -1,6 +1,7 @@
 package whet;
 
 import js.node.Buffer;
+import js.node.Fs;
 
 @:using(whet.SourceHash)
 class SourceHash {
@@ -16,6 +17,13 @@ class SourceHash {
 
     function new(bytes:Buffer) {
         this.bytes = bytes;
+    }
+
+    public static function fromFile(path:String):Promise<SourceHash> {
+        return new Promise((res, rej) -> Fs.readFile(path, (err, bytes) -> {
+            if (err != null) rej(err);
+            else res(fromBytes(bytes));
+        }));
     }
 
     public static function fromBytes(data:Buffer):SourceHash {
