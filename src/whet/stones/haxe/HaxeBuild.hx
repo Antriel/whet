@@ -39,6 +39,12 @@ class HaxeBuild extends Stone<BuildConfig> {
         }
     }
 
+    override function getCommands():Array<commander.Command> {
+        return [new commander.Command('build')
+            .action(_ -> build())
+        ];
+    }
+
     override function list():Promise<Array<SourceId>> {
         if (config.hxml.isSingleFile()) {
             return Promise.resolve([config.hxml.getBuildFilename()]);
@@ -49,7 +55,7 @@ class HaxeBuild extends Stone<BuildConfig> {
         // Not perfect, as it doesn't detect changes to library versions, but good enough.
         var hxmlHashP = config.hxml.generateHash();
         var fileHashesP:Promise<Array<SourceHash>> = Promise.all([for (src in makeArray(config.hxml.config.paths))
-            Utils.listDirectoryRecursively(src)])
+            Utils.listDirectoryRecursively((src:SourceId).toRelPath(config.hxml.project))])
             .then((arrFiles:Array<Array<String>>) -> {
                 arrFiles.map(files -> {
                     (untyped files).sort(); // Keep deterministic.
