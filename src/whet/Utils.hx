@@ -51,7 +51,10 @@ class Utils {
                 '{0}.rm({1}, {2}, {3})', Fs, path, { recursive: true, force: true }, _ -> res(null)));
     }
 
-    public static function listDirectoryRecursively(dir:String):Promise<Array<String>> {
+    /**
+     * Returns a list of all files in the directory. Doesn't include inner directories in non-recursive mode.
+     */
+    public static function listDirectoryFiles(dir:String, recursive:Bool = true):Promise<Array<String>> {
         return new Promise((res, rej) -> {
             var result = [];
             js.Syntax.code('{0}.readdir({1}, {2}, {3})', Fs, dir, { withFileTypes: true }, (err, files:Array<Dynamic>) -> {
@@ -62,7 +65,7 @@ class Utils {
                     for (file in files) {
                         var path = Path.join(dir, file.name);
                         if (file.isDirectory()) {
-                            otherDirs.push(listDirectoryRecursively(path));
+                            if (recursive) otherDirs.push(listDirectoryFiles(path, true));
                         } else {
                             result.push(path);
                         }

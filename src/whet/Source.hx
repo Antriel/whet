@@ -38,8 +38,9 @@ class Source {
     /**
      * Returns first result if `id` is null, or one equals to it.
      */
-    public function get(?id:SourceId):SourceData {
-        return id == null ? data[0] : Lambda.find(data, entry -> entry.id == id);
+    public function get(?id:String):SourceData {
+        final sid = (id:SourceId);
+        return sid == null ? data[0] : Lambda.find(data, entry -> entry.id == sid);
     }
 
 }
@@ -66,7 +67,7 @@ class SourceData {
     /**
      * `path` is the actual cwd-relative path. `pathId` is the project-relative source Id.
      */
-    public static function fromFile(id:SourceId, path:String, pathId:SourceId):Promise<SourceData> {
+    public static function fromFile(id:String, path:String, pathId:String):Promise<SourceData> {
         return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
             if (err != null) {
                 Log.error("File does not exist.", { id: id, path: path });
@@ -80,29 +81,29 @@ class SourceData {
         }));
     }
 
-    public static function fromString(id:SourceId, s:String) {
+    public static function fromString(id:String, s:String) {
         return fromBytes(id, Buffer.from(s, 'utf-8'));
     }
 
-    public static function fromBytes(id:SourceId, data:Buffer):SourceData {
+    public static function fromBytes(id:String, data:Buffer):SourceData {
         return new SourceData(id, data);
     }
 
     public function hasFile():Bool return this.filePath != null;
 
     /** Same as `getFilePath` but relative to project, not CWD. */
-    public function getFilePathId(idOverride:SourceId = null):Promise<SourceId> {
+    @:allow(whet) function getFilePathId(idOverride:SourceId = null):Promise<SourceId> {
         return if (filePathId == null) getFilePath(idOverride).then(_ -> filePathId);
         else Promise.resolve(filePathId);
     }
 
     /** Path to a file for this source, relative to CWD. */
-    public function getFilePath(idOverride:SourceId = null):Promise<String> {
+    @:allow(whet) function getFilePath(idOverride:SourceId = null):Promise<String> {
         return if (filePath == null) {
             if (source == null) new js.lib.Error("Data without source.");
             var dir = source.getDirPath();
             filePathId = (idOverride != null ? idOverride : id).getPutInDir(dir);
-            filePath = filePathId.toRelPath(source.origin.project);
+            filePath = filePathId.toCwdPath(source.origin.project);
             Utils.saveBytes(filePath, this.data).then(_ -> filePath);
         } else Promise.resolve(filePath);
     }

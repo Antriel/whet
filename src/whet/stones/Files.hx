@@ -9,7 +9,7 @@ class Files extends Stone<FilesConfig> {
         for (pathString in makeArray(config.paths)) {
             var path:SourceId = pathString;
             return (if (path.isDir()) {
-                new Promise((res, rej) -> Fs.readdir(path.toRelPath(project), (err, files) -> {
+                new Promise((res, rej) -> Fs.readdir(path.toCwdPath(project), (err, files) -> {
                     if (err != null) rej(err);
                     else res([for (file in files) {
                         var filepath = (file:SourceId).getPutInDir(path);
@@ -24,7 +24,7 @@ class Files extends Stone<FilesConfig> {
                 pathId: path
             }]))
                 .then((files:Array<{id:SourceId, pathId:SourceId}>) -> cast Promise.all([for (f in files)
-                    SourceData.fromFile(f.id, f.pathId.toRelPath(project), f.pathId)])
+                    SourceData.fromFile(cast f.id, f.pathId.toCwdPath(project), cast f.pathId)])
                 );
         }
         return null;

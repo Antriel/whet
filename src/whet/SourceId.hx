@@ -1,6 +1,6 @@
 package whet;
 
-using haxe.io.Path;
+import js.node.Path.posix as Path;
 
 abstract SourceId(String) {
 
@@ -10,18 +10,18 @@ abstract SourceId(String) {
     public var dir(get, set):SourceId;
 
     @:from public inline static function fromString(s:String):SourceId {
-        var norm = '/' + (if (s.charAt(0) == '/') s.substr(1) else s).normalize();
-        return (s.lastIndexOf('/') == s.length - 1) ? cast norm.addTrailingSlash() : cast norm;
+        s = Path.normalize(s);
+        s = StringTools.replace(s, '\\', '/');
+        return cast if (startsWithSlash(s)) s; else '/' + s;
     }
 
-    public inline function toRelPath(root:RootDir):String // Remove start slash -> make relative to CWD.
-        return if ((cast root:String).length == 1) this.substring(1);
-        // Remove start and end slash of root and join with `this` which starts with slash.
-        else (cast root:String).substring(1, (cast root:String).length - 1) + this;
+    public inline function toCwdPath(root:RootDir):String { // Remove start slash -> make relative to CWD.
+        // Check for badly formed SourceId. Could happen when some internal interface is used from JS.
+        if (this.charAt(0) != '/') throw new js.lib.Error("Badly formed SourceId.");
+        return Path.join('.', (cast root:String), '.', this);
+    }
 
-    public inline function isDir():Bool return this == dir;
-
-    public inline function asDir():SourceId return cast this.addTrailingSlash();
+    public inline function isDir():Bool return endsWithSlash(cast this);
 
     public inline function isInDir(directory:SourceId, nested:Bool = false):Bool {
         assertDir(directory);
@@ -50,26 +50,29 @@ abstract SourceId(String) {
         if (!directory.isDir()) throw new js.lib.Error('"$directory" is not a directory.');
     }
 
-    private inline function get_withExt() return this.withoutDirectory();
+    private inline function get_withExt() return this.substring(this.lastIndexOf('/'));
 
     private inline function set_withExt(v:String):String {
         if (v.length > 0) this = (cast dir:String) + v;
         return v;
     }
 
-    private inline function get_ext() return this.extension();
+    private inline function get_ext() return Path.extname(this);
 
-    private inline function set_ext(v):String {
-        var p = new Path(this);
-        p.ext = v;
-        return this = cast fromString(p.toString());
+    private inline function set_ext(v:String):String {
+        if (v.length > 0 && v.charCodeAt(0) != '.'.code) v = '.' + v;
+        this = (cast dir:String) + withoutExt + v;
+        return v;
     }
 
-    private inline function get_withoutExt() return this.withoutDirectory().withoutExtension();
+    private inline function get_withoutExt() return Path.parse(withExt).name;
 
-    private inline function set_withoutExt(v):String return this = '/$dir$v' + (ext == "" ? "" : '.$ext');
+    private inline function set_withoutExt(v):String {
+        this = (cast dir:String) + v + ext;
+        return v;
+    }
 
-    private inline function get_dir():SourceId return this.directory().addTrailingSlash();
+    private inline function get_dir():SourceId return this.substring(0, this.lastIndexOf('/') + 1);
 
     private inline function set_dir(v):SourceId throw new js.lib.Error("Not implemented");
 
@@ -80,3 +83,6 @@ abstract SourceId(String) {
     @:from public static function fromProject(p:Project):RootDir return p.rootDir;
 
 }
+
+private function startsWithSlash(str:String) return str.charCodeAt(0) == '/'.code;
+private function endsWithSlash(str:String) return str.charCodeAt(str.length - 1) == '/'.code;

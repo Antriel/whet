@@ -22,7 +22,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     public function new(rootDir:RootDir) {
         super(rootDir, new Map());
-        dbFile = (dbFileBase:SourceId).toRelPath(rootDir);
+        dbFile = (dbFileBase:SourceId).toCwdPath(rootDir);
         try {
             var db:DbJson = haxe.Json.parse(Fs.readFileSync(dbFile, { encoding: 'utf-8' }));
             for (key => values in db) cache.set(key, [for (val in values) {
@@ -70,8 +70,8 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             case _:
         }
         return Promise.all([for (file in value.files) new Promise(function(res, rej) {
-            var path = file.filePath.toRelPath(rootDir);
-            SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
+            var path = file.filePath.toCwdPath(rootDir);
+            SourceData.fromFile(cast file.id, path, cast file.filePath).then(sourceData -> {
                 if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
                     rej('Wrong hash.');
                 } else res(sourceData);
@@ -104,19 +104,19 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             flush();
             if (!isAlone) Promise.resolve(null) else
                 Promise.all([for (file in value.files) new Promise((res, rej) -> {
-                    Log.debug('Deleting file.', { path: file.filePath.toRelPath(rootDir) });
-                    Fs.unlink(file.filePath.toRelPath(rootDir), err -> {
+                    Log.debug('Deleting file.', { path: file.filePath.toCwdPath(rootDir) });
+                    Fs.unlink(file.filePath.toCwdPath(rootDir), err -> {
                         if (err != null) Log.error("Error deleting file.", { file: file, error: err });
                         res(null);
                     });
                 })]);
-        }).then(_ -> new Promise((res, rej) -> Fs.readdir(value.baseDir.toRelPath(rootDir), (err, files) -> {
+        }).then(_ -> new Promise((res, rej) -> Fs.readdir(value.baseDir.toCwdPath(rootDir), (err, files) -> {
             if (err != null) {
-                Log.error("Error reading directory", { dir: value.baseDir.toRelPath(rootDir), error: err });
+                Log.error("Error reading directory", { dir: value.baseDir.toCwdPath(rootDir), error: err });
                 res(null);
             } else if (files.length == 0)
-                Fs.rmdir(value.baseDir.toRelPath(rootDir), err -> {
-                    if (err != null) Log.error("Error removing directory.", { dir: value.baseDir.toRelPath(rootDir), error: err });
+                Fs.rmdir(value.baseDir.toCwdPath(rootDir), err -> {
+                    if (err != null) Log.error("Error removing directory.", { dir: value.baseDir.toCwdPath(rootDir), error: err });
                     res(null);
                 })
             else res(null);
@@ -141,11 +141,11 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 hash: val.hash.toHex(),
                 ctime: val.ctime,
                 ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
-                baseDir: val.baseDir.toRelPath('/'),
+                baseDir: val.baseDir.toCwdPath('/'),
                 files: [for (file in val.files) {
                     fileHash: file.fileHash.toHex(),
-                    filePath: file.filePath.toRelPath('/'),
-                    id: file.id.toRelPath('/')
+                    filePath: file.filePath.toCwdPath('/'),
+                    id: file.id.toCwdPath('/')
                 }]
             }]);
             Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(

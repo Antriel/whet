@@ -2,6 +2,7 @@ package whet;
 
 import js.node.Buffer;
 import js.node.Fs;
+import whet.magic.MaybeArray;
 
 @:using(whet.SourceHash)
 class SourceHash {
@@ -26,6 +27,25 @@ class SourceHash {
         }));
     }
 
+    /**
+     * Creates hashes of all files and or content of directories, optionally recursive.
+     */
+    public static function fromFiles(paths:MaybeArray<String>, filter:String->Bool = null, recursive = true):Promise<SourceHash> {
+        final allFilesProm = [for (src in makeArray(paths)) new Promise((res, rej) -> Fs.stat(src, function(err, stats) {
+            if (err != null) rej(err);
+            else if (stats.isDirectory()) Utils.listDirectoryFiles(src, recursive).then(files -> res(files));
+            else res([src]);
+        }))];
+        return Promise.all(allFilesProm).then((arrFiles:Array<Array<String>>) -> {
+            arrFiles.map(files -> {
+                if (filter != null) files = files.filter(filter);
+                (untyped files).sort(); // Keep deterministic.
+                return (cast Promise.all(files.map(f -> SourceHash.fromFile(f))):Promise<Array<SourceHash>>);
+            });
+        }).then(proms -> Promise.all(proms))
+            .then((allHashes:Array<Array<SourceHash>>) -> merge(...Lambda.flatten(allHashes)));
+    }
+
     public static function fromBytes(data:Buffer):SourceHash {
         return new SourceHash(js.node.Crypto.createHash('sha256').update(data).digest());
     }
@@ -34,10 +54,10 @@ class SourceHash {
         return fromBytes(Buffer.from(data));
     }
 
-    public static function add(a:SourceHash, b:SourceHash):SourceHash {
+    public function add(hash:SourceHash):SourceHash {
         var data = Buffer.alloc(HASH_LENGTH * 2);
-        a.bytes.copy(data, 0, 0, HASH_LENGTH);
-        b.bytes.copy(data, HASH_LENGTH, 0, HASH_LENGTH);
+        this.bytes.copy(data, 0, 0, HASH_LENGTH);
+        hash.bytes.copy(data, HASH_LENGTH, 0, HASH_LENGTH);
         return fromBytes(data);
     }
 

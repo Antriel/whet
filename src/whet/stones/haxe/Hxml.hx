@@ -69,7 +69,7 @@ class Hxml extends Stone<HxmlConfig> {
     }
 
     function getPlatform():Array<String> {
-        var path = getBuildExportPath().toRelPath('/'); // Not using `project` rel path, as we launch haxe in correct cwd.
+        var path = getBuildExportPath().toCwdPath('/'); // Not using `project` rel path, as we launch haxe in correct cwd.
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];
@@ -109,7 +109,7 @@ class Hxml extends Stone<HxmlConfig> {
 
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Generating hxml file.');
-        return Promise.resolve([SourceData.fromString(filename(), getFileContent())]);
+        return Promise.resolve([SourceData.fromString(cast filename(), getFileContent())]);
     }
 
     override function list():Promise<Array<SourceId>> {

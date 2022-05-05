@@ -8,7 +8,7 @@ class HaxeBuild extends Stone<BuildConfig> {
     public function build():Promise<Nothing> {
         Log.info("Building Haxe project.");
         return new Promise(function(res, rej) {
-            final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toRelPath('/'));
+            final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toCwdPath('/'));
             var cmd = Lambda.flatten(config.hxml.getBuildArgs());
             cmd.unshift(if (config.useNpx) 'npx haxe' else 'haxe');
             cmd = cmd.map(c -> StringTools.replace(c, '"', '\\"'));
@@ -25,10 +25,10 @@ class HaxeBuild extends Stone<BuildConfig> {
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
         if (config.hxml.isSingleFile()) {
             var pathId = config.hxml.getBuildExportPath();
-            var path = pathId.toRelPath(project);
+            var path = pathId.toCwdPath(project);
             // Clear the file, so if compilation fails, we don't serve old version.
             return Utils.deleteAll(path).then(_ -> build()).then(_ -> {
-                SourceData.fromFile(pathId.withExt, path, pathId).then(file -> {
+                SourceData.fromFile(cast pathId.withExt, path, cast pathId).then(file -> {
                     return [file];
                 });
             }).catchError(err -> {
@@ -54,24 +54,9 @@ class HaxeBuild extends Stone<BuildConfig> {
 
     override function generateHash():Promise<SourceHash> {
         // Not perfect, as it doesn't detect changes to library versions, but good enough.
-        var hxmlHashP = config.hxml.generateHash();
-        var fileHashesP:Promise<Array<SourceHash>> = Promise.all([for (src in makeArray(config.hxml.config.paths))
-            Utils.listDirectoryRecursively((src:SourceId).toRelPath(config.hxml.project))])
-            .then((arrFiles:Array<Array<String>>) -> {
-                arrFiles.map(files -> {
-                    (untyped files).sort(); // Keep deterministic.
-                    return (cast Promise.all(files.map(f -> SourceHash.fromFile(f))):Promise<Array<SourceHash>>);
-                });
-            })
-            .then(proms -> Promise.all(proms))
-            .then((allHashes:Array<Array<SourceHash>>) -> Lambda.flatten(allHashes));
-
-        return Promise.all([hxmlHashP, fileHashesP]).then(r -> {
-            var hxmlHash:SourceHash = r[0];
-            var fileHashes:Array<SourceHash> = r[1];
-            var r = Lambda.fold(fileHashes, (i, r:SourceHash) -> r.add(i), hxmlHash);
-            return r;
-        });
+        var paths = makeArray(config.hxml.config.paths).map(path -> (path:SourceId).toCwdPath(config.hxml.project));
+        return Promise.all([config.hxml.generateHash(), SourceHash.fromFiles(paths)])
+            .then(r -> SourceHash.merge(...cast r));
     }
 
 }

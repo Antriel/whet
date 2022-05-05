@@ -84,7 +84,7 @@ class Router {
         return (if (clearFirst) Utils.deleteAll(saveInto) else Promise.resolve(null))
             .then(_ -> find(searchId)).then(result -> {
                 cast Promise.all([for (r in result) {
-                    final p = Path.join(saveInto, r.serveId.toRelPath('/'));
+                    final p = Path.join(saveInto, r.serveId.toCwdPath('/'));
                     r.get().then(src -> Utils.saveBytes(p, src.data));
                 }]);
             });

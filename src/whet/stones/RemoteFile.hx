@@ -27,7 +27,7 @@ class RemoteFile extends Stone<RemoteFileConfig> {
                 response.on('data', d -> bufs.push(d));
                 response.on('end', function() {
                     final data = Buffer.concat(bufs);
-                    res([SourceData.fromBytes(getId(), data)]);
+                    res([SourceData.fromBytes(cast getId(), data)]);
                 });
             });
         });

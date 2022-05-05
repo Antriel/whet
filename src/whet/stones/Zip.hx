@@ -27,7 +27,7 @@ class ZipStone extends Stone<ZipConfig> {
             Promise.all([for (file in files) file.get().then(data -> {
                 final bytes = data.data.hxToBytes();
                 final entry:haxe.zip.Entry = {
-                    fileName: file.serveId.toRelPath('/'),
+                    fileName: file.serveId.toCwdPath('/'),
                     fileSize: data.data.length,
                     fileTime: Date.fromTime(data.source.ctime * 1000),
                     compressed: false,
