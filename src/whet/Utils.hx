@@ -6,6 +6,7 @@ import js.node.Path;
 
 using StringTools;
 
+@:expose
 class Utils {
 
     public static inline function makeUnique<T>(val:T, isNotUnique:T->Bool, modify:(val:T, variant:Int) -> T):T {
@@ -19,8 +20,7 @@ class Utils {
     public static inline function makeUniqueString(s:String, isNotUnique:String->Bool):String
         return makeUnique(s, isNotUnique, (s, v) -> s + v);
 
-    public static function ensureDirExist(path:String):Promise<Nothing> {
-        final dir = Path.dirname(path);
+    public static function ensureDirExist(dir:String):Promise<Nothing> {
         Log.trace('Ensuring directory $dir exists.');
         return new Promise((res, rej) -> Fs.stat(dir, (err, stats) -> {
             if (err != null) {
@@ -40,7 +40,7 @@ class Utils {
     /** Saves bytes Buffer, creates missing directories if needed. */
     public static function saveBytes(path:String, bytes:Buffer):Promise<Nothing> {
         Log.trace('Writing bytes to $path.');
-        return ensureDirExist(path).then(_ -> new Promise((res,
+        return ensureDirExist(Path.dirname(path)).then(_ -> new Promise((res,
                 rej) -> Fs.writeFile(path, bytes, err -> if (err != null) rej(err) else res(null))
         ));
     }
