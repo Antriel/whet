@@ -15,7 +15,7 @@ class CacheManager {
     }
 
     /** Keep last used 5 for a day and last used 1 indefinitely. */
-    public var defaultFileStrategy:CacheStrategy = InFile(Any([
+    @:keep public var defaultFileStrategy:CacheStrategy = InFile(Any([
         LimitCountByLastUse(1),
         All([MaxAge(24 * 60 * 60), LimitCountByLastUse(5)])
     ]), AllOnUse);
