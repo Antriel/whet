@@ -1,7 +1,9 @@
 package whet;
 
+import js.node.Path;
 import whet.Source;
 import whet.magic.StoneId.StoneIdType;
+import whet.magic.StoneId.getTypeName;
 import whet.magic.StoneId.makeStoneId;
 
 @:expose
@@ -18,13 +20,14 @@ abstract class Stone<T:StoneConfig> {
     public final project:Project;
 
     public final function new(config:T) {
-        Log.trace('Instantiating new Stone.', { type: Type.getClassName(Type.getClass(this)) });
+        Log.trace('Instantiating new Stone.', { type: getTypeName(this) });
         if (config == null) throw new js.lib.Error('Config must be supplied.');
         this.config = config;
-        initConfig();
-        id = if (config.id != null) makeStoneId(config.id) else makeStoneId(this);
         project = if (config.project != null) config.project else Project.projects[Project.projects.length - 1];
         if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
+        project.stones.push(this);
+        initConfig();
+        id = if (config.id != null) makeStoneId(config.id) else makeStoneId(this);
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
         for (cmd in getCommands()) project.addCommand(cmd, this);
     }
@@ -35,7 +38,10 @@ abstract class Stone<T:StoneConfig> {
     /** Override this to register commands. */
     function getCommands():Array<commander.Command> return [];
 
-    /** Get Source for this stone. Goes through the cache. */
+    /** 
+     * **Do not override.**
+     * Get Source for this stone. Goes through the cache.
+     */
     public final function getSource():Promise<Source> {
         Log.debug('Getting source.', { stone: this });
         return cache.getSource(this);
@@ -48,6 +54,7 @@ abstract class Stone<T:StoneConfig> {
     }
 
     /**
+     * **Do not override.**
      * Generates new Source. Used by the cache when needed.
      * Hash passed should be the same as is this stone's current one. Passed in as optimization.
      */
@@ -68,6 +75,7 @@ abstract class Stone<T:StoneConfig> {
     @:allow(whet.cache) function generateHash():Promise<SourceHash> return Promise.resolve(null);
 
     /**
+     * Abstract method.
      * Function that actually generates the source. Passed hash is only non-null
      * if `generateHash()` is implemented. It can be used for `CacheManager.getDir` and
      * is passed mainly as optimization.
@@ -95,10 +103,19 @@ abstract class Stone<T:StoneConfig> {
         return if (generate) getSource() else Promise.resolve(null);
     }
 
+    /**
+     * Convenient function to get CWD-relative path from project-relative one.
+     * Useful for pure JS stones.
+     */
+    @:keep public function cwdPath(path:String):String {
+        // return (path:SourceId).toRelPath(project);
+        return Path.join('./', cast project.rootDir, path);
+    }
+
     private inline function get_cache() return project.cache;
 
     @:keep public function toString():String {
-        return '$id:${Type.getClassName(Type.getClass(this))}';
+        return '$id:${getTypeName(this))}';
     }
 
 }

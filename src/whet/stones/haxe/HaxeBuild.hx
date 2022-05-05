@@ -6,6 +6,7 @@ class HaxeBuild extends Stone<BuildConfig> {
 
     /** Build the given hxml. */
     public function build():Promise<Nothing> {
+        Log.info("Building Haxe project.");
         return new Promise(function(res, rej) {
             final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toRelPath('/'));
             var cmd = Lambda.flatten(config.hxml.getBuildArgs());

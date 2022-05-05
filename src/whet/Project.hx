@@ -10,6 +10,7 @@ class Project {
     public final description:String;
     public final rootDir:SourceId;
     public final cache:CacheManager = null;
+    public final stones:Array<AnyStone> = [];
     public var onInit:(config:Dynamic) -> Promise<Any>;
 
     @:allow(whet) private final options:Array<Option>;
