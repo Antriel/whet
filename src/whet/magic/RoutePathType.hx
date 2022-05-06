@@ -19,10 +19,13 @@ function makeRoutePath(routerPathType:RoutePathType):Array<RoutePath> {
         if (item.length < 2)
             throw new js.lib.Error("RoutePath element should have at least 2 entries `[serveId, route]`.");
         if (item.length > 3)
-            throw new js.lib.Error("RoutePath element should have at most 3 entries `[serveId, route, serveAs]`.");
+            throw new js.lib.Error("RoutePath element should have at most 3 entries `[serveId, route, filter]`.");
         {
             routeUnder: ((item[0]:String):SourceId),
-            route: makeRoute([item.slice(1)])
+            route: switch item.slice(1) {
+                case { length: 1 } if (item[1] is Route): (cast item[1]:Route);
+                case other: makeRoute([other]);
+            }
         }
     }];
 }

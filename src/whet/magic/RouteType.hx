@@ -44,7 +44,7 @@ private function getRoute(t:BaseRouteType, ?path:SourceId) {
             path: if (path != null) path else ('/':SourceId)
         }
     } else {
-        throw new js.lib.Error("Unsupported type for Route.");
+        throw new js.lib.Error('Unsupported type for Route. Expected String or Stone, but got ${js.Syntax.code("{0}.constructor?.name", t)}.');
     }
 }
 
