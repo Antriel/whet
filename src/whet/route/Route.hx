@@ -2,21 +2,15 @@ package whet.route;
 
 import whet.magic.RouteType;
 
+@:expose
 class Route {
 
     private final routes:Array<RouteData>;
 
-    public function new(routes:Array<RouteData>) {
-        this.routes = routes;
+    public function new(route:RouteType) {
+        this.routes = if (route is Route) (route:Route).routes.copy();
+        else whet.magic.RouteType.makeRouteRoutes(route);
     }
-
-    public inline static function fromStone(stone:AnyStone):Route return fromStoneArray([stone]);
-
-    public inline static function fromStoneArray(stones:Array<AnyStone>):Route
-        return new Route([for (stone in stones) {
-            stone: stone,
-            path: ('/':SourceId)
-        }]);
 
     public function add(r:RouteType):Route {
         for (item in makeRoute(r).routes) routes.push(item);
@@ -35,8 +29,7 @@ class Route {
                 r.stone.list().then(list -> {
                     var arr:Array<RouteResult> = [];
                     if (r.path.isDir()) for (path in list) {
-                        // TODO: we used `serveId: path.relativeTo(r.path)` before. Was that correct? Make tests.
-                        arr.push({ source: r.stone, sourceId: path, serveId: path });
+                        arr.push({ source: r.stone, sourceId: path, serveId: path.relativeTo(r.path) });
                     } else for (path in list) if (path == r.path)
                         arr.push({ source: r.stone, sourceId: path, serveId: (path.withExt:SourceId) });
                     return arr;

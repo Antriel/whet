@@ -7,12 +7,17 @@ import whet.stones.Files;
 /**
  * Anything that can be transformed into `Route`.
  */
-typedef RouteType = MaybeArray<MaybeArray<BaseRouteType>>;
+typedef RouteType = EitherType<Route, MaybeArray<MaybeArray<BaseRouteType>>>;
 
 typedef BaseRouteType = EitherType<String, AnyStone>;
 
 function makeRoute(routeType:RouteType):Route {
-    return new Route([for (tarr in makeArray(routeType)) {
+    return if (routeType is Route) cast routeType; // Don't make a copy if already a Route.
+    else new Route(routeType);
+}
+
+@:allow(whet.route.Route) private function makeRouteRoutes(routeType:MaybeArray<MaybeArray<BaseRouteType>>):Array<RouteData> {
+    return [for (tarr in makeArray(routeType)) {
         var tinner = makeArray(tarr);
         if (tinner.length == 1) {
             getRoute(tinner[0]);
@@ -21,7 +26,7 @@ function makeRoute(routeType:RouteType):Route {
                 throw new js.lib.Error("Array-defined route's second element should be path (a string).");
             getRoute(tinner[0], (tinner[1]:String));
         }
-    }]);
+    }];
 }
 
 private function getRoute(t:BaseRouteType, ?path:SourceId) {
