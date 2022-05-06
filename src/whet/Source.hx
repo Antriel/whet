@@ -39,8 +39,10 @@ class Source {
      * Returns first result if `id` is null, or one equals to it.
      */
     public function get(?id:String):SourceData {
-        final sid = (id:SourceId);
-        return sid == null ? data[0] : Lambda.find(data, entry -> entry.id == sid);
+        return if (id == null) data[0] else {
+            final sid = (id:SourceId);
+            Lambda.find(data, entry -> entry.id == sid);
+        }
     }
 
 }
