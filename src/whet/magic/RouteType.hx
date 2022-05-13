@@ -9,7 +9,7 @@ import whet.stones.Files;
  */
 typedef RouteType = EitherType<Route, MaybeArray<MaybeArray<BaseRouteType>>>;
 
-typedef BaseRouteType = EitherType<String, AnyStone>;
+typedef BaseRouteType = EitherType<RouteResult, EitherType<String, AnyStone>>;
 
 function makeRoute(routeType:RouteType):Route {
     return if (routeType is Route) cast routeType; // Don't make a copy if already a Route.
@@ -43,8 +43,13 @@ private function getRoute(t:BaseRouteType, ?path:SourceId) {
             stone: t,
             path: if (path != null) path else ('/':SourceId)
         }
+    } else if (t is RouteResult) {
+        {
+            stone: (t:RouteResult).source,
+            path: (t:RouteResult).sourceId
+        }
     } else {
-        throw new js.lib.Error('Unsupported type for Route. Expected String or Stone, but got ${js.Syntax.code("{0}.constructor?.name", t)}.');
+        throw new js.lib.Error('Unsupported type for Route. Expected String, Stone or RouteResult, but got ${js.Syntax.code("{0}.constructor?.name", t)}.');
     }
 }
 
