@@ -29,14 +29,14 @@ abstract class Stone<T:StoneConfig> {
         initConfig();
         id = if (config.id != null) makeStoneId(config.id) else makeStoneId(this);
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
-        for (cmd in getCommands()) project.addCommand(cmd, this);
+        addCommands();
     }
 
     /** Override this to set config defaults. */
     function initConfig():Void { }
 
-    /** Override this to register commands. */
-    function getCommands():Array<commander.Command> return [];
+    /** Override this to register commands via `this.project.addCommand`. */
+    function addCommands():Void { }
 
     /** 
      * **Do not override.**
@@ -102,6 +102,25 @@ abstract class Stone<T:StoneConfig> {
     @:keep public function setAbsolutePath(path:String, generate:Bool = true):Promise<Source> {
         cacheStrategy = AbsolutePath(path, LimitCountByAge(1));
         return if (generate) getSource() else Promise.resolve(null);
+    }
+
+    /**
+     * Stores this resource in the supplied path, without changing cache strategy.
+     * @param path Path relative to this stone's project.
+     * Can be a directory or a file path (only if this resource generates single source).
+     */
+    @:keep public function exportTo(path:String):Promise<Nothing> {
+        Log.info('Exporting file(s).', { path: path, stone: this });
+        final pathId:SourceId = path;
+        final isDir = pathId.isDir();
+        return getSource().then(src -> {
+            if (src.data.length > 1 && !isDir)
+                throw new js.lib.Error('Path is not a directory for multiple source export.');
+            cast Promise.all([for (data in src.data) {
+                var id = isDir ? data.id.getPutInDir(pathId) : pathId;
+                Utils.saveBytes(id.toCwdPath(project), data.data);
+            }]);
+        });
     }
 
     /**

@@ -3,7 +3,6 @@ package whet.stones;
 import js.node.Http;
 import js.node.http.IncomingMessage;
 import js.node.http.ServerResponse;
-import js.node.url.URL;
 import whet.extern.Mime;
 
 class Server extends Stone<ServerConfig> {
@@ -27,15 +26,14 @@ class Server extends Stone<ServerConfig> {
         if (config.port == null) config.port = 7000;
     }
 
-    override function getCommands():Array<commander.Command> {
-        return [new commander.Command('serve')
+    override function addCommands():Void {
+        project.addCommand('serve', this)
             .option('-p, --port <port>', 'server port', '' + config.port)
             .action((args) -> {
                 if (args[0].port != null) config.port = Std.parseInt(args[0].port);
                 serve();
                 return null;
-            })
-        ];
+            });
     }
 
     function handler(req:IncomingMessage, res:ServerResponse) {

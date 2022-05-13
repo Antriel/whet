@@ -41,10 +41,8 @@ class HaxeBuild extends Stone<BuildConfig> {
         }
     }
 
-    override function getCommands():Array<commander.Command> {
-        return [new commander.Command('build')
-            .action(_ -> build())
-        ];
+    override function addCommands():Void {
+        project.addCommand('build', this).action(_ -> build());
     }
 
     override function list():Promise<Array<SourceId>> {

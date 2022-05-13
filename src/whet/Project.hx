@@ -1,6 +1,6 @@
 package whet;
 
-import commander.Option;
+@:expose var addOption = commander.Option.new;
 
 @:expose
 class Project {
@@ -13,7 +13,7 @@ class Project {
     public final stones:Array<AnyStone> = [];
     public var onInit:(config:Dynamic) -> Promise<Any>;
 
-    @:allow(whet) private final options:Array<Option>;
+    @:allow(whet) private final options:Array<commander.Option>;
 
     @:allow(whet) private static final projects:Array<Project> = [];
 
@@ -43,9 +43,11 @@ class Project {
         Log.info('New project created.', { project: this, projectCount: projects.length });
     }
 
-    public function addCommand(cmd:commander.Command, ?stone:AnyStone):Void {
+    public function addCommand(name:String, ?stone:AnyStone):commander.Command {
+        var cmd = new commander.Command(name);
         if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
         whet.Whet.program.addCommand(cmd);
+        return cmd;
     }
 
     public function toString() return '$name@$rootDir';
@@ -61,9 +63,9 @@ typedef ProjectConfig = {
     public var ?rootDir:String;
 
     /**
-     * Array of Commander.js options this project supports.
+     * Array of Commander.js options this project supports. Use `addOption` to get Option instance.
      */
-    public var ?options:Array<Option>;
+    public var ?options:Array<commander.Option>;
 
     /**
      * Called before first command is executed, but after configuration was parsed.
