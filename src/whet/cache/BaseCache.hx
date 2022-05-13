@@ -57,10 +57,10 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
                     Promise.resolve(src);
                 }
             });
-            srcPromise.then(_ -> {
+            return srcPromise.then(src -> {
                 if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
+                return src;
             });
-            return srcPromise;
         });
     }
 
