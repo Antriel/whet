@@ -3,6 +3,7 @@ package whet.stones;
 import js.node.Http;
 import js.node.http.IncomingMessage;
 import js.node.http.ServerResponse;
+import js.node.url.URL;
 import whet.extern.Mime;
 
 class Server extends Stone<ServerConfig> {
@@ -39,10 +40,14 @@ class Server extends Stone<ServerConfig> {
 
     function handler(req:IncomingMessage, res:ServerResponse) {
         Log.info('Handling request.', { url: req.url, method: req.method });
-        inline function err(e) {
+        inline function err(e:Dynamic) {
             Log.warn("Server error.", { error: e });
             res.writeHead(500, 'Error happened.');
-            res.write(Std.string(e), 'utf-8');
+            if (e is js.lib.Error) {
+                res.write((e:js.lib.Error).stack, 'utf-8');
+            } else {
+                res.write(Std.string(e), 'utf-8');
+            }
             res.end();
         }
         // TODO gzip support.
