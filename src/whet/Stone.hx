@@ -92,11 +92,12 @@ abstract class Stone<T:StoneConfig> {
         return getSource().then(source -> source.data.map(sd -> sd.id));
     }
 
-    /** 
+    /**
      * Caches this resource under supplied `path` as a single copy.
+     * @param path
      * If `path` is a directory, stores the file(s) under that path, using their standard names.
      * If `path` is a file and this stone generates only single data source, stores it under the supplied path.
-     * If `generate` is true, the source is exported right away.
+     * @param generate If true (default), the source is exported right away.
      */
     @:keep public function setAbsolutePath(path:String, generate:Bool = true):Promise<Source> {
         cacheStrategy = AbsolutePath(path, LimitCountByAge(1));

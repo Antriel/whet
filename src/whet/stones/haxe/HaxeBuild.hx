@@ -4,6 +4,10 @@ import whet.magic.MaybeArray;
 
 class HaxeBuild extends Stone<BuildConfig> {
 
+    override function initConfig() {
+        if (config.cacheStrategy == null) config.cacheStrategy = cache.defaultFileStrategy;
+    }
+
     /** Build the given hxml. */
     public function build():Promise<Nothing> {
         Log.info("Building Haxe project.");
@@ -31,9 +35,6 @@ class HaxeBuild extends Stone<BuildConfig> {
                 SourceData.fromFile(cast pathId.withExt, path, cast pathId).then(file -> {
                     return [file];
                 });
-            }).catchError(err -> {
-                Log.error("Error during Haxe build.", { error: err });
-                null;
             });
         } else {
             throw new js.lib.Error('Cannot get source of a multi-file build. Not implemented yet.');
