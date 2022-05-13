@@ -10,7 +10,7 @@ abstract SourceId(String) {
     public var dir(get, set):SourceId;
 
     @:from public inline static function fromString(s:String):SourceId {
-        s = Path.normalize(s);
+        s = Path.normalize(if (s.length > 1 && startsWithSlash(s)) s.substr(1) else s);
         s = StringTools.replace(s, '\\', '/');
         return cast if (startsWithSlash(s)) s; else '/' + s;
     }
