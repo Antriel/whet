@@ -20,8 +20,13 @@ class HaxeBuild extends Stone<BuildConfig> {
                 cwd: cwd,
                 windowsHide: true
             }, function(err, stdout, stderr) {
-                if (err != null) rej(err);
-                else res(null);
+                if (err != null) {
+                    Log.info("Haxe build failed.");
+                    rej(err);
+                } else {
+                    Log.info("Haxe build successful.");
+                    res(null);
+                }
             });
         });
     }
