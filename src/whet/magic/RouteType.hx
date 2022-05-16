@@ -52,12 +52,3 @@ private function getRoute(t:BaseRouteType, ?path:SourceId) {
         throw new js.lib.Error('Unsupported type for Route. Expected String, Stone or RouteResult, but got ${js.Syntax.code("{0}.constructor?.name", t)}.');
     }
 }
-
-// public inline static function fromResult(r:RouteResult):Route return fromResults([r]);
-// public inline static function fromResults(r:Array<RouteResult>):Route
-//     return new Route([for (res in r) {
-//         stone: res.source,
-//         path: res.sourceId
-//     }]);
-// public inline static function fromResults2(r:Array<Array<RouteResult>>):Route
-//     return fromResults(Lambda.flatten(r));

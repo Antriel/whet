@@ -10,6 +10,7 @@ class Route {
     public function new(route:RouteType) {
         this.routes = if (route is Route) (route:Route).routes.copy();
         else whet.magic.RouteType.makeRouteRoutes(route);
+        // TODO support glob patterns, or regex or something for the filtering part.
     }
 
     public function add(r:RouteType):Route {
@@ -28,8 +29,9 @@ class Route {
             for (r in routes) {
                 r.stone.list().then(list -> {
                     var arr:Array<RouteResult> = [];
-                    if (r.path.isDir()) for (path in list) {
-                        arr.push({ source: r.stone, sourceId: path, serveId: path.relativeTo(r.path) });
+                    if (r.path.isDir()) {
+                        for (path in list) if (path.isInDir(r.path, true))
+                            arr.push({ source: r.stone, sourceId: path, serveId: path.relativeTo(r.path) });
                     } else for (path in list) if (path == r.path)
                         arr.push({ source: r.stone, sourceId: path, serveId: (path.withExt:SourceId) });
                     return arr;

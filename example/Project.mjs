@@ -1,4 +1,4 @@
-import { RemoteFile } from "../bin/whet.js";
+import { Files, RemoteFile, Route } from "../bin/whet.js";
 import { ZipStone } from "../bin/whet.js";
 import { Project, JsonStone, Router, Log } from "../bin/whet.js";
 import { CacheDurability, CacheStrategy, DurabilityCheck } from "../bin/whet/cache/Cache.js";
@@ -14,14 +14,19 @@ const project = new Project({
     options: [new Option('-b, --build <type>', 'build type').choices(['debug', 'release']).makeOptionMandatory()],
     onInit: async config => {
         if(config.build == 'debug') {
-            project.addCommand(new Command('list')
+            project.addCommand('list')
             .option('-s, --search <route>', 'route to filter the search', '/')
             .action(async (args) => {
                 console.log(await router.listContents(args.search));
-            }));
+            });
         }
     }
 });
+
+// const route = new Route([
+//     ['/data/', '/nested/']
+// ]);
+// console.log(await route.list());
 
 const json = new JsonStone({mergeFiles: ["/data/"]}).addProjectData();
 // json.cacheStrategy = CacheStrategy.InMemory(CacheDurability.KeepForever, DurabilityCheck.AllOnUse);

@@ -1,41 +1,39 @@
 package whet.stones;
 
-import js.node.Fs;
 import whet.magic.MaybeArray.makeArray;
 
 class Files extends Stone<FilesConfig> {
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
-        for (pathString in makeArray(config.paths)) {
-            var path:SourceId = pathString;
-            return (if (path.isDir()) {
-                new Promise((res, rej) -> Fs.readdir(path.toCwdPath(project), (err, files) -> {
-                    if (err != null) rej(err);
-                    else res([for (file in files) {
-                        var filepath = (file:SourceId).getPutInDir(path);
-                        {
-                            id: filepath.relativeTo(path),
-                            pathId: filepath
-                        }
-                    }]);
-                }));
-            } else Promise.resolve([{
-                id: (path.withExt:SourceId),
-                pathId: path
-            }]))
-                .then((files:Array<{id:SourceId, pathId:SourceId}>) -> cast Promise.all([for (f in files)
-                    SourceData.fromFile(cast f.id, f.pathId.toCwdPath(project), cast f.pathId)])
-                );
-        }
-        return null;
+    override function initConfig() {
+        this.config.recursive = true;
     }
-    // TODO should also support nested directories and being able to configure what the sourceId will include.
+
+    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+        var sources:Array<Promise<Array<SourceData>>> = [for (pathString in makeArray(config.paths)) {
+            var path:SourceId = pathString;
+            if (path.isDir()) {
+                Utils.listDirectoryFiles(cwdPath(pathString), config.recursive).then(arr -> [
+                    for (file in arr) { // `file` is CWD relative.
+                        var pathId:SourceId = SourceId.fromCwdPath(file, project);
+                        var id:SourceId = pathId.relativeTo(path);
+                        SourceData.fromFile(cast id, file, cast pathId);
+                    }
+                ]).then(f -> (cast Promise.all(f):Promise<Array<SourceData>>));
+            } else {
+                SourceData.fromFile(path.withExt, cwdPath(cast path), cast path).then(src -> [src]);
+            }
+        }];
+        return Promise.all(sources).then(allSources -> Lambda.flatten(allSources));
+    }
 
 }
 
 typedef FilesConfig = StoneConfig & {
 
-    /** Can be either a file, or a directory that won't be recursed. */
-    var paths:MaybeArray<String>; // TODO support glob patterns, or regex or something.
+    /** Can be either a file, or a directory. */
+    var paths:MaybeArray<String>;
+
+    /** Whether to recurse directories. Defaults to `true`. */
+    @:optional var recursive:Bool;
 
 }

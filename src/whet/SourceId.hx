@@ -10,8 +10,7 @@ abstract SourceId(String) {
     public var dir(get, set):SourceId;
 
     @:from public inline static function fromString(s:String):SourceId {
-        s = Path.normalize(if (s.length > 1 && startsWithSlash(s)) s.substr(1) else s);
-        s = StringTools.replace(s, '\\', '/');
+        s = normalize(if (s.length > 1 && startsWithSlash(s)) s.substring(1) else s);
         return cast if (startsWithSlash(s)) s; else '/' + s;
     }
 
@@ -30,7 +29,7 @@ abstract SourceId(String) {
 
     public function relativeTo(directory:SourceId):SourceId {
         if (isInDir(directory, true)) {
-            var rel:SourceId = cast this.substr((cast directory:String).length - 1);
+            var rel:SourceId = cast this.substring((cast directory:String).length - 1);
             return rel;
         } else return null;
     }
@@ -84,5 +83,21 @@ abstract SourceId(String) {
 
 }
 
-private function startsWithSlash(str:String) return str.charCodeAt(0) == '/'.code;
-private function endsWithSlash(str:String) return str.charCodeAt(str.length - 1) == '/'.code;
+function fromCwdPath(s:String, root:RootDir) {
+    s = Path.resolve(normalize(s));
+    var rootStr:String = cast root;
+    if (startsWithSlash(rootStr)) rootStr = rootStr.substring(1);
+    rootStr = Path.resolve(rootStr);
+    return Path.relative(rootStr, s);
+}
+
+private inline function startsWithSlash(str:String) return str.charCodeAt(0) == '/'.code;
+private inline function endsWithSlash(str:String) return str.charCodeAt(str.length - 1) == '/'.code;
+
+private inline function normalize(str:String) {
+    if (str.length > 0) {
+        str = Path.normalize(str);
+        str = StringTools.replace(str, '\\', '/');
+    }
+    return str;
+}

@@ -50,6 +50,8 @@ class Source {
 class SourceData {
 
     public final data:Buffer;
+
+    /** Name relative to the stone that generated it. */
     public final id:SourceId;
 
     public final hash:SourceHash;
@@ -57,8 +59,8 @@ class SourceData {
     public var lengthKB(get, never):Int;
     @:allow(whet.Source) public var source(default, null):Source;
 
-    var filePathId:SourceId = null;
-    var filePath:String = null;
+    var filePathId:SourceId = null; // Relative to project.
+    var filePath:String = null; // CWD relative path.
 
     private function new(id, data) {
         this.data = data;
@@ -67,7 +69,10 @@ class SourceData {
     }
 
     /**
-     * `path` is the actual cwd-relative path. `pathId` is the project-relative source Id.
+     * @param id Path id relative to stone that generates it.
+     * @param path Actual path relative to CWD.
+     * @param pathId Path Id relative to project.
+     * @return Promise<SourceData>
      */
     public static function fromFile(id:String, path:String, pathId:String):Promise<SourceData> {
         return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
