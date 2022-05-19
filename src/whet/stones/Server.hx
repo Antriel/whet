@@ -59,24 +59,24 @@ class Server extends Stone<ServerConfig> {
                 router.find(cast id).then(routeResult -> {
                     var sourcePromise = if (routeResult.length > 0) routeResult[0].get();
                     else if (routeDynamic != null) routeDynamic(cast id);
-                    else null;
-                    if (sourcePromise != null) {
-                        sourcePromise.then(source -> {
-                            res.writeHead(200, {
-                                'Content-Type': Mime.getType(id.ext.toLowerCase()),
-                                'Last-Modified': new js.lib.Date(source.source.ctime * 1000).toUTCString(),
-                                'Content-Length': Std.string(source.data.length),
-                                'Cache-Control': 'no-store, no-cache',
-                            });
-                            // TODO last modified should be the file stat.mtime, if it has a file and it's not cached.
-                            // TODO instead of global no-cache, it would be nice if we had revalidation instead.
-                            res.write(source.data, 'binary');
+                    else Promise.resolve(null);
+                    sourcePromise.then(source -> {
+                        if (source == null) {
+                            res.writeHead(404, "File not found.");
                             res.end();
-                        }).catchError(e -> err(e));
-                    } else {
-                        res.writeHead(404, "File not found.");
+                            return;
+                        }
+                        res.writeHead(200, {
+                            'Content-Type': Mime.getType(id.ext.toLowerCase()),
+                            'Last-Modified': new js.lib.Date(source.source.ctime * 1000).toUTCString(),
+                            'Content-Length': Std.string(source.data.length),
+                            'Cache-Control': 'no-store, no-cache',
+                        });
+                        // TODO last modified should be the file stat.mtime, if it has a file and it's not cached.
+                        // TODO instead of global no-cache, it would be nice if we had revalidation instead.
+                        res.write(source.data, 'binary');
                         res.end();
-                    }
+                    }).catchError(e -> err(e));
                 }).catchError(e -> err(e));
             // case "PUT":
             case _:
