@@ -70,7 +70,6 @@ abstract class Stone<T:StoneConfig> {
      */
     @:allow(whet.cache) final function generateSource(hash:SourceHash):Promise<Source> {
         Log.debug('Generating source.', { stone: this, hash: hash });
-        trace(config.dependencies);
         var init = if (config.dependencies != null) Promise.all([
             // Make sure dependencies are up to date.
             for (stone in makeArray(config.dependencies)) stone.getSource()
