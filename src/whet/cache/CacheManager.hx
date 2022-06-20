@@ -30,6 +30,19 @@ class CacheManager {
         }
     }
 
+    /**
+     * Re-generates source even if the currently cached value is valid.
+     */
+    @:access(whet.Stone) @:keep public function refreshSource(stone:AnyStone):Promise<Source> {
+        Log.trace('Re-generating cached stone.', { stone: stone });
+        return switch stone.cacheStrategy {
+            case None: stone.generateHash().then(hash -> stone.generateSource(hash));
+            case InMemory(_): memCache.get(stone, MaxAge(-1), SingleOnGet);
+            case InFile(_) | AbsolutePath(_):
+                fileCache.get(stone, MaxAge(-1), SingleOnGet);
+        }
+    }
+
     /** 
      * Get valid directory to generate files in. The path is unique per stone based on caching rules.
      * If hash is supplied, and a path was already assigned, the same path is returned, assuring consistency.

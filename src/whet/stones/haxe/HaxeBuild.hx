@@ -47,7 +47,7 @@ class HaxeBuild extends Stone<BuildConfig> {
     }
 
     override function addCommands():Void {
-        project.addCommand('build', this).action(_ -> build());
+        project.addCommand('build', this).action(_ -> this.cache.refreshSource(this));
     }
 
     override function list():Promise<Array<SourceId>> {
