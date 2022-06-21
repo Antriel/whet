@@ -13,9 +13,8 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
         this.cache = cache;
     }
 
-    @:access(whet.Stone)
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
-        return stone.generateHash().then(hash -> {
+        return stone.finalMaybeHash().then(hash -> {
             // Default hash is hash of generated source, but generate it only once as optimization.
             if (hash == null)
                 Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });

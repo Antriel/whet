@@ -55,12 +55,21 @@ abstract class Stone<T:StoneConfig> {
      */
     public final function getHash():Promise<SourceHash> {
         Log.debug('Generating hash.', { stone: this });
-        return generateHash().then(hash -> if (hash != null) hash else cast getSource().then(s -> {
-            if (config.dependencies != null) Promise.all([
-                for (stone in makeArray(config.dependencies)) stone.getHash()
-            ]).then((hashes:Array<SourceHash>) -> s.hash.add(SourceHash.merge(...hashes)));
-            else Promise.resolve(s.hash);
-        }));
+        return finalMaybeHash().then(hash -> {
+            if (hash != null) hash else cast getSource().then(s -> s.hash);
+        });
+    }
+
+    /**
+     * **Do not override.**
+     * Should only be used internally.
+     * Used to finalize a hash in `getHash` or in `generateSource` if `getHash` isn't implemented.
+     * Also used by the cache for the same purpose.
+     */
+    final function finalizeHash(hash:SourceHash):Promise<Null<SourceHash>> {
+        return if (hash == null || config.dependencies == null) Promise.resolve(hash)
+        else Promise.all([for (stone in makeArray(config.dependencies)) stone.getHash()])
+            .then((hashes:Array<SourceHash>) -> hash.add(SourceHash.merge(...hashes)));
     }
 
     /**
@@ -68,7 +77,7 @@ abstract class Stone<T:StoneConfig> {
      * Generates new Source. Used by the cache when needed.
      * Hash passed should be the same as is this stone's current one. Passed in as optimization.
      */
-    @:allow(whet.cache) final function generateSource(hash:SourceHash):Promise<Source> {
+    @:allow(whet.cache) final function generateSource(hash:Null<SourceHash>):Promise<Source> {
         Log.debug('Generating source.', { stone: this, hash: hash });
         var init = if (config.dependencies != null) Promise.all([
             // Make sure dependencies are up to date.
@@ -77,18 +86,28 @@ abstract class Stone<T:StoneConfig> {
         return init.then(_ -> {
             var dataPromise = generate(hash);
             return if (dataPromise != null) dataPromise.then(data -> {
-                if (hash == null) { // Default hash is byte hash of the generated result.
-                    hash = SourceHash.merge(...data.map(d -> SourceHash.fromBytes(d.data)));
-                }
-                return new Source(data, hash, this, Sys.time());
-            }) else return null;
+                // If we have a hash, it's already finalized. Otherwise default hash is
+                // byte hash of the generated result, with the dependencies' hash added to it.
+                var finalHash = if (hash != null) Promise.resolve(hash)
+                else finalizeHash(SourceHash.merge(...data.map(d -> SourceHash.fromBytes(d.data))));
+                return finalHash.then(hash -> new Source(data, hash, this, Sys.time()));
+            }) else null;
         });
     }
 
     /**
      * Optionally overridable hash generation as optimization.
+     * Do not use directly. Use `getHash` instead.
      */
-    @:allow(whet.cache) function generateHash():Promise<SourceHash> return Promise.resolve(null);
+    private function generateHash():Promise<SourceHash> return Promise.resolve(null);
+
+    /**
+     * **Do not override.**
+     * Used by cache. Returns either null, or result of `generateHash` finalized by adding 
+     * dependencies.
+     */
+    @:allow(whet.cache) function finalMaybeHash():Promise<Null<SourceHash>>
+        return generateHash().then(hash -> finalizeHash(hash));
 
     /**
      * Abstract method.

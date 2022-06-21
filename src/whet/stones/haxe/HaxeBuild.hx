@@ -59,7 +59,7 @@ class HaxeBuild extends Stone<BuildConfig> {
     override function generateHash():Promise<SourceHash> {
         // Not perfect, as it doesn't detect changes to library versions, but good enough.
         var paths = makeArray(config.hxml.config.paths).map(path -> (path:SourceId).toCwdPath(config.hxml.project));
-        return Promise.all([config.hxml.generateHash(), SourceHash.fromFiles(paths)])
+        return Promise.all([config.hxml.getHash(), SourceHash.fromFiles(paths)])
             .then(r -> SourceHash.merge(...cast r));
     }
 
