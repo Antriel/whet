@@ -109,7 +109,10 @@ class SourceData {
         return if (filePath == null) {
             if (source == null) new js.lib.Error("Data without source.");
             var dir = source.getDirPath();
-            filePathId = (idOverride != null ? idOverride : id).getPutInDir(dir);
+            // Only use `idOverride` fully if it's not a directory,
+            // otherwise it's already handled in `getDirPath`, or rather `CacheManager.getDir`.
+            var name = if (idOverride != null && !idOverride.isDir()) idOverride else id;
+            filePathId = name.getPutInDir(dir);
             filePath = filePathId.toCwdPath(source.origin.project);
             Utils.saveBytes(filePath, this.data).then(_ -> filePath);
         } else Promise.resolve(filePath);

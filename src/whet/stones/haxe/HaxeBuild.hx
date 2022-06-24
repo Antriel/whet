@@ -19,10 +19,11 @@ class HaxeBuild extends Stone<BuildConfig> {
             js.node.ChildProcess.exec(cmd.join(' '), cast {
                 cwd: cwd,
                 windowsHide: true
-            }, function(err, stdout, stderr) {
+            }, function(err:js.lib.Error, stdout, stderr) {
                 if (err != null) {
-                    Log.info("Haxe build failed.");
-                    rej(err);
+                    var haxeError = new js.lib.Error(stderr);
+                    haxeError.name = "Haxe Build Error";
+                    rej(haxeError);
                 } else {
                     Log.info("Haxe build successful.");
                     res(null);

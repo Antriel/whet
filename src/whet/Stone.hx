@@ -92,7 +92,21 @@ abstract class Stone<T:StoneConfig> {
                 else finalizeHash(SourceHash.merge(...data.map(d -> SourceHash.fromBytes(d.data))));
                 return finalHash.then(hash -> new Source(data, hash, this, Sys.time()));
             }) else null;
-        });
+        }).catchError(e -> handleError(e).then(data -> {
+            Log.warn('Error happened and was handled by `handleError`.', { stone: this, error: e });
+            // Use file hash even if might have explicit hash, as this is a fallback value.
+            final hash = SourceHash.merge(...data.map(d -> SourceHash.fromBytes(d.data)));
+            new Source(data, hash, this, Sys.time());
+        }));
+    }
+
+    /**
+     * To be used externally (i.e. `myStone.handleError = err => ...`) for providing a fallback value
+     * where it might make sense.
+     * @param err Any error that might have happened during `generateSource`.
+     */
+    public dynamic function handleError(err:Dynamic):Promise<Array<SourceData>> {
+        return Promise.reject(err); // Don't handle anything by default.
     }
 
     /**
@@ -178,6 +192,11 @@ abstract class Stone<T:StoneConfig> {
 
 typedef StoneConfig = {
 
+    /**
+     * Defaults to `project.cache.defaultStrategy`.
+     * **Do not modify after initialization – it is ignored.**
+     * After stone is initialized, change `stone.cacheStrategy` directly.
+     */
     var ?cacheStrategy:CacheStrategy;
 
     /** Defaults to the Stone's class name. */

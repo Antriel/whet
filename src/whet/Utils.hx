@@ -39,7 +39,7 @@ class Utils {
 
     /** Saves bytes Buffer, creates missing directories if needed. */
     public static function saveBytes(path:String, bytes:Buffer):Promise<Nothing> {
-        Log.trace('Writing bytes to $path.');
+        Log.trace('Writing bytes to "$path".');
         return ensureDirExist(Path.dirname(path)).then(_ -> new Promise((res,
                 rej) -> Fs.writeFile(path, bytes, err -> if (err != null) rej(err) else res(null))
         ));
