@@ -99,13 +99,17 @@ class SourceData {
     public function hasFile():Bool return this.filePath != null;
 
     /** Same as `getFilePath` but relative to project, not CWD. */
-    @:allow(whet) function getFilePathId(idOverride:SourceId = null):Promise<SourceId> {
+    public function getFilePathId(idOverride:SourceId = null):Promise<SourceId> {
         return if (filePathId == null) getFilePath(idOverride).then(_ -> filePathId);
         else Promise.resolve(filePathId);
     }
 
-    /** Path to a file for this source, relative to CWD. */
-    @:allow(whet) function getFilePath(idOverride:SourceId = null):Promise<String> {
+    /**
+     * Path to a file for this source, relative to CWD.
+     * Useful for working with sources outside of Whet ecosystem.
+     * @param [idOverride] Use to change the name/directory of the file. Ignored if source already has a filepath.
+     */
+    public function getFilePath(idOverride:SourceId = null):Promise<String> {
         return if (filePath == null) {
             if (source == null) new js.lib.Error("Data without source.");
             var dir = source.getDirPath();
