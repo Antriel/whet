@@ -15,7 +15,7 @@ class ZipStone extends Stone<ZipConfig> {
     }
 
     override function generateHash():Promise<SourceHash> {
-        return new Router(config.sources).getHashOfEverything().then(hash -> {
+        return new Router(config.sources).getHash().then(hash -> {
             SourceHash.fromString((cast config.filename + config.level)).add(hash);
         });
     }
@@ -23,7 +23,7 @@ class ZipStone extends Stone<ZipConfig> {
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Zipping files.');
         final level = config.level;
-        return new Router(config.sources).find('/').then(files -> {
+        return new Router(config.sources).get().then(files -> {
             Promise.all([for (file in files) file.get().then(data -> {
                 final bytes = data.data.hxToBytes();
                 final entry:haxe.zip.Entry = {

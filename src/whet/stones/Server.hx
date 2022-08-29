@@ -56,7 +56,7 @@ class Server extends Stone<ServerConfig> {
             case "GET":
                 if (id.isDir()) id.withExt = "index.html";
                 else if (id.ext == '') id = '$id/index.html';
-                router.find(cast id).then(routeResult -> {
+                router.get(cast id).then(routeResult -> {
                     var sourcePromise = if (routeResult.length > 0) routeResult[0].get();
                     else if (routeDynamic != null) routeDynamic(cast id);
                     else Promise.resolve(null);

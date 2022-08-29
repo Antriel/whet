@@ -1,6 +1,6 @@
 {
     "name": "whet",
-    "version": "0.0.15",
+    "version": "0.0.16",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
         "devinit": "npx dts2hx commander --modular --noLibWrap",
@@ -24,9 +24,11 @@
     "homepage": "https://github.com/Antriel/whet#readme",
     "dependencies": {
         "commander": "^9.0.0",
-        "mime": "^3.0.0"
+        "mime": "^3.0.0",
+        "minimatch": "^5.1.0"
     },
     "devDependencies": {
+        "@types/minimatch": "^5.1.0",
         "dts2hx": "^0.18.1",
         "lix": "^15.11.6"
     }

@@ -1,6 +1,9 @@
 package whet.route;
 
+import haxe.extern.EitherType;
 import js.node.Path;
+import whet.extern.Minimatch;
+import whet.magic.MinimatchType;
 import whet.magic.RoutePathType;
 
 @:expose
@@ -16,54 +19,31 @@ class Router {
         for (path in makeRoutePath(r)) routes.push(path);
 
     /**
-     * Find data sources routed under `id`. By default only single result is returned if `id`
-     * is not a directory, all results otherwise. This can be overriden by providing a second argument.
+     * Find data sources routed under `pattern`.
+     * @param pattern A glob pattern to search for.
      */
-    public function find(id:String, firstOnly:Null<Bool> = null):Promise<Array<RouteResult>> {
-        var sourceId:SourceId = id;
+    public function get(pattern:MinimatchType = '**'):Promise<Array<RouteResult>> {
+        var filter = makeMinimatch(pattern);
         return new Promise((res, rej) -> {
-            if (firstOnly == null) firstOnly = !sourceId.isDir();
             var result:Array<RouteResult> = [];
-            Promise.all([for (path in routes) {
-                inline function check(item:RouteResult) {
-                    if (sourceId.isDir()) { // Everything in this dir.
-                        var rel = item.serveId.relativeTo(sourceId);
-                        if (rel != null) {
-                            item.serveId = rel;
-                            result.push(item);
-                        }
-                    } else { // Everything with that exact name.
-                        if (sourceId == item.serveId) {
-                            item.serveId = sourceId.withExt;
-                            result.push(item);
-                        }
-                    }
-                }
-                path.route.list().then(list -> {
-                    if (path.routeUnder.isDir()) {
-                        for (item in list) {
-                            item.serveId = item.serveId.getPutInDir(path.routeUnder);
-                            check(item);
-                        }
-                    } else {
-                        for (item in list) {
-                            item.serveId = path.routeUnder;
-                            check(item);
-                        }
+            Promise.all([for (route in routes) {
+                allFromRoute(route).then(list -> {
+                    var routeUnderIsDir = route.routeUnder.isDir();
+                    for (item in list) {
+                        item.serveId = if (routeUnderIsDir) item.serveId.getPutInDir(route.routeUnder);
+                        else route.routeUnder;
+                        if (filter.match(cast item.serveId)) result.push(item);
                     }
                 });
-            }]).then(_ -> {
-                if (firstOnly && result.length > 1) result.resize(1);
-                res(result);
-            });
+            }]).then(_ -> res(result));
         });
     }
 
     /**
-     * Get combined hash of all sources that would be found under supplied id.
+     * Get combined hash of all sources that fit the `pattern`.
      */
-    public function getHash(id:String, firstOnly:Null<Bool> = null):Promise<SourceHash> {
-        return find(id, firstOnly).then(items -> {
+    public function getHash(pattern:MinimatchType = '**'):Promise<SourceHash> {
+        return get(pattern).then(items -> {
             var uniqueStones = [];
             for (item in items)
                 if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
@@ -72,17 +52,12 @@ class Router {
         });
     }
 
-    public inline function getHashOfEverything():Promise<SourceHash> {
-        return Promise.all(routes.map(path -> path.route.getHash()))
-            .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
-    }
-
     /**
-     * Save files filtered by `searchId` into provided `saveInto` folder.
+     * Save files filtered by `pattern` into provided `saveInto` folder.
      */
-    public function saveInto(searchId:String, saveInto:String, clearFirst:Bool = true):Promise<Nothing> {
+    public function saveInto(pattern:MinimatchType, saveInto:String, clearFirst:Bool = true):Promise<Nothing> {
         return (if (clearFirst) Utils.deleteAll(saveInto) else Promise.resolve(null))
-            .then(_ -> find(searchId)).then(result -> {
+            .then(_ -> get(pattern)).then(result -> {
                 cast Promise.all([for (r in result) {
                     final p = Path.join(saveInto, r.serveId.toCwdPath('/'));
                     r.get().then(src -> Utils.saveBytes(p, src.data));
@@ -90,12 +65,58 @@ class Router {
             });
     }
 
-    public function listContents(search:String = "/"):Promise<String> {
-        return find(search).then(files -> {
+    public function listContents(pattern:MinimatchType = '**'):Promise<String> {
+        return get(pattern).then(files -> {
             var ids = files.map(f -> f.serveId);
             ids.sort((a, b) -> a.compare(b));
             ids.join('\n');
         });
+    }
+
+    inline function allFromRoute(route:RoutePath):Promise<Array<RouteResult>> {
+        if (route.source is AnyStone) {
+            final stone:AnyStone = cast route.source;
+            return stone.list().then(list -> {
+                var arr:Array<RouteResult> = [];
+                for (path in list) {
+                    var serveId = getServeId(path, route);
+                    if (serveId != null)
+                        arr.push({ source: stone, sourceId: path, serveId: serveId });
+                }
+                return arr;
+            });
+        } else if (route.source is Router) {
+            final router:Router = cast route.source;
+            return router.get().then(list -> {
+                var arr:Array<RouteResult> = [];
+                for (result in list) {
+                    var serveId = getServeId(result.serveId, route);
+                    if (serveId != null) {
+                        result.serveId = serveId;
+                        arr.push(result);
+                    }
+                }
+                return arr;
+            });
+        } else throw new js.lib.Error("Router source must be a Stone or a Router.");
+    }
+
+    inline function getServeId(path:SourceId, route:RoutePath) {
+        var serveId = null;
+        if (route.filter == null || route.filter.match(cast path)) {
+            serveId = path;
+            if (route.extractDirs != null) {
+                var dir:String = cast path;
+                do {
+                    dir = dir.substring(0, dir.lastIndexOf('/'));
+                    if (route.extractDirs.match(dir + '/')) {
+                        serveId = path.relativeTo(dir + '/');
+                        break;
+                    }
+                } while (dir.length > 0);
+            }
+        }
+        return serveId;
     }
 
 }
@@ -103,6 +124,10 @@ class Router {
 typedef RoutePath = {
 
     var routeUnder:SourceId;
-    var route:Route;
+    var source:RouterSource;
+    var filter:Minimatch;
+    var extractDirs:Minimatch;
 
 }
+
+typedef RouterSource = EitherType<AnyStone, Router>;
