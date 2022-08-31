@@ -12,7 +12,8 @@ function main() {
         .allowUnknownOption(true)
         .showSuggestionAfterError(true)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
-        .option('-l, --log-level <level>', 'log level, a string/number', 'info');
+        .option('-l, --log-level <level>', 'log level, a string/number', 'info')
+        .exitOverride();
 
     program.parse();
     final options = program.opts();
@@ -69,7 +70,12 @@ private function initProjects() {
         if (commands.length == 0) return;
         final c = commands.shift();
         Log.trace('Executing command.', { commandArgs: c });
-        program.parseAsync(c, { from: 'user' }).then(_ -> nextCommand());
+        program.parseAsync(c, { from: 'user' }).then(_ -> nextCommand())
+            .catchError(err -> {
+                if (err is commander.CommanderError && err.code == 'commander.help')
+                    return;
+                Log.error("Error while executing command.", { error: err });
+            });
     }
     initProm.then(_ -> nextCommand());
 }
