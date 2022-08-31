@@ -41,7 +41,9 @@ private function init(options:Dynamic) {
         }).catchError(e -> {
             Log.error("Error loading project.", { error: e });
             if (e is js.lib.Error) Log.error((e:js.lib.Error).stack);
-            program.help();
+            try {
+                program.help();
+            } catch (e) { }
         });
     }
 }
