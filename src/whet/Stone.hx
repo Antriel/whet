@@ -106,6 +106,7 @@ abstract class Stone<T:StoneConfig> {
      * @param err Any error that might have happened during `generateSource`.
      */
     public dynamic function handleError(err:Dynamic):Promise<Array<SourceData>> {
+        Log.error("Error while generating.", { stone: this, err: err });
         return Promise.reject(err); // Don't handle anything by default.
     }
 
