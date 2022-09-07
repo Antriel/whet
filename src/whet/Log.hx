@@ -42,7 +42,11 @@ import haxe.Json;
     }
 
     static function replacer(key:Dynamic, val:Dynamic):Dynamic {
-        if (val is js.lib.Error) return (val:js.lib.Error).stack;
+        if (val is js.lib.Error) return {
+            type: (val:js.lib.Error).name,
+            message: (val:js.lib.Error).message,
+            stack: (val:js.lib.Error).stack,
+        };
         if (val != null && js.Lib.typeof(val.toString) == 'function' && val.toString != js.lib.Object.prototype.toString)
             return val.toString();
         return val;
