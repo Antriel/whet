@@ -13,6 +13,7 @@ function main() {
         .showSuggestionAfterError(true)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info')
+        .option('--no-pretty', 'disable pretty logging')
         .exitOverride();
 
     program.parse();
@@ -23,6 +24,8 @@ function main() {
         if (n == null) program.error('Invalid value for --log-level');
         else Log.logLevel = n;
     }
+    if (options.pretty) Log.stream = PinoPretty.default_();
+
     js.Node.setImmediate(init, options); // Init next tick, in case the project file was executed directly.
 }
 

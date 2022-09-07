@@ -2,6 +2,7 @@ package whet;
 
 import haxe.DynamicAccess;
 import haxe.Json;
+import js.node.stream.Writable.IWritable;
 
 @:expose class Log {
 
@@ -18,6 +19,8 @@ import haxe.Json;
     public static inline function fatal(...args:Dynamic) return log(60, ...args);
 
     public static var logLevel:LogLevel = Info;
+
+    public static var stream:IWritable = js.Node.process.stdout;
 
     static function log(level:Int, ...args:Dynamic):Void {
         if (level >= (logLevel:Int)) {
@@ -37,7 +40,7 @@ import haxe.Json;
                     for (field => value in obj) out[field] = value;
                 }
             }
-            js.Node.process.stdout.write(Json.stringify(out, replacer) + '\n');
+            stream.write(Json.stringify(out, replacer) + '\n');
         }
     }
 

@@ -1,9 +1,9 @@
 {
     "name": "whet",
-    "version": "0.0.17",
+    "version": "0.0.18",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
-        "devinit": "npx dts2hx commander --modular --noLibWrap",
+        "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
         "build": "npx haxe build.hxml"
     },
     "repository": {
@@ -25,7 +25,8 @@
     "dependencies": {
         "commander": "^9.0.0",
         "mime": "^3.0.0",
-        "minimatch": "^5.1.0"
+        "minimatch": "^5.1.0",
+        "pino-pretty": "^9.1.0"
     },
     "devDependencies": {
         "@types/minimatch": "^5.1.0",
