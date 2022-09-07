@@ -1,5 +1,6 @@
 package whet.stones;
 
+import haxe.DynamicAccess;
 import js.node.Http;
 import js.node.http.IncomingMessage;
 import js.node.http.ServerResponse;
@@ -40,7 +41,7 @@ class Server extends Stone<ServerConfig> {
         Log.info('Handling request.', { url: req.url, method: req.method });
         inline function err(e:Dynamic) {
             Log.warn("Server error.", { error: e });
-            res.writeHead(500, 'Error happened.');
+            res.writeHead(500, 'Error happened.', this.config.headers);
             if (e is js.lib.Error) {
                 res.write((e:js.lib.Error).stack, 'utf-8');
             } else {
@@ -66,19 +67,34 @@ class Server extends Stone<ServerConfig> {
                             res.end();
                             return;
                         }
-                        res.writeHead(200, {
+                        var headers:DynamicAccess<String> = {
                             'Content-Type': Mime.getType(id.ext.toLowerCase()),
                             'Last-Modified': new js.lib.Date(source.source.ctime * 1000).toUTCString(),
                             'Content-Length': Std.string(source.data.length),
                             'Cache-Control': 'no-store, no-cache',
-                        });
+                        }
                         // TODO last modified should be the file stat.mtime, if it has a file and it's not cached.
                         // TODO instead of global no-cache, it would be nice if we had revalidation instead.
+                        if (config.headers != null) for (key => val in config.headers) headers[key] = val;
+                        res.writeHead(200, headers);
                         res.write(source.data, 'binary');
                         res.end();
                     }).catchError(e -> err(e));
                 }).catchError(e -> err(e));
-            // case "PUT":
+            case "PUT":
+                var cmd = [id.toCwdPath('/')];
+                var body = '';
+                req.on('data', chunk -> body += chunk);
+                req.on('end', () -> {
+                    if (body != '') cmd.push(body); // Assuming a single arg for now.
+                    whet.Whet.executeCommand(cmd).then(_ -> {
+                        res.writeHead(200, config.headers);
+                        res.end();
+                    }).catchError(e -> err(e));
+                });
+            case "OPTIONS":
+                res.writeHead(200, this.config.headers);
+                res.end();
             case _:
                 res.writeHead(400, "Unsupported method.");
                 res.end();
@@ -93,5 +109,6 @@ typedef ServerConfig = StoneConfig & {
     var port:Int;
 
     var router:Router;
+    @:optional var headers:DynamicAccess<String>;
 
 }

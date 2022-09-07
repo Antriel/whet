@@ -82,6 +82,11 @@ private function initProjects() {
     initProm.then(_ -> nextCommand());
 }
 
+function executeCommand(cmd:Array<String>) {
+    Log.trace('Executing command.', { command: cmd });
+    return program.parseAsync(cmd, { from: 'user' });
+}
+
 private function getCommands(args:Array<String>):Array<Array<String>> {
     var commands = [];
     var from = 0;
