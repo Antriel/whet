@@ -52,7 +52,7 @@ class Server extends Stone<ServerConfig> {
         // TODO gzip support.
         // Remove search params for now.
         final searchIndex = req.url.indexOf('?');
-        var id:SourceId = searchIndex > 0 ? req.url.substring(0, searchIndex) : req.url;
+        var id:SourceId = js.Syntax.code('decodeURI({0})', searchIndex > 0 ? req.url.substring(0, searchIndex) : req.url);
         switch req.method {
             case "GET":
                 if (id.isDir()) id.withExt = "index.html";
