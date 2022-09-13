@@ -16,7 +16,11 @@ function main() {
         .option('--no-pretty', 'disable pretty logging')
         .exitOverride();
 
-    program.parse();
+    try {
+        program.parse();
+    } catch (err:Dynamic) {
+        if (err is commander.CommanderError && err.code == 'commander.version') js.Node.process.exit();
+    }
     final options = program.opts();
     if (options.logLevel != null) { // Handle logLevel immediately.
         var n = Std.parseInt(options.logLevel);
