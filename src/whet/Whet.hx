@@ -18,8 +18,9 @@ function main() {
 
     try {
         program.parse();
-    } catch (err:Dynamic) {
-        if (err is commander.CommanderError && err.code == 'commander.version') js.Node.process.exit();
+    } catch (err) {
+        if (err.native is commander.CommanderError && (err.native:Dynamic).code == 'commander.version') js.Node.process.exit();
+        else throw err;
     }
     final options = program.opts();
     if (options.logLevel != null) { // Handle logLevel immediately.
