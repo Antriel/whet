@@ -78,7 +78,7 @@ class SourceData {
         return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
             if (err != null) {
                 Log.error("File does not exist.", { id: id, path: path });
-                res(null);
+                rej(err);
             } else {
                 var source = fromBytes(id, buffer);
                 source.filePath = path;

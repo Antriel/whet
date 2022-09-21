@@ -73,12 +73,14 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             var path = file.filePath.toCwdPath(rootDir);
             SourceData.fromFile(cast file.id, path, cast file.filePath).then(sourceData -> {
                 if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
-                    rej('Wrong hash.');
+                    rej('Invalid.');
                 } else res(sourceData);
-            });
+            }, err -> if (err is js.lib.Error && (err:Dynamic).code == 'ENOENT') rej('Invalid.');
+                else rej(err)
+            );
         })]).then(
             data -> new Source(cast data, value.hash, stone, value.ctime),
-            rejected -> rejected == 'Wrong hash.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
+            rejected -> rejected == 'Invalid.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
         );
     }
 
