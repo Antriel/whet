@@ -23,7 +23,7 @@ class CacheManager {
     public function getSource(stone:AnyStone):Promise<Source> {
         Log.trace('Determining cache status.', { stone: stone, strategy: stone.cacheStrategy.getName() });
         return switch stone.cacheStrategy {
-            case None: stone.finalMaybeHash().then(hash -> stone.generateSource(hash));
+            case None: stone.acquire(() -> stone.finalMaybeHash().then(hash -> stone.generateSource(hash)));
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
             case InFile(durability, check) | AbsolutePath(_, durability, check):
                 fileCache.get(stone, durability, check != null ? check : AllOnUse);
@@ -36,7 +36,7 @@ class CacheManager {
     @:keep public function refreshSource(stone:AnyStone):Promise<Source> {
         Log.trace('Re-generating cached stone.', { stone: stone });
         return switch stone.cacheStrategy {
-            case None: stone.finalMaybeHash().then(hash -> stone.generateSource(hash));
+            case None: stone.acquire(() -> stone.finalMaybeHash().then(hash -> stone.generateSource(hash)));
             case InMemory(_): memCache.get(stone, MaxAge(-1), SingleOnGet);
             case InFile(_) | AbsolutePath(_):
                 fileCache.get(stone, MaxAge(-1), SingleOnGet);

@@ -20,6 +20,13 @@ abstract class Stone<T:StoneConfig> {
     public var cache(get, never):CacheManager;
     public final project:Project;
 
+    var lockQueue:Array<{
+        run:Void->Promise<Any>,
+        res:Dynamic->Void,
+        rej:Dynamic->Void
+    }> = [];
+    var locked:Bool = false;
+
     public final function new(config:T) {
         Log.trace('Instantiating new Stone.', { type: getTypeName(this) });
         if (config == null) throw new js.lib.Error('Config must be supplied.');
@@ -38,6 +45,41 @@ abstract class Stone<T:StoneConfig> {
 
     /** Override this to register commands via `this.project.addCommand`. */
     function addCommands():Void { }
+
+    /**
+     * Locks this stone for generating. Used to prevent parallel generation of the same sources.
+     */
+    @:allow(whet) final function acquire<T>(run:Void->Promise<T>):Promise<T> {
+        Log.trace('Acquiring lock on a stone.', { stone: this });
+        if (locked) {
+            Log.debug('Stone is locked, waiting.', { stone: this });
+            var deferredRes:T->Void;
+            var deferredRej:Dynamic;
+            var deferred = new Promise((res, rej) -> {
+                deferredRes = res;
+                deferredRej = rej;
+            });
+            lockQueue.push({
+                run: run,
+                res: deferredRes,
+                rej: deferredRej
+            });
+            return deferred;
+        } else {
+            locked = true;
+            function runNext() {
+                if (lockQueue.length > 0) {
+                    Log.debug('Running next queued-up lock acquire function.', { stone: this });
+                    var queued = lockQueue.shift();
+                    queued.run().then(queued.res).catchError(queued.rej).finally(runNext);
+                } else {
+                    locked = false;
+                    Log.trace('No function in lock queue. Stone is now unlocked.', { stone: this });
+                }
+            }
+            return run().finally(runNext);
+        }
+    }
 
     /** 
      * **Do not override.**
@@ -78,6 +120,7 @@ abstract class Stone<T:StoneConfig> {
      * Hash passed should be the same as is this stone's current one. Passed in as optimization.
      */
     @:allow(whet.cache) final function generateSource(hash:Null<SourceHash>):Promise<Source> {
+        if (!this.locked) throw new js.lib.Error("Acquire a lock before generating.");
         Log.debug('Generating source.', { stone: this, hash: hash });
         var init = if (config.dependencies != null) Promise.all([
             // Make sure dependencies are up to date.

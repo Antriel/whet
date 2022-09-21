@@ -14,7 +14,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
     }
 
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
-        return stone.finalMaybeHash().then(hash -> {
+        return stone.acquire(() -> return stone.finalMaybeHash().then(hash -> {
             // Default hash is hash of generated source, but generate it only once as optimization.
             if (hash == null)
                 Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
@@ -60,7 +60,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float;}>
                 if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
                 return src;
             });
-        });
+        }));
     }
 
     function set(source:Source):Promise<Value> {
