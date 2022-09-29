@@ -15,14 +15,14 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
      * such as server_standalone.js and replay.js would stay in that same folder?
      * What about clearing that folder before exporting? We don't want to remove logs...
      */
-    static inline var dbFileBase:String = '.whet/cache.json';
+    static inline var dbFileBase:SourceId = '.whet/cache.json';
 
     final dbFile:String;
     var flushQueued:Bool = false;
 
     public function new(rootDir:RootDir) {
         super(rootDir, new Map());
-        dbFile = (dbFileBase:SourceId).toCwdPath(rootDir);
+        dbFile = dbFileBase.toCwdPath(rootDir);
         try {
             var db:DbJson = haxe.Json.parse(Fs.readFileSync(dbFile, { encoding: 'utf-8' }));
             for (key => values in db) cache.set(key, [for (val in values) {
@@ -71,7 +71,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         }
         return Promise.all([for (file in value.files) new Promise(function(res, rej) {
             var path = file.filePath.toCwdPath(rootDir);
-            SourceData.fromFile(cast file.id, path, cast file.filePath).then(sourceData -> {
+            SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
                 if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
                     rej('Invalid.');
                 } else res(sourceData);
@@ -143,11 +143,11 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 hash: val.hash.toHex(),
                 ctime: val.ctime,
                 ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
-                baseDir: val.baseDir.toCwdPath('/'),
+                baseDir: val.baseDir.toCwdPath('./'),
                 files: [for (file in val.files) {
                     fileHash: file.fileHash.toHex(),
-                    filePath: file.filePath.toCwdPath('/'),
-                    id: file.id.toCwdPath('/')
+                    filePath: file.filePath.toCwdPath('./'),
+                    id: file.id.toCwdPath('./')
                 }]
             }]);
             Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(

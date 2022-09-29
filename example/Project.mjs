@@ -15,7 +15,7 @@ const project = new Project({
     onInit: async config => {
         if (config.build == 'debug') {
             project.addCommand('list')
-                .option('-s, --search <route>', 'route to filter the search', '/')
+                .option('-s, --search <route>', 'route to filter the search', './')
                 .action(async (args) => {
                     console.log(await router.listContents(args.search));
                 });
@@ -24,11 +24,11 @@ const project = new Project({
 });
 
 // const route = new Route([
-//     ['/data/', '/nested/']
+//     ['data/', 'nested/']
 // ]);
 // console.log(await route.list());
 
-const json = new JsonStone({ mergeFiles: ["/data/"] }).addProjectData();
+const json = new JsonStone({ mergeFiles: ["data/"] }).addProjectData();
 // json.cacheStrategy = CacheStrategy.InMemory(CacheDurability.KeepForever, DurabilityCheck.AllOnUse);
 json.cacheStrategy = CacheStrategy.InFile(CacheDurability.LimitCountByLastUse(2), DurabilityCheck.AllOnUse);
 // console.log((await json.getSource()).get().data.toString(('utf-8')));
@@ -42,14 +42,14 @@ const phaser = new RemoteFile({ url: 'https://cdn.jsdelivr.net/npm/phaser@3.55.2
 
 const router = new Router([
     ['myUnique.json', unique],
-    ['filtered/', '/data/', '**/sample.json'],
-    ['prepended/', '/data/'],
-    ['unnested/', '/data/', '**', '/nested/'],
-    ['rewired.json', '/data/', '**/sample2.json'],
-    ['picked.json', '/data/sample2.json'],
+    ['filtered/', 'data/', '**/sample.json'],
+    ['prepended/', 'data/'],
+    ['unnested/', 'data/', '**', 'nested/'],
+    ['rewired.json', 'data/', '**/sample2.json'],
+    ['picked.json', 'data/sample2.json'],
     ['phaser.js', phaser]
 ]);
-// console.log(await router.listContents());
+console.log(await router.listContents());
 
 // await new ZipStone({sources: router}).setAbsolutePath('bundle.zip');
 

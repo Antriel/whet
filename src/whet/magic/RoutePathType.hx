@@ -21,12 +21,12 @@ typedef BaseRouteType = EitherType<Router, EitherType<AnyStone, EitherType<Minim
 function makeRoutePath(routerPathType:RoutePathType):Array<RoutePath> {
     inline function source(src:BaseRouteType) return if (src is String) new Files({ paths: [src] }) else src;
     if (routerPathType is Router || routerPathType is AnyStone || routerPathType is String)
-        return [{ routeUnder: '/', source: source(routerPathType), filter: null, extractDirs: null }];
+        return [{ routeUnder: '', source: source(routerPathType), filter: null, extractDirs: null }];
     if (!(routerPathType is Array))
         throw new js.lib.Error("RoutePath should be a Stone, Router, or an array.");
-    return [for (item in (routerPathType:Array<BaseRouteType>)) {
+    return [for (item in(routerPathType:Array<BaseRouteType>)) {
         if (item is Router || item is AnyStone || item is String)
-            { routeUnder: '/', source: source(item), filter: null, extractDirs: null };
+            { routeUnder: '', source: source(item), filter: null, extractDirs: null };
         else if (item is Array) {
             var inner:Array<Dynamic> = cast item;
             if (!(inner[0] is String))

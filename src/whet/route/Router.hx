@@ -32,7 +32,7 @@ class Router {
                     for (item in list) {
                         item.serveId = if (routeUnderIsDir) item.serveId.getPutInDir(route.routeUnder);
                         else route.routeUnder;
-                        if (filter.match(cast item.serveId)) result.push(item);
+                        if (filter.match(item.serveId)) result.push(item);
                     }
                 });
             }]).then(_ -> res(result));
@@ -59,7 +59,7 @@ class Router {
         return (if (clearFirst) Utils.deleteAll(saveInto) else Promise.resolve(null))
             .then(_ -> get(pattern)).then(result -> {
                 cast Promise.all([for (r in result) {
-                    final p = Path.join(saveInto, r.serveId.toCwdPath('/'));
+                    final p = Path.join(saveInto, r.serveId.toCwdPath('./'));
                     r.get().then(src -> Utils.saveBytes(p, src.data));
                 }]);
             });
@@ -73,7 +73,7 @@ class Router {
         });
     }
 
-    inline function allFromRoute(route:RoutePath):Promise<Array<RouteResult>> {
+    function allFromRoute(route:RoutePath):Promise<Array<RouteResult>> {
         if (route.source is AnyStone) {
             final stone:AnyStone = cast route.source;
             return stone.list().then(list -> {
@@ -103,14 +103,14 @@ class Router {
 
     inline function getServeId(path:SourceId, route:RoutePath) {
         var serveId = null;
-        if (route.filter == null || route.filter.match(cast path)) {
+        if (route.filter == null || route.filter.match(path)) {
             serveId = path;
             if (route.extractDirs != null) {
-                var dir:String = cast path;
+                var dir:String = path;
                 do {
                     dir = dir.substring(0, dir.lastIndexOf('/'));
                     if (route.extractDirs.match(dir + '/')) {
-                        serveId = path.relativeTo(dir + '/');
+                        serveId = path.getRelativeTo(dir + '/');
                         break;
                     }
                 } while (dir.length > 0);

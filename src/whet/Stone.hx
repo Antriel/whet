@@ -203,15 +203,14 @@ abstract class Stone<T:StoneConfig> {
      * @param path Path relative to this stone's project.
      * Can be a directory or a file path (only if this resource generates single source).
      */
-    @:keep public function exportTo(path:String):Promise<Nothing> {
+    @:keep public function exportTo(path:SourceId):Promise<Nothing> {
         Log.info('Exporting file(s).', { path: path, stone: this });
-        final pathId:SourceId = path;
-        final isDir = pathId.isDir();
+        final isDir = path.isDir();
         return getSource().then(src -> {
             if (src.data.length > 1 && !isDir)
                 throw new js.lib.Error('Path is not a directory for multiple source export.');
             cast Promise.all([for (data in src.data) {
-                var id = isDir ? data.id.getPutInDir(pathId) : pathId;
+                var id = isDir ? data.id.getPutInDir(path) : path;
                 Utils.saveBytes(id.toCwdPath(project), data.data);
             }]);
         });
@@ -221,9 +220,8 @@ abstract class Stone<T:StoneConfig> {
      * Convenient function to get CWD-relative path from project-relative one.
      * Useful for pure JS stones.
      */
-    @:keep public function cwdPath(path:String):String {
-        // return (path:SourceId).toRelPath(project);
-        return Path.join('./', cast project.rootDir, path);
+    @:keep public function cwdPath(path:SourceId):String {
+        return path.toCwdPath(project);
     }
 
     private inline function get_cache() return project.cache;

@@ -10,7 +10,7 @@ Project files define a project, its [stones](#Stones). Their content defines wha
 
 Stones (named after _whetstone_) are individual building blocks of a project.
 
-They represent a single logical asset (can be multiple files) or functionality (e.g. a dev web server). Stones can use other stones (via routes), to achieve their objective, forming a dependency tree. E.g. a css file could be made by minifying a file generated from scss source, and each step could be individually cached.
+They represent a single logical asset (can be multiple files) or functionality (e.g. a dev web server). Stones can use other stones (via routes), to achieve their objective, forming a dependency tree. E.g. a CSS file could be made by minifying a file generated from SCSS source, and each step could be individually cached.
 
 ### Stones Configuration
 
@@ -30,7 +30,7 @@ Some stones might provide helper methods to modify the configuration after it wa
 
 ...
 
-## Routes And Routers
+## Routers
 
 ...
 
@@ -40,8 +40,11 @@ Project files should have no side effects, unless some of their commands are exe
 
 <!-- TODO: document configuration handlers -->
 
-All paths are in stored as absolute (starting with `/`), but are actually relative to root project directory. Path that is a directory ends with a `/`, otherwise it's considered a file. That means:
+All file paths should use `/` as directory separator, regardless of platform.
 
-- `/assets/` is a **directory** called `assets` that's in the project root.
-- `assets/` is a **directory** called `assets` that's relative to the structure within the project (routing/stones).
-- `/assets` is a **file** called `assets` in the project root.
+Paths should always be relative, and are considered relative to root project directory, or relative to root of the Router/Stone used. For getting sources from Stones/Routers [minimatch](https://github.com/isaacs/minimatch/) is used.
+
+Path that is a directory ends with a `/`, otherwise it's considered a file. That means:
+
+- `assets/` is a **directory** called `assets`.
+- `assets` is a **file** called `assets`.

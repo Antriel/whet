@@ -8,19 +8,33 @@ class Files extends Stone<FilesConfig> {
         this.config.recursive = true;
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
-        var sources:Array<Promise<Array<SourceData>>> = [for (pathString in makeArray(config.paths)) {
-            var path:SourceId = pathString;
+    override function list():Promise<Array<SourceId>> { // TODO deduplicate
+        var paths = [for (path in makeArray(config.paths)) {
             if (path.isDir()) {
-                Utils.listDirectoryFiles(cwdPath(pathString), config.recursive).then(arr -> [
+                Utils.listDirectoryFiles(cwdPath(path), config.recursive).then(arr -> arr.map(file -> {
+                    // `file` is CWD relative.
+                    var pathId = (file:SourceId).fromCwdPath(project);
+                    pathId.getRelativeTo(path);
+                }));
+            } else {
+                Promise.resolve([path.withExt]);
+            }
+        }];
+        return Promise.all(paths).then(allPaths -> Lambda.flatten(allPaths));
+    }
+
+    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+        var sources:Array<Promise<Array<SourceData>>> = [for (path in makeArray(config.paths)) {
+            if (path.isDir()) {
+                Utils.listDirectoryFiles(cwdPath(path), config.recursive).then(arr -> [
                     for (file in arr) { // `file` is CWD relative.
-                        var pathId:SourceId = SourceId.fromCwdPath(file, project);
-                        var id:SourceId = pathId.relativeTo(path);
-                        SourceData.fromFile(cast id, file, cast pathId);
+                        var pathId = (file:SourceId).fromCwdPath(project);
+                        var id = pathId.getRelativeTo(path);
+                        SourceData.fromFile(id, file, pathId);
                     }
                 ]).then(f -> (cast Promise.all(f):Promise<Array<SourceData>>));
             } else {
-                SourceData.fromFile(path.withExt, cwdPath(cast path), cast path).then(src -> [src]);
+                SourceData.fromFile(path.withExt, cwdPath(path), path).then(src -> [src]);
             }
         }];
         return Promise.all(sources).then(allSources -> Lambda.flatten(allSources));
@@ -31,7 +45,7 @@ class Files extends Stone<FilesConfig> {
 typedef FilesConfig = StoneConfig & {
 
     /** Can be either a file, or a directory. */
-    var paths:MaybeArray<String>;
+    var paths:MaybeArray<SourceId>;
 
     /** Whether to recurse directories. Defaults to `true`. */
     @:optional var recursive:Bool;

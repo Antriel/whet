@@ -53,13 +53,14 @@ class Server extends Stone<ServerConfig> {
         // Remove search params for now.
         final searchIndex = req.url.indexOf('?');
         var id:SourceId = js.Syntax.code('decodeURI({0})', searchIndex > 0 ? req.url.substring(0, searchIndex) : req.url);
+        if (startsWithSlash(id)) id = id.substring(1);
         switch req.method {
             case "GET":
                 if (id.isDir()) id.withExt = "index.html";
                 else if (id.ext == '') id = '$id/index.html';
-                router.get(cast id).then(routeResult -> {
+                router.get(id).then(routeResult -> {
                     var sourcePromise = if (routeResult.length > 0) routeResult[0].get();
-                    else if (routeDynamic != null) routeDynamic(cast id);
+                    else if (routeDynamic != null) routeDynamic(id);
                     else Promise.resolve(null);
                     sourcePromise.then(source -> {
                         if (source == null) {
@@ -82,7 +83,7 @@ class Server extends Stone<ServerConfig> {
                     }).catchError(e -> err(e));
                 }).catchError(e -> err(e));
             case "PUT":
-                var cmd = [id.toCwdPath('/')];
+                var cmd = [id.toCwdPath('./')];
                 var body = '';
                 req.on('data', chunk -> body += chunk);
                 req.on('end', () -> {

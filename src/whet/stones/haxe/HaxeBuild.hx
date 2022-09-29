@@ -12,7 +12,7 @@ class HaxeBuild extends Stone<BuildConfig> {
     public function build():Promise<Nothing> {
         Log.info("Building Haxe project.");
         return new Promise(function(res, rej) {
-            final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toCwdPath('/'));
+            final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toCwdPath('./'));
             var cmd = Lambda.flatten(config.hxml.getBuildArgs());
             cmd.unshift(if (config.useNpx) 'npx haxe' else 'haxe');
             cmd = cmd.map(c -> StringTools.replace(c, '"', '\\"'));
@@ -38,7 +38,7 @@ class HaxeBuild extends Stone<BuildConfig> {
             var path = pathId.toCwdPath(project);
             // Clear the file, so if compilation fails, we don't serve old version.
             return Utils.deleteAll(path).then(_ -> build()).then(_ -> {
-                SourceData.fromFile(cast pathId.withExt, path, cast pathId).then(file -> {
+                SourceData.fromFile(pathId.withExt, path, pathId).then(file -> {
                     return [file];
                 });
             });
@@ -59,7 +59,7 @@ class HaxeBuild extends Stone<BuildConfig> {
 
     override function generateHash():Promise<SourceHash> {
         // Not perfect, as it doesn't detect changes to library versions, but good enough.
-        var paths = makeArray(config.hxml.config.paths).map(path -> (path:SourceId).toCwdPath(config.hxml.project));
+        var paths = makeArray(config.hxml.config.paths).map(path -> path.toCwdPath(config.hxml.project));
         return Promise.all([config.hxml.getHash(), SourceHash.fromFiles(paths)])
             .then(r -> SourceHash.merge(...cast r));
     }

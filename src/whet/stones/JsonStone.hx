@@ -17,7 +17,7 @@ class JsonStone extends Stone<JsonStoneConfig> {
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
         var obj:DynamicAccess<Dynamic> = { }
         for (field => val in data) obj[field] = val; // Copy our data first.
-        return new Router(config.mergeFiles).get().then(list -> Promise.all(list.map(r -> r.get())))
+        return config.mergeFiles.get().then(list -> Promise.all(list.map(r -> r.get())))
             .then(dataArr -> {
                 for (data in dataArr) {
                     var file:DynamicAccess<Dynamic> = haxe.Json.parse(data.data.toString());
@@ -28,7 +28,7 @@ class JsonStone extends Stone<JsonStoneConfig> {
     }
 
     override function generateHash():Promise<SourceHash> {
-        return new Router(config.mergeFiles).getHash().then(hash -> hash.add(SourceHash.fromString(haxe.Json.stringify(data))));
+        return config.mergeFiles.getHash().then(hash -> hash.add(SourceHash.fromString(haxe.Json.stringify(data))));
     }
 
     override function list():Promise<Array<SourceId>>
@@ -36,6 +36,7 @@ class JsonStone extends Stone<JsonStoneConfig> {
 
     override function initConfig() {
         if (config.name == null) config.name = 'data.json';
+        if (config.mergeFiles == null) config.mergeFiles = new Router();
         super.initConfig();
     }
 
@@ -44,6 +45,6 @@ class JsonStone extends Stone<JsonStoneConfig> {
 typedef JsonStoneConfig = StoneConfig & {
 
     public var ?name:String;
-    public var ?mergeFiles:RoutePathType;
+    public var ?mergeFiles:Router;
 
 }

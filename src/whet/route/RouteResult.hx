@@ -12,7 +12,7 @@ package whet.route;
     public final source:AnyStone;
 
     public function get():Promise<SourceData> {
-        return source.getSource().then(data -> data.get(cast sourceId));
+        return source.getSource().then(data -> data.get(sourceId));
     }
 
 }

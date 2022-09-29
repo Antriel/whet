@@ -15,19 +15,19 @@ class ZipStone extends Stone<ZipConfig> {
     }
 
     override function generateHash():Promise<SourceHash> {
-        return new Router(config.sources).getHash().then(hash -> {
-            SourceHash.fromString((cast config.filename + config.level)).add(hash);
+        return config.sources.getHash().then(hash -> {
+            SourceHash.fromString(config.filename + config.level).add(hash);
         });
     }
 
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Zipping files.');
         final level = config.level;
-        return new Router(config.sources).get().then(files -> {
+        return config.sources.get().then(files -> {
             Promise.all([for (file in files) file.get().then(data -> {
                 final bytes = data.data.hxToBytes();
                 final entry:haxe.zip.Entry = {
-                    fileName: file.serveId.toCwdPath('/'),
+                    fileName: file.serveId.toCwdPath('./'),
                     fileSize: data.data.length,
                     fileTime: Date.fromTime(data.source.ctime * 1000),
                     compressed: false,
@@ -54,7 +54,7 @@ class ZipStone extends Stone<ZipConfig> {
 
 typedef ZipConfig = StoneConfig & {
 
-    var sources:RoutePathType;
+    var sources:Router;
     /* Defaults to `'data.zip'`. */
     var ?filename:String;
     /* Zip compression level. Defaults to 9. */

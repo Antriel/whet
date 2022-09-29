@@ -3,6 +3,7 @@ package whet;
 import js.node.Buffer;
 import js.node.Fs;
 import whet.Stone;
+import whet.magic.MinimatchType;
 
 class Source {
 
@@ -36,12 +37,12 @@ class Source {
     }
 
     /**
-     * Returns first result if `id` is null, or one equals to it.
+     * Returns first result if `pattern` is null, or first one it matches.
      */
-    public function get(?id:String):SourceData {
-        return if (id == null) data[0] else {
-            final sid = (id:SourceId);
-            Lambda.find(data, entry -> entry.id == sid);
+    public function get(?pattern:MinimatchType):SourceData {
+        return if (pattern == null) data[0] else {
+            final filter = makeMinimatch(pattern);
+            Lambda.find(data, entry -> filter.match(entry.id));
         }
     }
 
