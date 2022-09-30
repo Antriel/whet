@@ -22,8 +22,8 @@ class Router {
      * Find data sources routed under `pattern`.
      * @param pattern A glob pattern to search for.
      */
-    public function get(pattern:MinimatchType = '**'):Promise<Array<RouteResult>> {
-        return getResults(new Filters(makeMinimatch(pattern)), []);
+    public function get(pattern:MinimatchType = null):Promise<Array<RouteResult>> {
+        return getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null), []);
     }
 
     function getResults(mainFilters:Filters, results:Array<RouteResult>):Promise<Array<RouteResult>> {
@@ -64,7 +64,7 @@ class Router {
     /**
      * Get combined hash of all sources that fit the `pattern`.
      */
-    public function getHash(pattern:MinimatchType = '**'):Promise<SourceHash> {
+    public function getHash(pattern:MinimatchType = null):Promise<SourceHash> {
         return get(pattern).then(items -> {
             var uniqueStones = [];
             for (item in items)
@@ -87,7 +87,7 @@ class Router {
             });
     }
 
-    public function listContents(pattern:MinimatchType = '**'):Promise<String> {
+    public function listContents(pattern:MinimatchType = null):Promise<String> {
         return get(pattern).then(files -> {
             var ids = files.map(f -> f.serveId);
             ids.sort((a, b) -> a.compare(b));
@@ -101,7 +101,7 @@ typedef Filter = {pathSoFar:Array<String>, filter:Minimatch, inProgress:Bool, re
 
 abstract Filters(Array<Filter>) from Array<Filter> {
 
-    public inline function new(filter:Minimatch) { // TODO allow null minimatch instead of "**", and just ignore the checks.
+    public inline function new(filter:Minimatch) {
         this = [{ pathSoFar: [], filter: filter, inProgress: true, remDirs: [] }];
     }
 
