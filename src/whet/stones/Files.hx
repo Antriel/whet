@@ -8,36 +8,44 @@ class Files extends Stone<FilesConfig> {
         this.config.recursive = true;
     }
 
-    override function list():Promise<Array<SourceId>> { // TODO deduplicate
-        var paths = [for (path in makeArray(config.paths)) {
-            if (path.isDir()) {
-                Utils.listDirectoryFiles(cwdPath(path), config.recursive).then(arr -> arr.map(file -> {
-                    // `file` is CWD relative.
-                    var pathId = (file:SourceId).fromCwdPath(project);
-                    pathId.getRelativeTo(path);
-                }));
-            } else {
-                Promise.resolve([path.withExt]);
-            }
-        }];
-        return Promise.all(paths).then(allPaths -> Lambda.flatten(allPaths));
+    override function list():Promise<Array<SourceId>> {
+        return walk(
+            (path) -> path.withExt,
+            (dir, dirFile) -> fromCwd(dirFile, dir).id
+        );
     }
 
     function generate(hash:SourceHash):Promise<Array<SourceData>> {
-        var sources:Array<Promise<Array<SourceData>>> = [for (path in makeArray(config.paths)) {
-            if (path.isDir()) {
-                Utils.listDirectoryFiles(cwdPath(path), config.recursive).then(arr -> [
-                    for (file in arr) { // `file` is CWD relative.
-                        var pathId = (file:SourceId).fromCwdPath(project);
-                        var id = pathId.getRelativeTo(path);
-                        SourceData.fromFile(id, file, pathId);
-                    }
-                ]).then(f -> (cast Promise.all(f):Promise<Array<SourceData>>));
-            } else {
-                SourceData.fromFile(path.withExt, cwdPath(path), path).then(src -> [src]);
+        return walk(
+            (path) -> SourceData.fromFile(path.withExt, cwdPath(path), path),
+            (dir, dirFile) -> {
+                var p = fromCwd(dirFile, dir);
+                SourceData.fromFile(p.id, dirFile, p.pathId);
             }
-        }];
-        return Promise.all(sources).then(allSources -> Lambda.flatten(allSources));
+        ).then(fileProms -> cast Promise.all(fileProms));
+    }
+
+    inline function walk<T>(onFile:SourceId->T, onDirFile:SourceId->SourceId->T):Promise<Array<T>> {
+        var files:Array<T> = [];
+        var dirs = [];
+        for (path in makeArray(config.paths)) {
+            if (path.isDir()) {
+                dirs.push(Utils.listDirectoryFiles(cwdPath(path), config.recursive).then(arr -> for (file in arr) {
+                    files.push(onDirFile(path, file));
+                }));
+            } else {
+                files.push(onFile(path));
+            }
+        }
+        return Promise.all(dirs).then(_ -> files);
+    }
+
+    inline function fromCwd(file:SourceId, dir:SourceId) {
+        var pathId = (file:SourceId).fromCwdPath(project); // `file` is CWD relative.
+        return {
+            pathId: pathId,
+            id: pathId.getRelativeTo(dir)
+        }
     }
 
 }
