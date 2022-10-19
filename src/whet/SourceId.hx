@@ -110,20 +110,20 @@ import js.node.Path.posix as Path;
         return Path.relative(rootStr, absPath);
     }
 
+    public static inline function normalize(str:String) {
+        if (str.length > 0) {
+            str = Path.normalize(str);
+            str = StringTools.replace(str, '\\', '/');
+        }
+        return str;
+    }
+
 }
 
 @:forward abstract RootDir(SourceId) from String from SourceId to SourceId {
 
     @:from public static function fromProject(p:Project):RootDir return p.rootDir;
 
-}
-
-inline function normalize(str:String) {
-    if (str.length > 0) {
-        str = Path.normalize(str);
-        str = StringTools.replace(str, '\\', '/');
-    }
-    return str;
 }
 
 inline function startsWithSlash(str:String) {

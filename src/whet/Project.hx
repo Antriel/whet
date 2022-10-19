@@ -35,7 +35,7 @@ class Project {
             js.Syntax.code('Error').prepareStackTrace = oldValue;
             file = js.Syntax.code('decodeURI({0})', file);
             file = StringTools.replace(file, 'file:///', '');
-            rootDir = (normalize(js.node.Path.relative(js.Node.process.cwd(), file)):SourceId).dir;
+            rootDir = (IdUtils.normalize(js.node.Path.relative(js.Node.process.cwd(), file)):SourceId).dir;
             // TODO write tests for this.
         } else rootDir = config.rootDir;
         cache = config.cache == null ? new CacheManager(this) : config.cache;
