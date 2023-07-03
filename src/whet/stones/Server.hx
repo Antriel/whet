@@ -19,6 +19,12 @@ class Server extends Stone<ServerConfig> {
     /** Starts a static server hosting attached resources. */
     public function serve() {
         final server = Http.createServer(handler);
+        var nextRetry = 500;
+        server.on('error', err -> {
+            Log.error('Failed to open a server. Retrying in ${nextRetry}ms.', { error: err });
+            js.Node.setTimeout(() -> server.listen(config.port), nextRetry);
+            nextRetry *= 2;
+        });
         server.listen(config.port, () -> Log.info('Started web server.', { port: config.port }));
     }
 

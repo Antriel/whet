@@ -6,6 +6,7 @@
 -cp src
 -cp externs
 --dce full
+-w -WDeprecated
 --main whet.Whet
 whet.Project
 whet.route.Router
