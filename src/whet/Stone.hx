@@ -227,7 +227,7 @@ abstract class Stone<T:StoneConfig> {
     private inline function get_cache() return project.cache;
 
     @:keep public function toString():String {
-        return '$id:${getTypeName(this))}';
+        return '$id:${getTypeName(this)}';
     }
 
 }

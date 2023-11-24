@@ -71,7 +71,8 @@ private function initProjects() {
         var promises:Array<Promise<Any>> = [];
         for (p in Project.projects) if (p.onInit != null) {
             Log.trace('Initializing project.', { project: p.id });
-            var prom = p.onInit(program.opts());
+            p.config = program.opts();
+            var prom = p.onInit(p.config);
             if (prom != null) promises.push(prom);
         }
         Promise.all(promises);

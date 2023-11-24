@@ -12,6 +12,8 @@ class Project {
     public final cache:CacheManager = null;
     public final stones:Array<AnyStone> = [];
     public var onInit:(config:Dynamic) -> Promise<Any>;
+    /** The object passed to `onInit`. */
+    public var config:Dynamic;
 
     @:allow(whet) private final options:Array<commander.Option>;
 
