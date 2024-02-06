@@ -1,6 +1,6 @@
 {
     "name": "whet",
-    "version": "0.0.26",
+    "version": "0.0.27",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
         "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
