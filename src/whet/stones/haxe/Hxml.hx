@@ -69,7 +69,9 @@ class Hxml extends Stone<HxmlConfig> {
     }
 
     function getPlatform():Array<String> {
-        var path = getBuildExportPath().toCwdPath('./'); // Not using `project` rel path, as we launch haxe in correct cwd.
+        var path = getBuildExportPath(); // Relative to project.
+        path = js.node.Path.resolve(build.project.rootDir, path); // Absolute based on project root.
+        path = js.node.Path.relative(build.config.cwd, path); // Haxe build CWD relative.
         return switch config.platform {
             case null: [];
             case JS: ['-js', path];

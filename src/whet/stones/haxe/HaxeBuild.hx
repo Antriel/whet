@@ -6,18 +6,19 @@ class HaxeBuild extends Stone<BuildConfig> {
 
     override function initConfig() {
         if (config.cacheStrategy == null) config.cacheStrategy = cache.defaultFileStrategy;
+        config.cwd ??= js.node.Path.join(js.Node.process.cwd(), project.rootDir.toCwdPath('./'));
     }
 
     /** Build the given hxml. */
     public function build():Promise<Nothing> {
-        Log.info("Building Haxe project.");
+        final startTime = js.lib.Date.now();
+        Log.info('Building Haxe project (id "${config.id}").');
         return new Promise(function(res, rej) {
-            final cwd = js.node.Path.join(js.Node.process.cwd(), project.rootDir.toCwdPath('./'));
             var cmd = Lambda.flatten(config.hxml.getBuildArgs());
             cmd.unshift(if (config.useNpx) 'npx haxe' else 'haxe');
             cmd = cmd.map(c -> StringTools.replace(c, '"', '\\"'));
             js.node.ChildProcess.exec(cmd.join(' '), cast {
-                cwd: cwd,
+                cwd: config.cwd,
                 windowsHide: true
             }, function(err:js.lib.Error, stdout, stderr) {
                 if (err != null) {
@@ -25,7 +26,7 @@ class HaxeBuild extends Stone<BuildConfig> {
                     haxeError.name = "Haxe Build Error";
                     rej(haxeError);
                 } else {
-                    Log.info("Haxe build successful.");
+                    Log.info('Haxe build successful (id "${config.id}" in ${js.lib.Date.now() - startTime} ms).');
                     res(null);
                 }
             });
@@ -71,5 +72,6 @@ typedef BuildConfig = StoneConfig & {
     var hxml:Hxml;
     var ?useNpx:Bool;
     var ?filename:String;
+    var ?cwd:String;
 
 }
