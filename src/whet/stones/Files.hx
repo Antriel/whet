@@ -44,7 +44,7 @@ class Files extends Stone<FilesConfig> {
         var pathId = (file:SourceId).fromCwdPath(project); // `file` is CWD relative.
         return {
             pathId: pathId,
-            id: pathId.getRelativeTo(dir)
+            id: dir == '/' ? pathId : pathId.getRelativeTo(dir)
         }
     }
 
