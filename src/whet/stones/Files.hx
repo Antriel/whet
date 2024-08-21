@@ -5,7 +5,7 @@ import whet.magic.MaybeArray.makeArray;
 class Files extends Stone<FilesConfig> {
 
     override function initConfig() {
-        this.config.recursive = true;
+        this.config.recursive ??= true;
     }
 
     override function list():Promise<Array<SourceId>> {
