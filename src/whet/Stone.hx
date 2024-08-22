@@ -259,6 +259,8 @@ typedef StoneConfig = {
      */
     var ?dependencies:whet.magic.MaybeArray<AnyStone>;
 
+    // Note: See `SourceHash.fromConfig` when adding fields here.
+
 }
 
 typedef AnyStone = Stone<Dynamic>;

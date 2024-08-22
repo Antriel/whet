@@ -54,6 +54,35 @@ class SourceHash {
         return fromBytes(Buffer.from(data));
     }
 
+    /**
+     * Converts `obj` to string via JSON.stringify, defaults to 'null' if undefined to prevent
+     * errors. The string is then converted to hash. See also `fromConfig`.
+     */
+    @:keep public static function fromStringify(obj:Dynamic):SourceHash {
+        return fromBytes(Buffer.from(haxe.Json.stringify(obj) ?? 'null'));
+    }
+
+    /**
+     * Convert a Stone config into hash by ignoring the base `StoneConfig` fields
+     * and anything inside `ignoreList`, getting hash of `Stone` and `Router` instances,
+     * and applying `fromStringify` on the rest.
+     * Only checks keys at root level, no deep inspection is done.
+     */
+    @:keep public static function fromConfig(obj:haxe.DynamicAccess<Dynamic>,
+            ?ignoreList:Array<String>):Promise<SourceHash> {
+        var keys = [];
+        var hashes = [for (key => val in obj) switch key {
+            case 'cacheStrategy' | 'id' | 'project' | 'dependencies': continue;
+            case key if (ignoreList != null && ignoreList.contains(key)): continue;
+            case _:
+                keys.push(key);
+                if (val is Stone) (val:AnyStone).getHash();
+                else if (val is Router) (val:Router).getHash();
+                else cast SourceHash.fromStringify(val);
+        }];
+        return Promise.all(hashes).then(hashes -> merge(...hashes));
+    }
+
     public function add(hash:SourceHash):SourceHash {
         var data = Buffer.alloc(HASH_LENGTH * 2);
         this.bytes.copy(data, 0, 0, HASH_LENGTH);
