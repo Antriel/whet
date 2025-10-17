@@ -99,6 +99,35 @@ class Server extends Stone<ServerConfig> {
                         res.end();
                     }).catchError(e -> err(e));
                 });
+            case "POST":
+                final stoneId = id.toCwdPath('./');
+                var stone = Lambda.find(project.stones, s -> s.id == stoneId);
+                if (stone == null) err('Could not find stone with such id.');
+                else {
+                    var body = '';
+                    req.on('data', chunk -> body += chunk);
+                    req.on('end', () -> {
+                        final request = haxe.Json.parse(body);
+                        if (request.config != null) { // A bit naive, but will do for now.
+                            for (field in Reflect.fields(stone.config))
+                                Reflect.setField(stone.config, field, Reflect.field(request.config, field));
+                        }
+                        if (request.getSource) {
+                            stone.getSource().then(src -> {
+                                var resJson = {};
+                                for (data in src.data) { // Ew. But, it works.
+                                    Reflect.setField(resJson, data.id, data.data.toString('base64'));
+                                }
+                                res.writeHead(200, config.headers);
+                                res.write(haxe.Json.stringify(resJson), 'utf-8');
+                                res.end();
+                            }).catchError(e -> err(e));
+                        } else {
+                            res.writeHead(200, config.headers);
+                            res.end();
+                        }
+                    });
+                }
             case "OPTIONS":
                 res.writeHead(200, this.config.headers);
                 res.end();
