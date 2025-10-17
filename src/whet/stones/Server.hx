@@ -62,30 +62,49 @@ class Server extends Stone<ServerConfig> {
         if (startsWithSlash(id)) id = id.substring(1);
         switch req.method {
             case "GET":
-                if (id.isDir()) id.withExt = "index.html";
-                else if (id.ext == '') id = '$id/index.html';
-                router.get(id).then(routeResult -> {
-                    var sourcePromise = if (routeResult.length > 0) routeResult[0].get();
-                    else if (routeDynamic != null) routeDynamic(id);
-                    else Promise.resolve(null);
-                    sourcePromise.then(source -> {
-                        if (source == null) {
-                            res.writeHead(404, "File not found.");
+                // Handle directory paths intelligently.
+                var isDirOrNoExt = id.isDir() || id.ext == '';
+                var queryPromise:Promise<Array<whet.route.RouteResult>> = if (isDirOrNoExt) {
+                    // First, check what's available under this directory.
+                    var searchPattern = if (id.isDir()) id + '**' else id + '/**';
+                    router.get(searchPattern);
+                } else {
+                    Promise.resolve([]);
+                }
+
+                queryPromise.then(dirResults -> {
+                    // If we found exactly one result under this directory, use it.
+                    if (isDirOrNoExt && dirResults.length == 1) {
+                        id = dirResults[0].serveId;
+                    } else if (isDirOrNoExt) {
+                        // Fall back to index.html
+                        if (id.isDir()) id.withExt = "index.html";
+                        else if (id.ext == '') id = '$id/index.html';
+                    }
+
+                    router.get(id).then(routeResult -> {
+                        var sourcePromise = if (routeResult.length > 0) routeResult[0].get();
+                        else if (routeDynamic != null) routeDynamic(id);
+                        else Promise.resolve(null);
+                        sourcePromise.then(source -> {
+                            if (source == null) {
+                                res.writeHead(404, "File not found.");
+                                res.end();
+                                return;
+                            }
+                            var headers:DynamicAccess<String> = {
+                                'Content-Type': Mime.getType(id.ext.toLowerCase()),
+                                'Last-Modified': new js.lib.Date(source.source.ctime * 1000).toUTCString(),
+                                'Content-Length': Std.string(source.data.length),
+                                'Cache-Control': 'no-store, no-cache',
+                            }
+                            // TODO last modified should be the file stat.mtime, if it has a file and it's not cached.
+                            // TODO instead of global no-cache, it would be nice if we had revalidation instead.
+                            if (config.headers != null) for (key => val in config.headers) headers[key] = val;
+                            res.writeHead(200, headers);
+                            res.write(source.data, 'binary');
                             res.end();
-                            return;
-                        }
-                        var headers:DynamicAccess<String> = {
-                            'Content-Type': Mime.getType(id.ext.toLowerCase()),
-                            'Last-Modified': new js.lib.Date(source.source.ctime * 1000).toUTCString(),
-                            'Content-Length': Std.string(source.data.length),
-                            'Cache-Control': 'no-store, no-cache',
-                        }
-                        // TODO last modified should be the file stat.mtime, if it has a file and it's not cached.
-                        // TODO instead of global no-cache, it would be nice if we had revalidation instead.
-                        if (config.headers != null) for (key => val in config.headers) headers[key] = val;
-                        res.writeHead(200, headers);
-                        res.write(source.data, 'binary');
-                        res.end();
+                        }).catchError(e -> err(e));
                     }).catchError(e -> err(e));
                 }).catchError(e -> err(e));
             case "PUT":
