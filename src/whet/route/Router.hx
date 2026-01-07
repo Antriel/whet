@@ -63,14 +63,22 @@ class Router {
 
     /**
      * Get combined hash of all sources that fit the `pattern`.
+     * Includes matched serveIds in hash to capture filter effects.
      */
     public function getHash(pattern:MinimatchType = null):Promise<SourceHash> {
         return get(pattern).then(items -> {
             var uniqueStones = [];
-            for (item in items)
+            var serveIds = [];
+            for (item in items) {
                 if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
+                serveIds.push(item.serveId);
+            }
+            serveIds.sort((a, b) -> a.compare(b)); // Consistent ordering
             Promise.all(uniqueStones.map(s -> s.getHash()))
-                .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
+                .then((hashes:Array<SourceHash>) -> {
+                    // Include serveIds in hash to capture filter effects
+                    return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));
+                });
         });
     }
 

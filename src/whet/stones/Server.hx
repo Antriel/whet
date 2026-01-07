@@ -6,6 +6,8 @@ import js.node.http.IncomingMessage;
 import js.node.http.ServerResponse;
 import whet.extern.Mime;
 
+using StringTools;
+
 class Server extends Stone<ServerConfig> {
 
     public var router(get, never):Router;
@@ -77,6 +79,17 @@ class Server extends Stone<ServerConfig> {
                     if (isDirOrNoExt && dirResults.length == 1) {
                         id = dirResults[0].serveId;
                     } else if (isDirOrNoExt) {
+                        // If the original URL doesn't end with a slash, redirect to add it.
+                        // This ensures relative paths in served HTML work correctly.
+                        if (!req.url.substring(0, searchIndex > 0 ? searchIndex : req.url.length).endsWith('/')) {
+                            var redirectUrl = if (searchIndex > 0) req.url.substring(0, searchIndex)
+                                + '/'
+                                + req.url.substring(searchIndex);
+                            else req.url + '/';
+                            res.writeHead(301, 'Moved Permanently', { 'Location': redirectUrl });
+                            res.end();
+                            return;
+                        }
                         // Fall back to index.html
                         if (id.isDir()) id.withExt = "index.html";
                         else if (id.ext == '') id = '$id/index.html';
