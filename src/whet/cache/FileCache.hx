@@ -32,7 +32,9 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 files: [for (file in val.files) {
                     fileHash: SourceHash.fromHex(file.fileHash),
                     filePath: file.filePath,
-                    id: file.id
+                    id: file.id,
+                    mtime: file.mtime,
+                    size: file.size
                 }]
             }]);
         } catch (_) { }
@@ -46,9 +48,14 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             case _: null;
         }
         return Promise.all([for (data in source.data) data.getFilePathId(idOverride).then(filePath -> {
-            fileHash: SourceHash.fromBytes(data.data),
-            filePath: filePath,
-            id: data.id
+            var cwdPath = filePath.toCwdPath(rootDir);
+            HashCache.getStats(cwdPath).then(stats -> {
+                fileHash: SourceHash.fromBytes(data.data),
+                filePath: filePath,
+                id: data.id,
+                mtime: stats.mtime,
+                size: stats.size
+            });
         })]).then(files -> {
             hash: source.hash,
             ctime: source.ctime,
@@ -71,13 +78,34 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         }
         return Promise.all([for (file in value.files) new Promise(function(res, rej) {
             var path = file.filePath.toCwdPath(rootDir);
-            SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
-                if (sourceData == null || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
-                    rej('Invalid.');
-                } else res(sourceData);
-            }, err -> if (err is js.lib.Error && (err:Dynamic).code == 'ENOENT') rej('Invalid.');
-                else rej(err)
-            );
+            // First check mtime+size (fast stat-based validation)
+            Fs.stat(path, (statErr, stats) -> {
+                if (statErr != null) {
+                    if (statErr is js.lib.Error && (statErr:Dynamic).code == 'ENOENT') rej('Invalid.');
+                    else rej(statErr);
+                    return;
+                }
+
+                var mtimeMs:Float = (cast stats).mtimeMs;
+                var mtimeMatch = file.mtime != null && mtimeMs == file.mtime
+                    && Std.int(stats.size) == file.size;
+
+                if (mtimeMatch && !stone.ignoreFileHash) {
+                    // Mtime matches - trust cached hash, just read data without rehashing
+                    SourceData.fromFileSkipHash(file.id, path, file.filePath, file.fileHash)
+                        .then(res, rej);
+                } else {
+                    // Mtime changed or no mtime stored - fall back to hash validation
+                    SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
+                        if (sourceData == null
+                            || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
+                            rej('Invalid.');
+                        } else res(sourceData);
+                    }, err -> if (err is js.lib.Error && (err:Dynamic).code == 'ENOENT') rej('Invalid.');
+                        else rej(err)
+                    );
+                }
+            });
         })]).then(
             data -> new Source(cast data, value.hash, stone, value.ctime),
             rejected -> rejected == 'Invalid.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
@@ -147,7 +175,9 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 files: [for (file in val.files) {
                     fileHash: file.fileHash.toHex(),
                     filePath: file.filePath.toCwdPath('./'),
-                    id: file.id.toCwdPath('./')
+                    id: file.id.toCwdPath('./'),
+                    mtime: file.mtime,
+                    size: file.size,
                 }]
             }]);
             Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(
@@ -169,6 +199,8 @@ typedef FileCacheValue<H, S> = {
         final id:S;
         final fileHash:H;
         final filePath:S;
+        final ?mtime:Float;
+        final ?size:Int;
     }>;
 
 };

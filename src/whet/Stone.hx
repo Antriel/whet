@@ -186,6 +186,19 @@ abstract class Stone<T:StoneConfig> {
     }
 
     /**
+     * Optional filter describing what this Stone can produce.
+     * Used by Router to skip Stones that can't match a query.
+     * If null, Stone is assumed to potentially produce anything.
+     *
+     * This is a function (not a static value) because Stone outputs
+     * may depend on runtime config which can change externally.
+     * Override in subclasses to provide filtering optimization.
+     */
+    public function getOutputFilter():Null<OutputFilter> {
+        return null;  // Default: no filter, could produce anything
+    }
+
+    /**
      * Caches this resource under supplied `path` as a single copy.
      * @param path
      * If `path` is a directory, stores the file(s) under that path, using their standard names.
@@ -264,3 +277,20 @@ typedef StoneConfig = {
 }
 
 typedef AnyStone = Stone<Dynamic>;
+
+/**
+ * Describes what file types/patterns a Stone can produce.
+ * Used by Router to skip Stones that can't match a query.
+ */
+typedef OutputFilter = {
+
+    /**
+     * File extensions this Stone can produce (without dot). Null = any.
+     * Supports compound extensions like "png.meta.json" for metadata files.
+     */
+    var ?extensions:Array<String>;
+
+    /** Glob patterns for output files. Null = matches any file with valid extension. */
+    var ?patterns:Array<String>;
+
+};

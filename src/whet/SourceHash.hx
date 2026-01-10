@@ -2,6 +2,7 @@ package whet;
 
 import js.node.Buffer;
 import js.node.Fs;
+import whet.cache.HashCache;
 import whet.magic.MaybeArray;
 
 @:using(whet.SourceHash)
@@ -21,10 +22,7 @@ class SourceHash {
     }
 
     public static function fromFile(path:String):Promise<SourceHash> {
-        return new Promise((res, rej) -> Fs.readFile(path, (err, bytes) -> {
-            if (err != null) rej(err);
-            else res(fromBytes(bytes));
-        }));
+        return HashCache.get().getFileHash(path);
     }
 
     /**

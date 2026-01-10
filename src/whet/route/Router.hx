@@ -29,6 +29,8 @@ class Router {
     function getResults(mainFilters:Filters, results:Array<RouteResult>):Promise<Array<RouteResult>> {
         return new Promise((res, rej) -> {
             var allRouteProms = [];
+            var queryIsPattern = mainFilters.isWildcardQuery();
+
             for (route in routes) {
                 var routeFilters = mainFilters.clone(); // Clone filters so other routes aren't affected.
                 var possible = if (route.routeUnder.isDir()) routeFilters.step(route.routeUnder);
@@ -36,6 +38,22 @@ class Router {
 
                 if (!possible) continue;
                 if (route.filter != null || route.extractDirs != null) routeFilters.add(route.filter, route.extractDirs);
+
+                // Output filter check - skip sources that can't possibly match the query
+                var outputFilter:Null<OutputFilter> = null;
+                if (route.source is AnyStone) {
+                    outputFilter = (cast route.source:AnyStone).getOutputFilter();
+                } else if (route.source is Router) {
+                    outputFilter = (cast route.source:Router).getOutputFilter();
+                }
+
+                if (outputFilter != null) {
+                    var queryPattern = routeFilters.getQueryPattern();
+                    if (queryPattern != null &&
+                        !OutputFilterMatcher.couldMatch(queryPattern, outputFilter, queryIsPattern)) {
+                        continue;  // Skip this source entirely
+                    }
+                }
 
                 var prom:Promise<Any> = if (route.source is AnyStone) {
                     final stone:AnyStone = cast route.source;
@@ -76,6 +94,8 @@ class Router {
             serveIds.sort((a, b) -> a.compare(b)); // Consistent ordering
             Promise.all(uniqueStones.map(s -> s.getHash()))
                 .then((hashes:Array<SourceHash>) -> {
+                    // Sort hashes for consistent ordering (stone order in results is non-deterministic)
+                    hashes.sort((a, b) -> a.toString() < b.toString() ? -1 : a.toString() > b.toString() ? 1 : 0);
                     // Include serveIds in hash to capture filter effects
                     return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));
                 });
@@ -101,6 +121,48 @@ class Router {
             ids.sort((a, b) -> a.compare(b));
             ids.join('\n');
         });
+    }
+
+    /**
+     * Compute combined output filter from all routes.
+     * Must be dynamic (not cached) because Stone configs can change externally.
+     */
+    public function getOutputFilter():Null<OutputFilter> {
+        var allExtensions = new Array<String>();
+        var allPatterns = new Array<String>();
+        var hasUnfiltered = false;
+
+        for (route in routes) {
+            var childFilter:Null<OutputFilter> = null;
+
+            if (route.source is AnyStone) {
+                childFilter = (cast route.source:AnyStone).getOutputFilter();
+            } else if (route.source is Router) {
+                childFilter = (cast route.source:Router).getOutputFilter();
+            }
+
+            if (childFilter == null) {
+                hasUnfiltered = true;
+                break;  // Can't filter if any child is unfiltered
+            }
+
+            if (childFilter.extensions != null)
+                for (ext in childFilter.extensions)
+                    if (allExtensions.indexOf(ext) == -1) allExtensions.push(ext);
+
+            if (childFilter.patterns != null)
+                for (p in childFilter.patterns) {
+                    // Prepend route prefix to pattern
+                    var prefixed = Path.posix.join(route.routeUnder, p);
+                    allPatterns.push(prefixed);
+                }
+        }
+
+        if (hasUnfiltered) return null;
+        return {
+            extensions: allExtensions.length > 0 ? allExtensions : null,
+            patterns: allPatterns.length > 0 ? allPatterns : null
+        };
     }
 
 }
@@ -166,6 +228,21 @@ abstract Filters(Array<Filter>) from Array<Filter> {
             inProgress: f.inProgress,
             remDirs: f.remDirs.copy()
         });
+    }
+
+    /**
+     * Get the original query pattern string, or null if no filter.
+     */
+    public inline function getQueryPattern():Null<String> {
+        return if (this.length > 0 && this[0].filter != null) this[0].filter.pattern else null;
+    }
+
+    /**
+     * Check if the query is a wildcard pattern (contains * or ?).
+     */
+    public inline function isWildcardQuery():Bool {
+        var pattern = getQueryPattern();
+        return pattern != null && (pattern.indexOf('*') != -1 || pattern.indexOf('?') != -1);
     }
 
     inline function processParts(parts:Array<String>, f:Filter) {

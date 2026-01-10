@@ -1,6 +1,6 @@
 {
     "name": "whet",
-    "version": "0.0.32",
+    "version": "0.0.33",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
         "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
@@ -13,7 +13,9 @@
     "files": [
         "bin"
     ],
-    "bin": "bin/whet.js",
+    "bin": {
+        "whet": "bin/whet.js"
+    },
     "main": "bin/whet.js",
     "type": "module",
     "author": "Peter Achberger",

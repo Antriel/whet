@@ -63,10 +63,10 @@ class SourceData {
     var filePathId:SourceId = null; // Relative to project.
     var filePath:String = null; // CWD relative path.
 
-    private function new(id, data) {
+    private function new(id, data, ?knownHash:SourceHash) {
         this.data = data;
         this.id = id;
-        this.hash = SourceHash.fromBytes(data);
+        this.hash = knownHash != null ? knownHash : SourceHash.fromBytes(data);
     }
 
     /**
@@ -82,6 +82,27 @@ class SourceData {
                 rej(err);
             } else {
                 var source = fromBytes(id, buffer);
+                source.filePath = path;
+                source.filePathId = pathId;
+                res(source);
+            }
+        }));
+    }
+
+    /**
+     * Read file without recomputing hash. Used when mtime validation passed.
+     * @param id Path id relative to stone that generates it.
+     * @param path Actual path relative to CWD.
+     * @param pathId Path Id relative to project.
+     * @param knownHash The hash from cache (already validated via mtime).
+     */
+    public static function fromFileSkipHash(id:String, path:String, pathId:String, knownHash:SourceHash):Promise<SourceData> {
+        return new Promise((res, rej) -> Fs.readFile(path, (err, buffer) -> {
+            if (err != null) {
+                Log.error("File does not exist.", { id: id, path: path, error: err });
+                rej(err);
+            } else {
+                var source = new SourceData(id, buffer, knownHash);
                 source.filePath = path;
                 source.filePathId = pathId;
                 res(source);
@@ -128,3 +149,4 @@ class SourceData {
     inline function get_lengthKB() return Math.round(length / 1024);
 
 }
+
