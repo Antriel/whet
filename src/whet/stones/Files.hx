@@ -1,11 +1,21 @@
 package whet.stones;
 
+import whet.cache.HashCache;
 import whet.magic.MaybeArray.makeArray;
 
 class Files extends Stone<FilesConfig> {
 
     override function initConfig() {
         this.config.recursive ??= true;
+    }
+
+    override function generateHash():Promise<SourceHash> {
+        var hashCache = HashCache.get();
+        return walk(
+            (path) -> hashCache.getFileHash(cwdPath(path)),
+            (dir, dirFile) -> hashCache.getFileHash(dirFile)
+        ).then(hashProms -> cast Promise.all(hashProms))
+            .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
     }
 
     override function list():Promise<Array<SourceId>> {
