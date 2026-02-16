@@ -1,19 +1,15 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Overview
+# Overview
 
 Whet is a NodeJS-based tool for managing project assets and tooling using a flexible "everything-is-an-asset" approach with configurable caching. It's written in Haxe and compiles to JavaScript (ES6 modules).
 
-## Build Commands
+# Build Commands
 
 - **Build the project**: `haxe build.hxml` (compiles Haxe to JavaScript, no output on success build)
 - **Run a project**: `node bin/whet.js -p <project-file>` (default: `Project.mjs`)
 
 The compiled output is `bin/whet.js` which serves as both the CLI entry point and importable library.
 
-## Technology Stack
+# Technology Stack
 
 - **Language**: Haxe 4.3.4 (configured in `.haxerc`)
 - **Target**: JavaScript ES6 modules (`-D js-es=6` in build.hxml)
@@ -25,9 +21,9 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
   - `minimatch`: Glob pattern matching
   - `mime`: MIME type detection
 
-## Architecture
+# Architecture
 
-### Core Concepts
+## Core Concepts
 
 **Stones** are the fundamental building blocks. Each Stone represents a logical asset or functionality (e.g., a minified CSS file, a dev server). Stones can depend on other Stones, forming a dependency tree. All state is kept in a `config` object.
 
@@ -41,7 +37,7 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 
 **CacheManager** handles caching strategies (in-memory, file-based, or none) with configurable durability rules (by age, count, last use).
 
-### Source Files Structure
+## Source Files Structure
 
 - `src/whet/Whet.hx`: CLI entry point and command execution
 - `src/whet/Project.hx`: Project container and command registration
@@ -54,7 +50,7 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 - `src/whet/magic/`: Type system abstractions (StoneId, MaybeArray, RoutePathType, MinimatchType)
 - `externs/`: TypeScript definition conversions for Node.js libraries
 
-### Key Design Patterns
+## Key Design Patterns
 
 1. **Everything-is-an-asset**: All project resources (files, builds, configurations) are treated as Stones
 2. **Lazy generation**: Sources are only generated when needed and go through caching
@@ -62,21 +58,21 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 4. **Lock acquisition**: Stones use `acquire()` to prevent parallel generation of the same resource
 5. **Promise-based**: All async operations use Promises for consistency
 
-### Path Conventions
+## Path Conventions
 
 - All paths use `/` as separator (cross-platform)
 - Paths are relative to project root
 - Directory paths end with `/` (e.g., `assets/` is a directory, `assets` is a file)
 - `SourceId` is a type alias for relative paths
 
-### Command Chaining
+## Command Chaining
 
 Commands can be chained with `+`:
 ```bash
 node bin/whet.js -p Project.mjs command1 + command2
 ```
 
-## Creating New Stones
+# Creating New Stones
 
 Extend the abstract `Stone<T>` class:
 
@@ -91,7 +87,7 @@ Stones automatically:
 - Merge dependency hashes into their own hash
 - Lock during generation to prevent race conditions
 
-## Working with Haxe
+# Working with Haxe
 
 - **Type system**: Haxe is statically typed; use proper type annotations
 - **Abstracts**: Many types like `SourceId`, `StoneId`, `MaybeArray` are abstract types with compile-time transformations
