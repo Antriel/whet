@@ -133,7 +133,7 @@ class SourceData {
      */
     public function getFilePath(idOverride:SourceId = null):Promise<String> {
         return if (filePath == null) {
-            if (source == null) new js.lib.Error("Data without source.");
+            if (source == null) return Promise.reject(new js.lib.Error("Data without source."));
             var dir = source.getDirPath();
             // Only use `idOverride` fully if it's not a directory,
             // otherwise it's already handled in `getDirPath`, or rather `CacheManager.getDir`.
