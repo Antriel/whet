@@ -35,7 +35,21 @@ abstract class Stone<T:StoneConfig> {
         if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
         project.stones.push(this);
         initConfig();
-        id = if (config.id != null) makeStoneId(config.id) else makeStoneId(this);
+        final isExplicitId = config.id != null;
+        id = if (isExplicitId) makeStoneId(config.id) else makeStoneId(this);
+        // Auto-deduplicate implicit IDs; warn on explicit ID collisions.
+        // Note: `this` is already in project.stones but with id=null, so it won't match.
+        var duplicates = 0;
+        for (stone in project.stones) {
+            if (stone.id == id || (!isExplicitId && StringTools.startsWith(stone.id, id + ':')))
+                duplicates++;
+        }
+        if (duplicates > 0) {
+            if (isExplicitId)
+                Log.warn('Duplicate explicit Stone ID.', { id: id })
+            else
+                id = id + ':' + (duplicates + 1);
+        }
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
         addCommands();
     }

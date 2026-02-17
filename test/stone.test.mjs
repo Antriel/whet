@@ -103,3 +103,24 @@ test("Stone handleError fallback returns source data", async () => {
   assert.equal(source.get().data.toString("utf-8"), "fallback");
   await env.cleanup();
 });
+
+test("Duplicate explicit Stone IDs are preserved (not deduped)", async () => {
+  const env = await createTestProject("stone-dedup-explicit");
+  const a = new MockStone({ project: env.project, id: "shared" });
+  const b = new MockStone({ project: env.project, id: "shared" });
+
+  // Explicit IDs are kept as-is (a warning is logged)
+  assert.equal(a.id, "shared");
+  assert.equal(b.id, "shared");
+  await env.cleanup();
+});
+
+test("Stones with different IDs are not affected by dedup", async () => {
+  const env = await createTestProject("stone-no-dedup");
+  const a = new MockStone({ project: env.project, id: "alpha" });
+  const b = new MockStone({ project: env.project, id: "beta" });
+
+  assert.equal(a.id, "alpha");
+  assert.equal(b.id, "beta");
+  await env.cleanup();
+});
