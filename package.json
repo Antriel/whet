@@ -5,7 +5,7 @@
     "scripts": {
         "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
         "build": "npx haxe build.hxml",
-        "test": "node --test --test-isolation=none \"test/**/*.test.mjs\""
+        "test": "node --test \"test/**/*.test.mjs\""
     },
     "repository": {
         "type": "git",

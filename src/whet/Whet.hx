@@ -5,6 +5,11 @@ import whet.Log.LogLevel;
 var program = new commander.Command('whet');
 
 function main() {
+    // Only run CLI when executed directly, not when imported as a library.
+    final entryUrl = js.node.Url.pathToFileURL(js.Node.process.argv[1] ?? "").href;
+    final thisUrl:String = js.Syntax.code("new URL('../whet.js',import.meta.url).href");
+    if (entryUrl != thisUrl) return;
+
     program.enablePositionalOptions().passThroughOptions()
         .description('Project tooling.')
         .usage('[options] [command] [+ [command]...]')
