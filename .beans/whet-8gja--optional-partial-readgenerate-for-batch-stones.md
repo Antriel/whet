@@ -54,7 +54,7 @@ For MemoryCache, the Value is `Source`. Add `complete` field to `Source` directl
 **Partial request** (`getPartialSource(sourceId)`):
 1. Find entry by hash
 2. If entry exists and contains the requested sourceId -> return it (cache hit)
-3. If entry exists but doesn't contain sourceId, and `complete = true` -> sourceId doesn't exist in this stone
+3. If entry exists but doesn't contain sourceId, and `complete = true` -> return **null** (sourceId doesn't exist in this stone)
 4. If entry exists but doesn't contain sourceId, and `complete = false` -> generate just this output, add to entry
 5. If no entry -> generate just this output, create new partial entry
 
@@ -83,6 +83,17 @@ For MemoryCache, the Value is `Source`. Add `complete` field to `Source` directl
 **Why previous concerns are non-issues:**
 - "What if `list()` output changes between sessions?" — Stone hash would change, so partial entry wouldn't be found. Non-issue.
 - "Items generated at different times, is combined hash still valid?" — This path only works when `generateHash()` is implemented (input-based hash). If it's not, partial entries can't exist in the first place. Non-issue.
+
+## Missing-source semantics
+
+**Rule: "sourceId not found" = null, consistently.** This is a normal condition (Router tries multiple stones), not an error.
+
+- `Stone.getPartialSource(sourceId)` returns `Promise<Null<Source>>` — null means sourceId doesn't exist
+- `Cache.getPartial(...)` returns `Promise<Null<Source>>` — null means sourceId doesn't exist in a complete entry
+- `Source.filterTo(sourceId)` returns `Null<Source>` — null if sourceId not in data (not an empty Source)
+- `Project.getStoneSource(id, sourceId)` returns `Promise<Null<Source>>` — null means stone not found OR sourceId not found (already uses this pattern for stone-not-found)
+
+Errors (Promise rejection) are reserved for actual failures: generation crashed, IO errors, lock violations, etc.
 
 ## Stone API Changes
 
@@ -153,7 +164,7 @@ The `generateHash()` check is the **gating mechanism** — it happens here, befo
  * Otherwise falls back to full generation + filter.
  * Uses the same cache as getSource() — partial and full share the pool.
  */
-public final function getPartialSource(sourceId:SourceId):Promise<Source> {
+public final function getPartialSource(sourceId:SourceId):Promise<Null<Source>> {
     // Gate: check if we have an input-based hash. If not, partial caching
     // is impossible (hash depends on output bytes), so fall back to full gen + filter.
     return finalMaybeHash().then(hash -> {
@@ -222,7 +233,7 @@ When `BaseCache.get()` finds a partial entry (`complete = false`):
 ### `Cache.hx` — add to interface
 
 ```haxe
-public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Source>;
+public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Null<Source>>;
 ```
 
 ### `BaseCache.hx` — add `getPartial` method
@@ -230,9 +241,16 @@ public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDu
 Similar to `get()` but:
 - Uses the SAME hash (partial and full share the hash because both use `generateHash()`).
 - The hash is already known (non-null) — we only reach this path when `finalMaybeHash()` returned a value (gated in `Stone.getPartialSource`).
-- On cache hit: checks if the entry contains the requested sourceId. If yes, returns filtered Source. If entry is complete but sourceId not found, returns null/error.
-- On cache miss (entry doesn't have sourceId and `complete = false`): calls `generatePartialSource(sourceId, hash)`, then **adds the result to the existing entry** (mutable entry — append to file list, update cache).
+- On cache hit: checks if the entry contains the requested sourceId. If yes, returns filtered Source. If entry is complete but sourceId not found, returns **null**.
+- On cache miss (entry doesn't have sourceId and `complete = false`): calls `generatePartialSource(sourceId, hash)`, then **upserts the result into the existing entry** (see merge semantics below).
 - On no entry at all: calls `generatePartialSource(sourceId, hash)`, creates new entry.
+
+### Entry merge semantics (partial entry mutation)
+
+When adding partial generation results to an existing entry:
+- **Upsert by sourceId**, not blind append — replace existing file metadata if the sourceId already exists (defensive against duplicates), add if new.
+- **Set/propagate `complete` flag** — set to `true` when all outputs are present (after completion), keep `false` otherwise.
+- **FileCache: always `flush()` after in-place mutation** — current `set()` flow creates new values and persistence happens naturally. In-place mutation of an existing entry's file list bypasses that, so an explicit flush is required after every mutation.
 
 ### `BaseCache.hx` — modify `get` method (full generation path)
 
@@ -256,7 +274,7 @@ Similar to `get()` but:
 ### `CacheManager.hx` — add routing method
 
 ```haxe
-public function getPartialSource(stone:AnyStone, sourceId:SourceId):Promise<Source> {
+public function getPartialSource(stone:AnyStone, sourceId:SourceId):Promise<Null<Source>> {
     return switch stone.cacheStrategy {
         case None:
             stone.acquire(() -> stone.finalMaybeHash().then(hash ->
@@ -290,10 +308,11 @@ class Source {
         this.complete = complete;
     }
 
-    /** Filter to a single sourceId. Returns a Source containing only that entry (or empty). */
-    public function filterTo(sourceId:SourceId):Source {
+    /** Filter to a single sourceId. Returns null if sourceId not found. */
+    public function filterTo(sourceId:SourceId):Null<Source> {
         var filtered = data.filter(d -> d.id == sourceId);
-        return new Source(filtered, hash, origin, ctime, complete);
+        return if (filtered.length == 0) null
+            else new Source(filtered, hash, origin, ctime, complete);
     }
 }
 ```
@@ -402,6 +421,8 @@ Refactor `list()` to match the `generateHash()`/`getHash()` pattern: private `li
 - Cache completion: with `list()` (incremental), without (full replace)
 - Cache isolation: different sourceIds cached correctly within same entry
 - Gate check: stone without `generateHash` falls back to full gen + filter
+- Parallel partial requests: two different sourceIds on same stone/hash queued via lock, second finds first's result in entry, only generates its own
+- Duplicate-id prevention: request same sourceId twice, verify entry has exactly one copy (upsert, not append)
 
 ## TODO
 
