@@ -1,5 +1,8 @@
 package whet;
 
+import whet.Stone.OutputFilter;
+import whet.magic.StoneId.getTypeName;
+
 @:expose var addOption = commander.Option.new;
 
 @:expose
@@ -45,6 +48,22 @@ class Project {
         Log.info('New project created.', { project: this, projectCount: projects.length });
     }
 
+    public function getStone(id:String):Null<AnyStone> {
+        for (stone in stones) {
+            if (stone.id == id) return stone;
+        }
+        return null;
+    }
+
+    public function describeStones():Array<StoneDescription> {
+        return [for (stone in stones) {
+            id: stone.id,
+            className: getTypeName(stone),
+            outputFilter: stone.getOutputFilter(),
+            cacheStrategy: stone.cacheStrategy,
+        }];
+    }
+
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {
         var cmd = new commander.Command(name);
         if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
@@ -73,5 +92,14 @@ typedef ProjectConfig = {
      * Called before first command is executed, but after configuration was parsed.
      */
     public var ?onInit:(config:Dynamic) -> Promise<Any>;
+
+}
+
+typedef StoneDescription = {
+
+    var id:String;
+    var className:String;
+    var ?outputFilter:OutputFilter;
+    var ?cacheStrategy:CacheStrategy;
 
 }
