@@ -47,7 +47,7 @@ Add a `complete` flag:
 - `complete = true`: all stone outputs are present (equivalent to current behavior)
 - `complete = false`: only some outputs are present
 
-For MemoryCache, the Value is `Source`. Source would need a similar `complete` flag (or a wrapper).
+For MemoryCache, the Value is `Source`. Add `complete` field to `Source` directly (Source is already cache-aware with `origin`, `ctime`, `getDirPath`).
 
 ### Cache lookup behavior
 
@@ -66,29 +66,67 @@ For MemoryCache, the Value is `Source`. Source would need a similar `complete` f
 
 ### Completing a partial entry (full generation finds partial cache)
 
-This is the interesting case. Options for what happens when `getSource()` finds a partial cache entry:
+**Decision: Option B — generate only missing outputs, merge into entry.** Gracefully degrades when `list()` is not overridden.
 
-**Option A: Generate everything fresh, replace partial entry**
-- Simplest. Full generation always calls `generate(hash)` which produces all outputs.
-- The partial entry is replaced with the complete one. Partial files on disk are reused if they end up in the same directory.
-- Pro: No change to full generation path. Simple.
-- Con: Doesn't reuse partial work (though files on disk may overlap).
+**With `list()` overridden** (stone knows its full output set without generating):
+- Get full set of output IDs via `list()` (the private method, called directly by cache via `@:allow`)
+- Diff against what's already in the partial entry
+- Call `generatePartial()` for each missing sourceId
+- Merge results into the entry, mark `complete = true`
+- Maximum reuse, no redundant computation
 
-**Option B: Generate only missing outputs, merge into entry**
-- Requires `list()` to know the full set, and `generatePartial()` to produce individual missing items.
-- For each output in `list()` not in the partial entry: call `generatePartial()`, add to entry. Mark complete.
-- Pro: Maximum reuse. No redundant computation.
-- Con: Requires both `list()` and `generatePartial()` to be implemented. More complex merge logic. What if `list()` output changes between sessions (e.g., input files added)?
-- Con: The merged Source would have items generated at different times — is the combined hash still valid? (Yes, if using `generateHash()` — the hash is input-based, not output-based.)
+**Without `list()` overridden** (default returns `null` — stone can't enumerate without generating):
+- `list()` returns null, so we can't determine what's missing
+- Fall back: call `generateSource(hash)` to get everything, replace the partial entry with complete result
+- This is effectively Option A behavior, but it's the natural fallback, not a separate code path
 
-**Option C: Validate partial files, generate everything, skip already-valid files**
-- Call `generate(hash)` as normal. But during file writing (in FileCache), check if a file already exists with matching fileHash. If so, skip writing.
-- Pro: Full generation path unchanged. Disk I/O savings but still processes everything in memory.
-- Con: Doesn't save computation time (stone still generates all). Only saves disk writes.
-
-**Recommendation**: Start with **Option A** for simplicity. Annotate as future optimization point. Option B can be added later for stones that implement both `list()` and `generatePartial()`, once we have a real use case (SharpStone).
+**Why previous concerns are non-issues:**
+- "What if `list()` output changes between sessions?" — Stone hash would change, so partial entry wouldn't be found. Non-issue.
+- "Items generated at different times, is combined hash still valid?" — This path only works when `generateHash()` is implemented (input-based hash). If it's not, partial entries can't exist in the first place. Non-issue.
 
 ## Stone API Changes
+
+### Refactor: `list()` / `listIds()` split
+
+Currently `list()` is public with a default that calls `getSource()`. Refactor to match the `generateHash()`/`getHash()` pattern:
+
+**Current:**
+```haxe
+public function list():Promise<Array<SourceId>> {
+    return getSource().then(source -> source.data.map(sd -> sd.id));
+}
+```
+
+**New — private `list()` with null default:**
+```haxe
+/**
+ * Optional override: return the list of output sourceIds this stone produces,
+ * without triggering generation. Return null if unknown (default).
+ * Used by cache for partial entry completion and by listIds() as fast path.
+ */
+private function list():Promise<Null<Array<SourceId>>> {
+    return Promise.resolve(null);
+}
+```
+
+**New — public `listIds()` with fallback:**
+```haxe
+/**
+ * Public API for getting output IDs. Calls list(), falls back to
+ * full generation if list() returns null.
+ */
+public final function listIds():Promise<Array<SourceId>> {
+    return list().then(ids -> {
+        if (ids != null) return ids;
+        return getSource().then(source -> source.data.map(sd -> sd.id));
+    });
+}
+```
+
+**Impact on existing code:**
+- 6 stones override `list()` (Files, JsonStone, Zip, RemoteFile, Hxml, HaxeBuild) — they keep working, their overrides now return non-null lists as before, just the method is now private
+- 3 call sites switch from `list()` to `listIds()`: `Router.hx:60`, `Project.hx:69`, `HaxeBuild.hx:58` (`super.list()` → `super.listIds()`)
+- Cache completion calls `list()` directly via `@:allow` — gets null if stone can't enumerate cheaply, gets the list if it can
 
 ### New optional override: `generatePartial`
 
@@ -106,6 +144,8 @@ private function generatePartial(sourceId:SourceId, hash:SourceHash):Promise<Nul
 
 ### New public final: `getPartialSource`
 
+The `generateHash()` check is the **gating mechanism** — it happens here, before entering the cache:
+
 ```haxe
 /**
  * Get source for a single output by sourceId.
@@ -114,17 +154,68 @@ private function generatePartial(sourceId:SourceId, hash:SourceHash):Promise<Nul
  * Uses the same cache as getSource() — partial and full share the pool.
  */
 public final function getPartialSource(sourceId:SourceId):Promise<Source> {
-    return cache.getPartialSource(this, sourceId);
+    // Gate: check if we have an input-based hash. If not, partial caching
+    // is impossible (hash depends on output bytes), so fall back to full gen + filter.
+    return finalMaybeHash().then(hash -> {
+        if (hash == null)
+            return getSource().then(source -> source.filterTo(sourceId));
+        else
+            return cache.getPartialSource(this, sourceId);
+    });
 }
 ```
 
+**Important**: `finalMaybeHash()` is the right method to use here — it calls `generateHash()` and finalizes with dependency hashes, returning `null` when `generateHash()` isn't overridden.
+
 ### New internal: `generatePartialSource`
 
-Similar to `generateSource` but for partial generation. Called by cache on miss. Handles:
-1. Initialize dependencies (same as generateSource)
-2. Try `generatePartial(sourceId, hash)`
-3. If returns data -> wrap in Source (with `complete = false`)
-4. If returns null -> fall back to `generateSource(hash)` then filter to sourceId (with `complete = true` on the full result cached, filtered view returned)
+Called by cache on miss. **Must not re-enter the cache** (to avoid loops).
+
+```haxe
+/**
+ * Called by cache infrastructure. Generates partial source directly,
+ * never goes back through cache methods.
+ */
+@:allow(whet.cache) final function generatePartialSource(sourceId:SourceId, hash:SourceHash):Promise<{source:Source, complete:Bool}> {
+    if (!this.locked) throw new js.lib.Error("Acquire a lock before generating.");
+    // Initialize dependencies (same as generateSource).
+    var init = if (config.dependencies != null) Promise.all([
+        for (stone in makeArray(config.dependencies)) stone.getSource()
+    ]) else Promise.resolve(null);
+    return init.then(_ -> {
+        return generatePartial(sourceId, hash).then(data -> {
+            if (data != null) {
+                // Stone supports partial generation — wrap as incomplete Source.
+                return { source: new Source(data, hash, this, Sys.time(), false), complete: false };
+            } else {
+                // Not supported — full generation, then filter.
+                // Call generate() directly, NOT getSource(), to avoid re-entering cache.
+                return generate(hash).then(allData -> {
+                    var fullSource = new Source(allData, hash, this, Sys.time(), true);
+                    return { source: fullSource, complete: true };
+                });
+            }
+        });
+    });
+}
+```
+
+The cache layer uses the `complete` flag from the return value to decide how to store the result. When `complete = true`, the full source is cached, and the caller filters to the requested `sourceId` from the returned full source.
+
+### Loop prevention
+
+The critical invariant: **`generatePartialSource` and `generateSource` call `generate()`/`generatePartial()` directly, never `getSource()`/`getPartialSource()`**. The cache layer calls these `generate*Source` methods. This keeps the cache as the single entry point, with everything below it being direct calls. No re-entrant cache access = no loops.
+
+Similarly, the completion path in `BaseCache.get()` (when finding a partial entry) must call `list()` (private, via `@:allow`) and `generatePartialSource`/`generateSource` directly, not `listIds()`/`getPartialSource`/`getSource`.
+
+### Completing a partial entry — detailed flow in BaseCache.get()
+
+When `BaseCache.get()` finds a partial entry (`complete = false`):
+
+**Completion flow:**
+1. Call `stone.list()` (private, via `@:allow`) — returns null or list of all output IDs
+2. If returns list: diff against partial entry files, call `stone.generatePartialSource(missingId, hash)` for each missing one, merge into entry, mark complete
+3. If returns null: call `stone.generateSource(hash)` to get everything, replace partial entry with complete one
 
 ## Cache Interface Changes
 
@@ -137,15 +228,16 @@ public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDu
 ### `BaseCache.hx` — add `getPartial` method
 
 Similar to `get()` but:
-- Uses the SAME hash (no augmentation — partial and full share the hash because both use `generateHash()`).
+- Uses the SAME hash (partial and full share the hash because both use `generateHash()`).
+- The hash is already known (non-null) — we only reach this path when `finalMaybeHash()` returned a value (gated in `Stone.getPartialSource`).
 - On cache hit: checks if the entry contains the requested sourceId. If yes, returns filtered Source. If entry is complete but sourceId not found, returns null/error.
-- On cache miss (entry doesn't have sourceId): calls `generatePartialSource(sourceId, hash)`, then **adds the result to the existing entry** (or creates new partial entry).
-- Needs to handle the `complete` flag: an incomplete entry that lacks sourceId triggers partial generation; a complete entry that lacks sourceId means the sourceId doesn't exist.
+- On cache miss (entry doesn't have sourceId and `complete = false`): calls `generatePartialSource(sourceId, hash)`, then **adds the result to the existing entry** (mutable entry — append to file list, update cache).
+- On no entry at all: calls `generatePartialSource(sourceId, hash)`, creates new entry.
 
 ### `BaseCache.hx` — modify `get` method (full generation path)
 
 - After finding an entry by hash, check the `complete` flag.
-- If `complete = false`: treat as cache miss (for Option A — generate everything fresh, replace entry).
+- If `complete = false`: call `stone.list()` (private, via `@:allow`). If non-null, complete incrementally via `generatePartial` for missing items. If null, fall back to full `generateSource` replacing the entry.
 - If `complete = true`: existing behavior (validate and return).
 
 ### `FileCache.hx` — changes
@@ -153,16 +245,13 @@ Similar to `get()` but:
 - Add `complete` field to `RuntimeFileCacheValue` and `FileCacheValue`.
 - Serialize/deserialize in cache.json.
 - **Existing entries without `complete` field**: treat as `complete = true` (backward compatible — all existing entries are full generations).
-- `value()` function: set `complete = true` when storing from `generateSource` (full), `complete = false` from `generatePartialSource`.
-- Partial file storage: same baseDir as full would use (same hash -> same getUniqueDir). Files accumulate in the directory.
+- `value()` function: accept `complete` parameter. Set `complete = true` when storing from `generateSource` (full), `complete = false` from `generatePartialSource`.
+- Partial file storage: same baseDir as full would use (same hash -> same `getUniqueDir`). Files accumulate in the directory.
 
 ### `MemoryCache.hx` — changes
 
-- Value type is `Source`. Need to add `complete` flag to Source or use a wrapper.
-- **Open question**: should `Source` get a `complete` field, or should MemoryCache use a wrapper like `{ source: Source, complete: Bool }`?
-  - Source already has a private constructor — adding a field is straightforward but changes a core type.
-  - Wrapper keeps Source clean but adds indirection.
-  - **Recommendation**: Add `complete` to Source. It's a cache-related concern but Source is already cache-aware (has `origin`, `ctime`, `getDirPath`).
+- Value type is `Source`. The `complete` flag lives on Source itself.
+- No wrapper needed.
 
 ### `CacheManager.hx` — add routing method
 
@@ -171,12 +260,41 @@ public function getPartialSource(stone:AnyStone, sourceId:SourceId):Promise<Sour
     return switch stone.cacheStrategy {
         case None:
             stone.acquire(() -> stone.finalMaybeHash().then(hash ->
-                stone.generatePartialSource(sourceId, hash)));
+                stone.generatePartialSource(sourceId, hash).then(r -> r.source.filterTo(sourceId))));
         case InMemory(durability, check):
             memCache.getPartial(stone, sourceId, durability, check ?? AllOnUse);
         case InFile(durability, check) | AbsolutePath(_, durability, check):
             fileCache.getPartial(stone, sourceId, durability, check ?? AllOnUse);
     };
+}
+```
+
+Note: for `None` strategy, `finalMaybeHash()` is guaranteed non-null here (gated in `Stone.getPartialSource`).
+
+## Source Changes
+
+Add `complete` field to `Source`:
+
+```haxe
+class Source {
+    public final data:Array<SourceData>;
+    public final hash:SourceHash;
+    public final origin:AnyStone;
+    public final ctime:Float;
+    public final complete:Bool; // New field, defaults to true
+
+    @:allow(whet.Stone)
+    @:allow(whet.cache)
+    private function new(data, hash, origin, ctime, complete = true) {
+        // ... existing code ...
+        this.complete = complete;
+    }
+
+    /** Filter to a single sourceId. Returns a Source containing only that entry (or empty). */
+    public function filterTo(sourceId:SourceId):Source {
+        var filtered = data.filter(d -> d.id == sourceId);
+        return new Source(filtered, hash, origin, ctime, complete);
+    }
 }
 ```
 
@@ -195,66 +313,106 @@ public function getStoneSource(id:String, ?sourceId:SourceId):Promise<Null<Sourc
 
 ## Interaction Matrix
 
-| Stone capabilities | Partial request | Full request |
+| Stone capabilities | Partial request | Full request finding partial entry |
 |---|---|---|
-| No `generateHash`, no `generatePartial`, no `list` | Falls back to full gen + filter. No partial caching benefit (hash would differ). | Unchanged. |
-| Has `generateHash`, no `generatePartial` | Falls back to full gen + filter. Cached as complete entry. Subsequent partial requests served from that cached full entry. | Unchanged. |
-| Has `generateHash` + `generatePartial`, no `list` | Generates single output, cached as partial entry. | Finds partial entry -> generates everything fresh, replaces with complete (Option A). |
-| Has `generateHash` + `generatePartial` + `list` | Generates single output, cached as partial entry. | (Future Option B) Could complete partial entry by generating only missing outputs. For now: same as above (Option A). |
+| No `generateHash` | Full gen + filter via `getSource()`. No partial caching (gated out in `getPartialSource`). | N/A — partial entries cannot exist. |
+| `generateHash` only, no `generatePartial` | `generatePartialSource` returns null from `generatePartial` -> falls back to full `generate()`, cached as **complete**. Subsequent partial requests served from cache. | N/A — entries are always complete (fallback always does full gen). |
+| `generateHash` + `generatePartial`, no `list()` override | Single output generated, cached as partial entry. | `list()` returns null -> full `generateSource()`, replaces partial with complete. |
+| `generateHash` + `generatePartial` + `list()` override | Single output generated, cached as partial entry. | Diff + `generatePartial()` for each missing -> merge, mark complete. Maximum reuse. |
 
-## Open Questions
+## Resolved Design Decisions
 
-### Q1: How should `getPartial` in BaseCache handle adding to an existing partial entry?
+### Q1: Mutable entries
+Entries are mutable. After generating a partial output, mutate the existing entry's file list and update the cache. FileCache already mutates for use-ordering.
 
-BaseCache.getPartial needs to add a new file to an existing entry. Currently entries are immutable after creation. Two options:
+### Q2: Cache directory sharing
+Partial and full share the same directory. `getUniqueDir` returns the same dir for the same hash.
 
-- **Mutable entries**: After generating a partial output, mutate the existing entry's file list and update the cache. FileCache flushes to disk.
-- **Replace entry**: Remove old partial entry, create new one with old files + new file. Simpler conceptually but more churn.
+### Q3: None cache strategy
+No caching. Partial generates and returns without storing. Fine.
 
-Recommendation: Mutable entries (simpler for FileCache which already mutates for use-ordering).
+### Q4: Durability rules
+Same rules for partial and full entries. No special treatment.
 
-### Q2: Cache directory sharing between partial and full
+### Q5: Concurrency
+Handled by existing `acquire()` lock.
 
-If partial generates to `.whet/SharpStone/v1/sprite1.png` and full generation later runs, should full also use `v1/`?
-
-Yes — `getUniqueDir` already returns the same dir for the same hash. Since partial and full share the hash, they naturally share the directory. Full generation would overwrite/add files in the same dir.
-
-### Q3: What about the None cache strategy?
-
-For `CacheStrategy.None`, there's no caching. Partial just generates and returns without storing. This is fine — stones with None caching regenerate every time anyway.
-
-### Q4: Durability rules and partial entries
-
-Partial entries should follow the same durability rules as full entries. A partial entry counts as one "use" for `LimitCountByLastUse`. No special treatment needed — durability is already per-entry.
-
-### Q5: Concurrency — partial request while full generation is running?
-
-The lock (`acquire()`) already prevents concurrent generation. If a partial request comes in while full generation is locked, it waits in the queue. When it runs, it finds the full entry and filters. No special handling needed.
+### Q6: list() refactor
+Refactor `list()` to match the `generateHash()`/`getHash()` pattern: private `list()` returns null by default (overridden by stones that can enumerate without generating), new public `listIds()` handles the fallback to full generation. Cache calls `list()` directly via `@:allow`. No new method needed — just a visibility change + public wrapper. 6 existing overrides (Files, JsonStone, Zip, RemoteFile, Hxml, HaxeBuild) keep working. 3 call sites (Router, Project, HaxeBuild super call) switch to `listIds()`.
 
 ## Files to Modify
 
-1. `src/whet/Stone.hx` — add `generatePartial`, `getPartialSource`, `generatePartialSource`
-2. `src/whet/Source.hx` — add `complete` field
+1. `src/whet/Stone.hx` — refactor `list()` to private + add `listIds()` public, add `generatePartial`, `getPartialSource`, `generatePartialSource`
+2. `src/whet/Source.hx` — add `complete` field, add `filterTo` method
 3. `src/whet/cache/Cache.hx` — add `getPartial` to interface
-4. `src/whet/cache/BaseCache.hx` — add `getPartial`, modify `get` for complete flag
+4. `src/whet/cache/BaseCache.hx` — add `getPartial`, modify `get` for complete flag + completion logic
 5. `src/whet/cache/FileCache.hx` — add `complete` to value type, serialization
-6. `src/whet/cache/MemoryCache.hx` — handle partial Source values
+6. `src/whet/cache/MemoryCache.hx` — handle partial Source values (via Source.complete)
 7. `src/whet/cache/CacheManager.hx` — add `getPartialSource` routing
-8. `src/whet/Project.hx` — update `getStoneSource`
+8. `src/whet/Project.hx` — update `getStoneSource`, switch `list()` → `listIds()`
+9. `src/whet/route/Router.hx` — switch `list()` → `listIds()`
+10. `src/whet/stones/haxe/HaxeBuild.hx` — switch `super.list()` → `super.listIds()`
+
+## Implementation Plan
+
+### Step 1: Source.complete and Source.filterTo
+- Add `complete:Bool` field to `Source` constructor (default `true`)
+- Add `filterTo(sourceId)` method
+- All existing callers unaffected (default = true)
+
+### Step 2: Refactor list() + Stone API additions
+- Refactor `list()`: make private, change default to return null (instead of `getSource().then(...)`)
+- Add `listIds()` — public final, calls `list()`, falls back to `getSource().then(...)` if null
+- Update 6 existing `list()` overrides — no code changes needed (just visibility, Haxe handles this)
+- Update 3 call sites: `Router.hx`, `Project.hx`, `HaxeBuild.hx` → switch to `listIds()`
+- Add `generatePartial(sourceId, hash)` — private, default returns null
+- Add `getPartialSource(sourceId)` — public final, with `finalMaybeHash()` gate
+- Add `generatePartialSource(sourceId, hash)` — `@:allow(whet.cache)` final
+
+### Step 3: Cache interface
+- Add `getPartial` to `Cache.hx` interface
+
+### Step 4: FileCache value type
+- Add `complete` field to `RuntimeFileCacheValue` and `FileCacheValue`
+- Backward compat: missing field = `true`
+- Update serialization/deserialization
+
+### Step 5: BaseCache.getPartial
+- Implement partial cache lookup and generation
+- Handle: cache hit (has sourceId), cache hit (complete, no sourceId = doesn't exist), cache miss (incomplete, generate + add), no entry (generate + create)
+
+### Step 6: BaseCache.get modification
+- Check `complete` flag on found entries
+- If incomplete: attempt completion via `list()` + per-item `generatePartial`, or fall back to full `generateSource` replacing entry
+
+### Step 7: MemoryCache updates
+- Source already carries `complete` — MemoryCache uses Source as value, so it works naturally
+- May need minor adjustments for the `getPartial` implementation
+
+### Step 8: CacheManager.getPartialSource
+- Route to appropriate cache based on `cacheStrategy`
+
+### Step 9: Project.getStoneSource
+- Add optional `sourceId` parameter, route to `getPartialSource` when provided
+
+### Step 10: Tests
+- Partial generation returns correct single output (fallback path — no `generatePartial`)
+- Partial generation with `generatePartial` override
+- Cache sharing: partial then full, full then partial
+- Cache completion: with `list()` (incremental), without (full replace)
+- Cache isolation: different sourceIds cached correctly within same entry
+- Gate check: stone without `generateHash` falls back to full gen + filter
 
 ## TODO
 
-- [ ] Design: resolve open questions
-- [ ] Implement Stone API (generatePartial, getPartialSource, generatePartialSource)
-- [ ] Implement Source.complete flag
-- [ ] Implement Cache.getPartial interface method
-- [ ] Implement BaseCache.getPartial with growable entry support
-- [ ] Modify BaseCache.get to handle complete flag on existing entries
-- [ ] Update FileCache value type and serialization for complete flag
-- [ ] Update MemoryCache for partial Source handling
-- [ ] Add CacheManager.getPartialSource routing
-- [ ] Update Project.getStoneSource to use partial path
-- [ ] Test: partial generation returns correct single output (fallback path)
-- [ ] Test: partial generation with generatePartial override
-- [ ] Test: cache sharing — partial then full, full then partial
-- [ ] Test: cache isolation — different sourceIds cached correctly within same entry
+- [x] Design: resolve open questions
+- [ ] Step 1: Add Source.complete field and Source.filterTo method
+- [ ] Step 2: Refactor list()/listIds() + add generatePartial, getPartialSource, generatePartialSource
+- [ ] Step 3: Add Cache.getPartial interface method
+- [ ] Step 4: Update FileCache value type and serialization for complete flag
+- [ ] Step 5: Implement BaseCache.getPartial with growable entry support
+- [ ] Step 6: Modify BaseCache.get to handle complete flag + completion logic
+- [ ] Step 7: Update MemoryCache for partial Source handling
+- [ ] Step 8: Add CacheManager.getPartialSource routing
+- [ ] Step 9: Update Project.getStoneSource to use partial path
+- [ ] Step 10: Tests
