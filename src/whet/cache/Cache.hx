@@ -3,6 +3,7 @@ package whet.cache;
 interface Cache {
 
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source>;
+    public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Null<Source>>;
     public function getUniqueDir(stone:AnyStone, baseDir:SourceId, ?hash:SourceHash):SourceId;
 
 }

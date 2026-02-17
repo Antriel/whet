@@ -114,7 +114,7 @@ class Hxml extends Stone<HxmlConfig> {
         return Promise.resolve([SourceData.fromString(filename(), getFileContent())]);
     }
 
-    override function list():Promise<Array<SourceId>> {
+    override function list():Promise<Null<Array<SourceId>>> {
         return Promise.resolve([filename()]);
     }
 

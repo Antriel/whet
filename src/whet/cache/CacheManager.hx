@@ -30,6 +30,18 @@ class CacheManager {
         }
     }
 
+    public function getPartialSource(stone:AnyStone, sourceId:SourceId):Promise<Null<Source>> {
+        return switch stone.cacheStrategy {
+            case None:
+                stone.acquire(() -> stone.finalMaybeHash().then(hash ->
+                    stone.generatePartialSource(sourceId, hash).then(r -> r.source.filterTo(sourceId))));
+            case InMemory(durability, check):
+                memCache.getPartial(stone, sourceId, durability, check != null ? check : AllOnUse);
+            case InFile(durability, check) | AbsolutePath(_, durability, check):
+                fileCache.getPartial(stone, sourceId, durability, check != null ? check : AllOnUse);
+        }
+    }
+
     /**
      * Re-generates source even if the currently cached value is valid.
      */

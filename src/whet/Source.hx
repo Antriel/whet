@@ -11,17 +11,26 @@ class Source {
     public final hash:SourceHash;
     public final origin:AnyStone;
     public final ctime:Float;
+    public final complete:Bool;
 
     var dirPath:SourceId = null;
 
     @:allow(whet.Stone)
     @:allow(whet.cache)
-    private function new(data:Array<SourceData>, hash:SourceHash, origin:AnyStone, ctime:Float) {
+    private function new(data:Array<SourceData>, hash:SourceHash, origin:AnyStone, ctime:Float, complete:Bool = true) {
         this.data = data;
         this.hash = hash;
         this.origin = origin;
         this.ctime = ctime;
+        this.complete = complete;
         for (entry in data) entry.source = this;
+    }
+
+    /** Filter to a single sourceId. Returns null if sourceId not found. */
+    public function filterTo(sourceId:SourceId):Null<Source> {
+        var filtered = data.filter(d -> d.id == sourceId);
+        return if (filtered.length == 0) null
+            else new Source(filtered, hash, origin, ctime, complete);
     }
 
     public function tryDirPath():Null<SourceId> return dirPath;

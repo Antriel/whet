@@ -42,7 +42,7 @@ class RemoteFile extends Stone<RemoteFileConfig> {
         req.on('error', rej);
     }
 
-    override function list():Promise<Array<SourceId>> return Promise.resolve([getId()]);
+    override function list():Promise<Null<Array<SourceId>>> return Promise.resolve([getId()]);
 
     override public function generateHash():Promise<SourceHash> {
         return Promise.resolve(SourceHash.fromString(config.url));

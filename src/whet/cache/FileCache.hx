@@ -31,6 +31,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 hash: SourceHash.fromHex(val.hash),
                 ctime: val.ctime,
                 baseDir: val.baseDir,
+                complete: val.complete != null ? val.complete : true,
                 files: [for (file in val.files) {
                     fileHash: SourceHash.fromHex(file.fileHash),
                     filePath: file.filePath,
@@ -62,6 +63,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             hash: source.hash,
             ctime: source.ctime,
             baseDir: source.getDirPath(),
+            complete: source.complete,
             ctimePretty: null, // For some reason Haxe doesn't like this missing.
             files: cast files
         });
@@ -109,7 +111,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 }
             });
         })]).then(
-            data -> new Source(cast data, value.hash, stone, value.ctime),
+            data -> new Source(cast data, value.hash, stone, value.ctime, value.complete != null ? value.complete : true),
             rejected -> rejected == 'Invalid.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
         );
     }
@@ -163,6 +165,67 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     function getDirFor(value:RuntimeFileCacheValue):SourceId return value.baseDir;
 
+    function hasSourceId(value:RuntimeFileCacheValue, sourceId:SourceId):Bool {
+        return Lambda.exists(value.files, f -> f.id == sourceId);
+    }
+
+    function mergePartial(stone:AnyStone, existing:RuntimeFileCacheValue, addition:Source, markComplete:Bool):Promise<RuntimeFileCacheValue> {
+        // Build merged file list: upsert by sourceId.
+        var mergedFiles = [for (f in existing.files) f];
+        if (addition != null) {
+            return value(addition).then(addVal -> {
+                for (newFile in addVal.files) {
+                    var replaced = false;
+                    for (i in 0...mergedFiles.length) {
+                        if (mergedFiles[i].id == newFile.id) {
+                            mergedFiles[i] = newFile;
+                            replaced = true;
+                            break;
+                        }
+                    }
+                    if (!replaced) mergedFiles.push(newFile);
+                }
+                var merged:RuntimeFileCacheValue = {
+                    hash: existing.hash,
+                    ctime: existing.ctime,
+                    baseDir: existing.baseDir,
+                    complete: markComplete,
+                    files: mergedFiles
+                };
+                // Replace in cache array.
+                var values = cache.get(key(stone));
+                var idx = values.indexOf(existing);
+                if (idx >= 0) values[idx] = merged;
+                flush();
+                return merged;
+            });
+        } else {
+            // Just update complete flag.
+            var merged:RuntimeFileCacheValue = {
+                hash: existing.hash,
+                ctime: existing.ctime,
+                baseDir: existing.baseDir,
+                complete: markComplete,
+                files: mergedFiles
+            };
+            var values = cache.get(key(stone));
+            var idx = values.indexOf(existing);
+            if (idx >= 0) values[idx] = merged;
+            flush();
+            return Promise.resolve(merged);
+        }
+    }
+
+    function replaceEntry(stone:AnyStone, existing:RuntimeFileCacheValue, replacement:Source):Promise<RuntimeFileCacheValue> {
+        return value(replacement).then(newVal -> {
+            var values = cache.get(key(stone));
+            var idx = values.indexOf(existing);
+            if (idx >= 0) values[idx] = newVal;
+            flush();
+            return newVal;
+        });
+    }
+
     function flush():Promise<Void> {
         if (flushPromise == null)
             flushPromise = new Promise((res, _) -> flushResolve = res);
@@ -182,6 +245,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             ctime: val.ctime,
             ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
             baseDir: val.baseDir.toCwdPath('./'),
+            complete: val.complete,
             files: [for (file in val.files) {
                 fileHash: file.fileHash.toHex(),
                 filePath: file.filePath.toCwdPath('./'),
@@ -217,6 +281,7 @@ typedef FileCacheValue<H, S> = {
     final ctime:Float;
     final ?ctimePretty:String;
     final baseDir:S;
+    final complete:Bool;
     final files:Array<{
         final id:S;
         final fileHash:H;

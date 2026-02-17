@@ -57,7 +57,7 @@ class Router {
 
                 var prom:Promise<Any> = if (route.source is AnyStone) {
                     final stone:AnyStone = cast route.source;
-                    stone.list().then(list -> {
+                    stone.listIds().then(list -> {
                         for (sourceId in list) {
                             var serveId = routeFilters.tryFinalize(sourceId);
                             if (serveId != null) {

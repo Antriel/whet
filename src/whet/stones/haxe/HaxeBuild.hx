@@ -52,10 +52,10 @@ class HaxeBuild extends Stone<BuildConfig> {
         project.addCommand('build', this).action(_ -> this.cache.refreshSource(this));
     }
 
-    override function list():Promise<Array<SourceId>> {
+    override function list():Promise<Null<Array<SourceId>>> {
         if (config.hxml.isSingleFile()) {
             return Promise.resolve([config.hxml.getBuildFilename()]);
-        } else return super.list();
+        } else return Promise.resolve(null);
     }
 
     override function generateHash():Promise<SourceHash> {

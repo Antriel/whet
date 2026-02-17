@@ -18,7 +18,7 @@ class Files extends Stone<FilesConfig> {
             .then((hashes:Array<SourceHash>) -> SourceHash.merge(...hashes));
     }
 
-    override function list():Promise<Array<SourceId>> {
+    override function list():Promise<Null<Array<SourceId>>> {
         return walk(
             (path) -> path.withExt,
             (dir, dirFile) -> fromCwd(dirFile, dir).id

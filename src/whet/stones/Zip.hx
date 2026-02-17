@@ -46,7 +46,7 @@ class ZipStone extends Stone<ZipConfig> {
         });
     }
 
-    override function list():Promise<Array<SourceId>> {
+    override function list():Promise<Null<Array<SourceId>>> {
         return Promise.resolve([(config.filename:SourceId)]);
     }
 

@@ -66,12 +66,14 @@ class Project {
 
     public function listStoneOutputs(id:String):Promise<Null<Array<SourceId>>> {
         final stone = getStone(id);
-        return if (stone == null) Promise.resolve(null) else stone.list();
+        return if (stone == null) Promise.resolve(null) else stone.listIds();
     }
 
     public function getStoneSource(id:String, ?sourceId:SourceId):Promise<Null<Source>> {
         final stone = getStone(id);
-        return if (stone == null) Promise.resolve(null) else stone.getSource();
+        return if (stone == null) Promise.resolve(null)
+        else if (sourceId != null) stone.getPartialSource(sourceId)
+        else stone.getSource();
     }
 
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {

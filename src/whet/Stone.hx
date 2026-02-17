@@ -190,13 +190,71 @@ abstract class Stone<T:StoneConfig> {
     private abstract function generate(hash:SourceHash):Promise<Array<SourceData>>;
 
     /**
-     * Returns a list of sources that this stone generates.
-     * Used by Router for finding the correct asset.
-     * Default implementation generates the sources to find their ids, but can be overriden
-     * to provide optimized implementation that would avoid generating assets we might not need.
+     * Optional override: return the list of output sourceIds this stone produces,
+     * without triggering generation. Return null if unknown (default).
+     * Used by cache for partial entry completion and by listIds() as fast path.
      */
-    public function list():Promise<Array<SourceId>> {
-        return getSource().then(source -> source.data.map(sd -> sd.id));
+    @:allow(whet.cache) private function list():Promise<Null<Array<SourceId>>> {
+        return Promise.resolve(null);
+    }
+
+    /**
+     * Public API for getting output IDs. Calls list(), falls back to
+     * full generation if list() returns null.
+     */
+    public final function listIds():Promise<Array<SourceId>> {
+        return list().then(ids -> {
+            if (ids != null) return ids;
+            return cast getSource().then(source -> source.data.map(sd -> sd.id));
+        });
+    }
+
+    /**
+     * Optional override for partial generation.
+     * Called when a single output is requested via getPartialSource().
+     * Return data for the requested sourceId, or null to signal
+     * "not supported" (triggers fallback to full generation + filter).
+     */
+    private function generatePartial(sourceId:SourceId, hash:SourceHash):Promise<Null<Array<SourceData>>> {
+        return Promise.resolve(null);
+    }
+
+    /**
+     * Get source for a single output by sourceId.
+     * If the stone implements generatePartial(), generates just the requested output.
+     * Otherwise falls back to full generation + filter.
+     * Uses the same cache as getSource() — partial and full share the pool.
+     */
+    public final function getPartialSource(sourceId:SourceId):Promise<Null<Source>> {
+        return finalMaybeHash().then(hash -> {
+            if (hash == null)
+                return cast getSource().then(source -> source.filterTo(sourceId));
+            else
+                return cache.getPartialSource(this, sourceId);
+        });
+    }
+
+    /**
+     * Called by cache infrastructure. Generates partial source directly,
+     * never goes back through cache methods.
+     */
+    @:allow(whet.cache) final function generatePartialSource(sourceId:SourceId, hash:SourceHash):Promise<{source:Source, complete:Bool}> {
+        if (!this.locked) throw new js.lib.Error("Acquire a lock before generating.");
+        var init = if (config.dependencies != null) Promise.all([
+            for (stone in makeArray(config.dependencies)) stone.getSource()
+        ]) else Promise.resolve(null);
+        return init.then(_ -> {
+            return generatePartial(sourceId, hash).then(data -> {
+                if (data != null) {
+                    return { source: new Source(data, hash, this, Sys.time(), false), complete: false };
+                } else {
+                    return cast generate(hash).then(allData -> {
+                        var fullSource = new Source(allData, hash, this, Sys.time(), true);
+                        return { source: fullSource, complete: true };
+                    });
+                }
+            });
+        });
     }
 
     /**

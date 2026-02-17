@@ -31,7 +31,7 @@ class JsonStone extends Stone<JsonStoneConfig> {
         return config.mergeFiles.getHash().then(hash -> hash.add(SourceHash.fromString(haxe.Json.stringify(data))));
     }
 
-    override function list():Promise<Array<SourceId>>
+    override function list():Promise<Null<Array<SourceId>>>
         return Promise.resolve([(config.name:SourceId)]);
 
     override function initConfig() {

@@ -1,15 +1,16 @@
 ---
 # whet-8gja
 title: Optional partial read/generate for batch Stones
-status: todo
+status: in-progress
 type: feature
 priority: normal
 created_at: 2026-02-17T08:34:27Z
-updated_at: 2026-02-17T09:35:50Z
+updated_at: 2026-02-17T15:23:57Z
 parent: whet-juli
 blocked_by:
     - whet-flfg
 ---
+
 
 Add optional per-Stone capability for partial generation, integrated natively into the existing cache infrastructure. Partial and full generation share the same cache pool — files generated partially are reusable by full generation and vice versa.
 
@@ -427,13 +428,13 @@ Refactor `list()` to match the `generateHash()`/`getHash()` pattern: private `li
 ## TODO
 
 - [x] Design: resolve open questions
-- [ ] Step 1: Add Source.complete field and Source.filterTo method
-- [ ] Step 2: Refactor list()/listIds() + add generatePartial, getPartialSource, generatePartialSource
-- [ ] Step 3: Add Cache.getPartial interface method
-- [ ] Step 4: Update FileCache value type and serialization for complete flag
-- [ ] Step 5: Implement BaseCache.getPartial with growable entry support
-- [ ] Step 6: Modify BaseCache.get to handle complete flag + completion logic
-- [ ] Step 7: Update MemoryCache for partial Source handling
-- [ ] Step 8: Add CacheManager.getPartialSource routing
-- [ ] Step 9: Update Project.getStoneSource to use partial path
+- [x] Step 1: Add Source.complete field and Source.filterTo method
+- [x] Step 2: Refactor list()/listIds() + add generatePartial, getPartialSource, generatePartialSource
+- [x] Step 3: Add Cache.getPartial interface method
+- [x] Step 4: Update FileCache value type and serialization for complete flag
+- [x] Step 5: Implement BaseCache.getPartial with growable entry support
+- [x] Step 6: Modify BaseCache.get to handle complete flag + completion logic
+- [x] Step 7: Update MemoryCache for partial Source handling
+- [x] Step 8: Add CacheManager.getPartialSource routing
+- [x] Step 9: Update Project.getStoneSource to use partial path
 - [ ] Step 10: Tests
