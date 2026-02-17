@@ -59,13 +59,8 @@ class Router {
                     final stone:AnyStone = cast route.source;
                     stone.list().then(list -> {
                         for (sourceId in list) {
-                            // We are finished for this route, check the last filter if any.
-                            var finalFilters = routeFilters.clone();
-                            var passed = finalFilters.finalize(sourceId);
-                            // This could be optimized. We don't need to do checks, unless we have a new filter.
-                            // And we should be able to avoid cloning regardless, by avoiding making modifications to the Filters.
-                            if (passed) {
-                                var serveId = finalFilters.getServeId();
+                            var serveId = routeFilters.tryFinalize(sourceId);
+                            if (serveId != null) {
                                 results.push({ source: stone, sourceId: sourceId, serveId: serveId });
                             }
                         }
@@ -167,7 +162,14 @@ class Router {
 
 }
 
-typedef Filter = {pathSoFar:Array<String>, filter:Minimatch, inProgress:Bool, remDirs:Array<Minimatch>};
+typedef Filter = {
+
+    pathSoFar:haxe.ds.ReadOnlyArray<String>,
+    filter:Minimatch,
+    inProgress:Bool,
+    remDirs:haxe.ds.ReadOnlyArray<Minimatch>
+
+};
 
 abstract Filters(Array<Filter>) from Array<Filter> {
 
@@ -181,8 +183,36 @@ abstract Filters(Array<Filter>) from Array<Filter> {
             f.inProgress = false;
             processParts(parts, f);
             f.pathSoFar = f.pathSoFar.concat(parts);
-            return f.filter == null || f.filter.match(Path.posix.join(...f.pathSoFar));
+            return f.filter == null || f.filter.match(Path.posix.join(...(cast f.pathSoFar:Array<String>)));
         });
+    }
+
+    /** Like finalize, but restores filter state afterwards. Returns serveId on match, null otherwise. */
+    public function tryFinalize(finalPath:SourceId):Null<SourceId> {
+        // Fast path for single filter (common case) — zero extra allocations.
+        if (this.length == 1) {
+            var f = this[0];
+            var savedPath = f.pathSoFar;
+            var savedIP = f.inProgress;
+            var passed = finalize(finalPath);
+            var serveId = if (passed) getServeId() else null;
+            f.pathSoFar = savedPath;
+            f.inProgress = savedIP;
+            return serveId;
+        }
+        // General case: save state per filter. Refs are stable since pathSoFar/remDirs are
+        // effectively immutable (always replaced via concat, never mutated in-place).
+        var arr:Array<Dynamic> = cast this;
+        var saved = [for (f in arr) { p: f.pathSoFar, ip: f.inProgress }];
+        var passed = finalize(finalPath);
+        var serveId = if (passed) getServeId() else null;
+        var i = 0;
+        for (f in arr) {
+            f.pathSoFar = saved[i].p;
+            f.inProgress = saved[i].ip;
+            i++;
+        }
+        return serveId;
     }
 
     public inline function step(dir:SourceId):Bool {
@@ -208,11 +238,12 @@ abstract Filters(Array<Filter>) from Array<Filter> {
         return res;
     }
 
-    public inline function getServeId():SourceId return Path.posix.join(...this[0].pathSoFar);
+    public inline function getServeId():SourceId
+        return Path.posix.join(...(cast this[0].pathSoFar:Array<String>));
 
     public inline function add(f:Minimatch, extractDir:Minimatch):Void {
         if (extractDir != null && this.length > 0) // Add to the current one. Applied when adding paths.
-            this[this.length - 1].remDirs.push(extractDir);
+            this[this.length - 1].remDirs = this[this.length - 1].remDirs.concat([extractDir]);
         this.push({
             pathSoFar: [],
             filter: f,
@@ -222,11 +253,13 @@ abstract Filters(Array<Filter>) from Array<Filter> {
     }
 
     public inline function clone():Filters {
+        // pathSoFar and remDirs are effectively immutable (always replaced via concat, never mutated
+        // in-place), so sharing references is safe — the next write creates a new array.
         return this.map(f -> {
             filter: f.filter,
-            pathSoFar: f.pathSoFar.copy(),
+            pathSoFar: f.pathSoFar,
             inProgress: f.inProgress,
-            remDirs: f.remDirs.copy()
+            remDirs: f.remDirs
         });
     }
 

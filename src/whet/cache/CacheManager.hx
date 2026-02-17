@@ -62,4 +62,8 @@ class CacheManager {
         // TODO clean tmp on start/end of process
     }
 
+    @:keep public function close():Promise<Void> {
+        return fileCache.close();
+    }
+
 }

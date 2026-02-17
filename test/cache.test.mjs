@@ -1,7 +1,5 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { setTimeout as sleep } from "node:timers/promises";
-
 import { Files, Project } from "../bin/whet.js";
 import {
   CacheStrategy,
@@ -78,7 +76,7 @@ test("File cache is reused by a new project at same root", async () => {
 
   await first.getSource();
   assert.equal(first.generateCount, 1);
-  await sleep(180); // wait for async cache DB flush
+  await env.project.cache.close();
 
   const secondProject = new Project({
     name: "whet-cache-reuse-second",

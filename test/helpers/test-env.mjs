@@ -40,6 +40,7 @@ export async function createTestProject(name = "test") {
       }
     },
     async cleanup() {
+      await project.cache.close();
       await rm(rootDir, { recursive: true, force: true });
     },
   };
