@@ -1,11 +1,11 @@
 ---
 # whet-7iin
 title: 'Bug: RemoteFile error path throws inside callback instead of rejecting promise'
-status: todo
+status: done
 type: bug
 priority: high
 created_at: 2026-02-14T08:29:35Z
-updated_at: 2026-02-14T08:30:05Z
+updated_at: 2026-02-17T00:00:00Z
 parent: whet-4ve1
 ---
 

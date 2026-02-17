@@ -21,22 +21,25 @@ class RemoteFile extends Stone<RemoteFileConfig> {
     }
 
     function get(url:String, res, rej) {
-        Https.get(url, response -> {
+        final req = Https.get(url, response -> {
             if (response.statusCode == 301 || response.statusCode == 302) {
                 return get(response.headers.get('location'), res, rej);
             }
             if (response.statusCode < 200 || response.statusCode >= 300) {
                 // Must consume response data to free up memory.
                 response.resume();
-                throw new js.lib.Error('Error downloading file. ${response.statusCode} – ${response.statusMessage}');
+                rej(new js.lib.Error('Error downloading file. ${response.statusCode} – ${response.statusMessage}'));
+                return;
             }
             final bufs = [];
             response.on('data', d -> bufs.push(d));
+            response.on('error', rej);
             response.on('end', function() {
                 final data = Buffer.concat(bufs);
                 res([SourceData.fromBytes(getId(), data)]);
             });
         });
+        req.on('error', rej);
     }
 
     override function list():Promise<Array<SourceId>> return Promise.resolve([getId()]);
