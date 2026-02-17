@@ -87,6 +87,17 @@ Stones automatically:
 - Merge dependency hashes into their own hash
 - Lock during generation to prevent race conditions
 
+# Testing
+
+- **Run tests**: `node --test "test/**/*.test.mjs"`
+- **Framework**: Node.js built-in test runner (`node:test`) with `node:assert/strict`
+- **Test files**: `test/*.test.mjs` — each file covers a specific area (cache, stone, router, etc.)
+- **Helpers** (`test/helpers/`):
+  - `test-env.mjs`: `createTestProject(name)` creates a temp dir + Project; returns `{ project, rootDir, write, read, exists, cleanup }`
+  - `mock-stone.mjs`: `MockStone` extends Stone with configurable `outputs`, `hashKey`, `delayMs`; tracks `generateCount`
+- Tests are written in JS (not Haxe) against the compiled `bin/whet.js` output — build before testing
+- Haxe private methods (like `generate`, `generateHash`, `list`, `generatePartial`) are overridable from JS subclasses
+
 # Working with Haxe
 
 - **Type system**: Haxe is statically typed; use proper type annotations

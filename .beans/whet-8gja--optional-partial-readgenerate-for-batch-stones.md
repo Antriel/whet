@@ -1,11 +1,11 @@
 ---
 # whet-8gja
 title: Optional partial read/generate for batch Stones
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-02-17T08:34:27Z
-updated_at: 2026-02-17T15:23:57Z
+updated_at: 2026-02-17T15:30:43Z
 parent: whet-juli
 blocked_by:
     - whet-flfg
@@ -437,4 +437,24 @@ Refactor `list()` to match the `generateHash()`/`getHash()` pattern: private `li
 - [x] Step 7: Update MemoryCache for partial Source handling
 - [x] Step 8: Add CacheManager.getPartialSource routing
 - [x] Step 9: Update Project.getStoneSource to use partial path
-- [ ] Step 10: Tests
+- [x] Step 10: Tests
+
+
+## Summary of Changes
+
+Added comprehensive test suite for partial generation in `test/partial.test.mjs` (19 tests):
+
+- **Source.filterTo**: matching entry returns filtered source, missing ID returns null
+- **Gate check**: stone without `generateHash` falls back to full gen + filter
+- **Fallback path**: stone without `generatePartial` override does full gen + filter, caches as complete
+- **Partial generation**: `generatePartial` override generates only requested output, no full gen
+- **Cache sharing (partial → full)**: with `list()` override does incremental completion; without does full gen replacement
+- **Cache sharing (full → partial)**: partial request served from complete cache entry; missing ID returns null
+- **Cache isolation**: multiple partial requests accumulate in same entry, re-requests served from cache
+- **Duplicate prevention**: same sourceId requested twice doesn't create duplicate in entry (upsert semantics)
+- **FileCache**: partial then full works with file-backed cache; partial entry survives project reload
+- **CacheStrategy.None**: partial requests regenerate every time (no caching)
+- **listIds()**: uses `list()` fast path when available, falls back to full generation otherwise
+- **Source.complete**: full generation sets `complete = true`
+
+Created `PartialMockStone` test helper extending `MockStone` with `generatePartial()` and optional `list()` overrides.
