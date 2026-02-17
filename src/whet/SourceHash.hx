@@ -68,15 +68,17 @@ class SourceHash {
      */
     @:keep public static function fromConfig(obj:haxe.DynamicAccess<Dynamic>,
             ?ignoreList:Array<String>):Promise<SourceHash> {
-        var keys = [];
-        var hashes = [for (key => val in obj) switch key {
+        var keys = [for (key => _ in obj) switch key {
             case 'cacheStrategy' | 'id' | 'project' | 'dependencies': continue;
             case key if (ignoreList != null && ignoreList.contains(key)): continue;
-            case _:
-                keys.push(key);
-                if (val is Stone) (val:AnyStone).getHash();
-                else if (val is Router) (val:Router).getHash();
-                else cast SourceHash.fromStringify(val);
+            case _: key;
+        }];
+        keys.sort(Reflect.compare);
+        var hashes = [for (key in keys) {
+            var val = obj.get(key);
+            if (val is Stone) (val:AnyStone).getHash();
+            else if (val is Router) (val:Router).getHash();
+            else cast SourceHash.fromStringify(val);
         }];
         return Promise.all(hashes).then(hashes -> merge(...hashes));
     }
