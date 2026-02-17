@@ -64,6 +64,16 @@ class Project {
         }];
     }
 
+    public function listStoneOutputs(id:String):Promise<Null<Array<SourceId>>> {
+        final stone = getStone(id);
+        return if (stone == null) Promise.resolve(null) else stone.list();
+    }
+
+    public function getStoneSource(id:String, ?sourceId:SourceId):Promise<Null<Source>> {
+        final stone = getStone(id);
+        return if (stone == null) Promise.resolve(null) else stone.getSource();
+    }
+
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {
         var cmd = new commander.Command(name);
         if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
