@@ -2,3 +2,4 @@
 externs/
 bin/
 node_modules/
+/test/.tmp/
