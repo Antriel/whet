@@ -27,6 +27,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Haxe and libraries
+        run: npx lix download
+
+      - name: Build
+        run: npx haxe build.hxml
+
       - name: Run tests
         run: npm test
 
