@@ -18,7 +18,9 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
     static inline var dbFileBase:SourceId = '.whet/cache.json';
 
     final dbFile:String;
-    var flushQueued:Bool = false;
+    var flushTimerId:Dynamic = null;
+    var flushResolve:(Dynamic)->Void = null;
+    var flushPromise:Promise<Void> = null;
 
     public function new(rootDir:RootDir) {
         super(rootDir, new Map());
@@ -161,30 +163,50 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     function getDirFor(value:RuntimeFileCacheValue):SourceId return value.baseDir;
 
-    function flush() {
-        if (flushQueued) return;
-        flushQueued = true;
-        js.Node.setTimeout(function() {
-            flushQueued = false;
-            var db:DbJson = {};
-            for (id => values in cache) db.set(id, [for (val in values) {
-                hash: val.hash.toHex(),
-                ctime: val.ctime,
-                ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
-                baseDir: val.baseDir.toCwdPath('./'),
-                files: [for (file in val.files) {
-                    fileHash: file.fileHash.toHex(),
-                    filePath: file.filePath.toCwdPath('./'),
-                    id: file.id.toCwdPath('./'),
-                    mtime: file.mtime,
-                    size: file.size,
-                }]
-            }]);
-            Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(
-                _ -> Log.trace('FileCache DB saved.'),
-                err -> Log.error('FileCache DB save error.', err)
-            );
-        }, 100);
+    function flush():Promise<Void> {
+        if (flushPromise == null)
+            flushPromise = new Promise((res, _) -> flushResolve = res);
+        if (flushTimerId == null)
+            flushTimerId = js.Node.setTimeout(doFlush, 100);
+        return flushPromise;
+    }
+
+    function doFlush() {
+        flushTimerId = null;
+        var resolve = flushResolve;
+        flushPromise = null;
+        flushResolve = null;
+        var db:DbJson = {};
+        for (id => values in cache) db.set(id, [for (val in values) {
+            hash: val.hash.toHex(),
+            ctime: val.ctime,
+            ctimePretty: Date.fromTime(val.ctime * 1000).toString(),
+            baseDir: val.baseDir.toCwdPath('./'),
+            files: [for (file in val.files) {
+                fileHash: file.fileHash.toHex(),
+                filePath: file.filePath.toCwdPath('./'),
+                id: file.id.toCwdPath('./'),
+                mtime: file.mtime,
+                size: file.size,
+            }]
+        }]);
+        Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(
+            _ -> { Log.trace('FileCache DB saved.'); resolve(null); },
+            err -> { Log.error('FileCache DB save error.', err); resolve(null); }
+        );
+    }
+
+    public function close():Promise<Void> {
+        if (flushTimerId != null) {
+            js.Node.clearTimeout(flushTimerId);
+            flushTimerId = null;
+        }
+        if (flushResolve != null) {
+            var p = flushPromise;
+            doFlush();
+            return p;
+        }
+        return Promise.resolve(null);
     }
 
 }
