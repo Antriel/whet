@@ -30,6 +30,9 @@ jobs:
       - name: Install Haxe and libraries
         run: npx lix download
 
+      - name: Generate externs
+        run: npm run devinit
+
       - name: Build
         run: npx haxe build.hxml
 
