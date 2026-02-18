@@ -17,6 +17,8 @@ Implement **ConfigStore** — a persistent, per-stone config patching system tha
 
 The name "ConfigStore" is working — in the future the backing store might become SQLite or similar, but JSON files are the first iteration.
 
+ConfigStore is a Haxe class in whet core (not JS-only).
+
 ## Motivation
 
 - Move data-like configuration away from Project.mjs scripts into editable, committable files.
@@ -43,10 +45,19 @@ Always `{ [stoneId]: { ...patch } }`, even for single-stone files. One format, c
 ### Multiple files supported
 Each ConfigStore instance = one JSON file. Multiple stones can share a file (keyed by stone.id). A stone could also have its own dedicated file. User wires this up in Project.mjs.
 
-### Loading: both auto and explicit
-- Auto-load: a project-level default/global ConfigStore loads automatically.
-- Explicit: users can create and load custom ConfigStores from `onInit()` for conditional scenarios (debug vs release, etc.).
-- Sync read (`readFileSync`) is acceptable since these are small JSON files.
+### Instance sharing: by reference, user-managed
+Users create ConfigStore instances and pass the same instance to multiple stones. Same object = shared file data and mtime cache naturally. No registry or factory pattern. If user accidentally creates two instances for the same path, they just do redundant file reads — not broken, just slightly wasteful.
+
+```js
+const audioConfig = new ConfigStore('assets/audio/config.json');
+new AudioWav({ source: ..., configStore: audioConfig });
+new Audio({ source: ..., configStore: audioConfig });
+```
+
+### Loading: lazy, on-demand
+No auto-loading. ConfigStore is constructed with just a path string — lightweight, no I/O at construction time. The backing JSON file is loaded lazily on first access (when a stone's hash/source is requested). Subsequent accesses check file mtime and reload only if changed.
+
+No `readFileSync` — all I/O is async, triggered by the existing async hash/generation flow.
 
 ## Config Field Categories
 
@@ -61,20 +72,43 @@ From examining real stones, config fields fall into two categories:
 - `preprocess: { startTime, duration }` (AudioWav)
 - `container`, `encoder`, `encodingOptions` (Audio)
 - `ids: [{id, scale, name}]` (Inkscape)
-- `paths`, `recursive` (Files)
 
 ConfigStore can only patch the data fields. Structural fields (Router, Stone instances, functions) are never in JSON.
 
+**Non-patchable data fields:**
+- `paths` (Files) — while technically data, it's used to instantiate a Files Stone at construction time. The Files stone's `id` isn't unique and is derived from the path, making runtime modification awkward. This stays non-modifiable; dynamic router upgrades are a possible future extension.
+
+## ConfigStore on StoneConfig and ProjectConfig
+
+ConfigStore is a field on **StoneConfig** and **ProjectConfig**. It is transparent to stone implementations — the field is handled internally by the framework (excluded from hashing via `fromConfig`, not patchable by ConfigStore itself).
+
+```js
+// Project-level: applies to any stone without an explicit configStore
+new Project({
+    configStore: new ConfigStore('whet-config.json'),
+});
+
+// Stone-level: overrides project-level for this stone
+new SharpStone({
+    source: ...,
+    configStore: new ConfigStore('assets/textures/config.json'),
+});
+```
+
+**Lookup chain** in a stone: `this.config.configStore ?? this.config.project?.config.configStore ?? null`
+
+Stone-level overrides project-level. The project-level store naturally serves as a "global" store — no explicit binding to all stones needed, they just fall through to it on demand.
+
 ## Patching & Idempotency
 
-When a ConfigStore is bound to a stone:
+**Eager materialization with in-place sync.** No Proxy (bad for debugging, performance, behavior clarity). No `effectiveConfig` indirection. `stone.config` stays the single source of truth, mutated in place.
 
-1. **Baseline capture**: Snapshot current values of all JSON-serializable config keys (skip Routers, Stones, functions). Cheap — just the data fields.
-2. **Apply**: For each key in the patch, set it on `stone.config`.
-3. **Re-apply** (file changed externally): For each key in the *previous* patch not in new patch, restore from baseline. Then apply new patch. Idempotent.
-4. **Remove**: Restore all baselined keys. Stone reverts to original config.
+### Flow
 
-This means `stone.config` stays the single source of truth. No `effectiveConfig` indirection. No Stone API changes. Stones that do `this.config.operations` just work transparently.
+1. **Baseline capture** (once, on first `ensureApplied` call): Deep-clone all JSON-serializable config keys from `stone.config` (skip Routers, Stones, functions). Store as the stone's baseline on the ConfigStore.
+2. **Apply**: For each key in baseline, compute `merged = deepMerge(baseline[key], patch[key])` and set on `stone.config`. Keys added by old patch but absent from new patch and not in baseline are deleted.
+3. **Re-apply** (file changed): Same as apply — recompute merged values from baseline + new patch. Baseline never changes. Idempotent.
+4. **No unbind**: ConfigStore is a config field, always present once set. No explicit unbind/remove flow.
 
 ### Deep merge semantics
 - Objects: recursive merge (patch keys override base keys)
@@ -82,70 +116,91 @@ This means `stone.config` stays the single source of truth. No `effectiveConfig`
 - Primitives: replace
 - `null` value in patch: deletes the key from effective config
 
-## Binding Model
+## State Split
 
-ConfigStore is NOT on StoneConfig (stays transparent to Stone implementations). Binding is done externally:
-```js
-configStore.bind(sharpStone);
+**On ConfigStore instance** (shared across all stones using this store):
+- `path: string` — file path
+- `_data: object | null` — parsed JSON content of the whole file
+- `_mtime: number | null` — last known file modification time
+
+**On ConfigStore, per-stone** (via WeakMap, keyed by stone):
+- `_baselines: WeakMap<Stone, object>` — original config values before any patch
+- `_appliedPatches: WeakMap<Stone, object>` — last applied patch entry (for change detection)
+
+WeakMap ensures: no memory leak if stones are GC'd (relevant for AudioDb-style dynamic stones), and all patching logic lives on ConfigStore rather than scattered across stones. The stone itself only has `config.configStore` — a plain reference.
+
+## Integration with Hash / Cache: Hook Point
+
+The natural hook point is **`getHash()`** in `Stone.hx`. This is the upstream chokepoint — all paths that read config flow through here. Before computing the hash, we ensure config reflects the current state of the backing file.
+
+```haxe
+// In Stone.getHash(), before existing logic:
+var store = config.configStore ?? config.project?.config.configStore;
+var patchPromise = if (store != null) store.ensureApplied(this) else Promise.resolve(null);
+return patchPromise.then(_ -> { /* existing getHash body */ });
 ```
 
-For **catch-all/global store**: `project.configStore` — a default ConfigStore at a project-level path for patching any stone without explicit binding. Created automatically with sensible default path, but path is configurable.
+### `ensureApplied(stone)` flow:
+1. No data loaded? → `fs.stat` + `fs.readFile`, parse JSON, capture baseline from stone's current config, apply patch for `stone.config.id`
+2. Data loaded? → `fs.stat`, compare mtime → changed: reload file, re-apply from baseline → unchanged: no-op (also compare entry to `_appliedPatches` — file might have changed but this stone's entry didn't)
+3. Entry same as last applied? → no-op, return immediately
 
-## Integration with Hash / Cache
+### Why this works for both hash paths:
+- **Stones with `generateHash()`**: They read `this.config` which has patched values → hash reflects patches naturally.
+- **Stones without `generateHash()`**: Falls through to output byte hash via `getSource()` → `generateSource()`. But `getHash()` runs first (called by cache), so config is patched before `generate()` reads it. Output reflects patches → byte hash reflects patches.
 
-When a persisted patch changes a stone's config, the stone's hash changes naturally (config values flow through `SourceHash.fromConfig()` or custom `generateHash()`). No special ConfigStore-awareness needed in the hash system.
+### No direct hash injection needed
+We do NOT inject the config store entry hash separately. Modifying config values is sufficient — the existing hash mechanisms (`fromConfig`, custom `generateHash`, or output byte hash) pick up the changed values naturally. This avoids the problem of the whole ConfigStore file affecting unrelated stones' hashes.
+
+### Interaction with commands
+Config store patches are applied before command execution too. Since patches are applied lazily via `getHash()`/`getSource()`, any code path that reads config after these calls sees patched values. For commands, we ensure `ensureApplied` runs before the command's action.
 
 ## Relationship to Other Beans
 
 - **whet-a2d8** (Config read/update entry points): Provides the API surface (`getStoneConfig`, `setStoneConfig` with preview/persist modes). Preview patches are request-scoped and don't touch ConfigStore. Persist mode calls into ConfigStore.
 - **whet-juli** (parent epic): Stone Inspector & Dynamic Configuration.
-- **AudioDb replacement**: ConfigStore handles the simpler case (patching existing stone configs). AudioDb-style "data defines which stones exist" is a higher-level pattern that might build on ConfigStore eventually but isn't directly replaced.
+- **AudioDb migration**: See below.
+
+### AudioDb Migration Path
+AudioDb's per-entry audio config (opusConfig, aacConfig, preprocess) moves into ConfigStore. The wav/sox, aac, opus stones become batch stones working off a Router with whole-directory input, with per-file config maps via ConfigStore. AudioDb can then go away — partial generation + ConfigStore enables per-file editing and generation with just 3 stones instead of dynamic stone creation.
+
+Note: whole batch hash changes when any entry changes (acceptable trade-off), but `generatePartial` means only the requested file is actually processed. Quick iteration, simpler architecture. Future improvement for per-entry hash granularity is planned separately.
+
+### Audio.mjs helper method edge case
+For `setOpusConfig()`/`setAacConfig()` style helpers that have logic: turn the computed values into defaults directly in the code. Use `perFileConfig.field ?? fieldDefault` per field based on output type. ConfigStore patches the plain data fields (`bitrate`, `cutoff`, etc.) directly. This is cleaner than the current setter pattern regardless of ConfigStore.
 
 ## Tests
 
 - [ ] Patch application produces correct merged config (nested objects, arrays, primitives)
 - [ ] `null` in patch removes key from effective config
 - [ ] Flush writes JSON to expected path; load reads it back (round-trip)
-- [ ] Removing a patch reverts stone to base config
-- [ ] Re-apply is idempotent (changing file content applies cleanly)
+- [ ] Re-apply from baseline is idempotent (changing file content applies cleanly)
 - [ ] Structural fields (Router, Stone instances) are excluded from baseline/patching
 - [ ] Unknown stone IDs in the file are preserved (forward compat)
-- [ ] Multiple stones bound to same ConfigStore work independently
-- [ ] Global/default ConfigStore patches any stone without explicit binding
+- [ ] Multiple stones sharing same ConfigStore instance work independently
+- [ ] Project-level ConfigStore applies to stones without explicit configStore
+- [ ] Stone-level configStore overrides project-level
+- [ ] Stale file detection: mtime change triggers reload and re-apply
+- [ ] Entry unchanged after file reload: no unnecessary config mutation
+- [ ] WeakMap cleanup: GC'd stones don't leak baseline/patch state
+- [ ] `configStore` field itself excluded from `fromConfig` hashing
+- [ ] Config patching happens before command execution
 
 ## Open Questions (for future sessions)
 
-### Binding API details
-`configStore.bind(stone)` vs `stone.bindConfig(configStore)` vs something on Project? Leaning toward `configStore.bind(stone)` since ConfigStore is the active agent. But need to think through how the global config store's binding works (it binds to all stones? or on-demand?).
+### Re-apply triggers beyond builds
+Currently, config is patched lazily when `getHash()`/`getSource()` is called. For the inspector UI (Scry), an explicit WS/API endpoint can trigger re-evaluation of affected stones. File watching is not in scope for v1 — explicit triggers only.
 
-### Re-apply triggers
-When the file changes externally, who triggers re-apply? Options:
-- WS/API endpoint trigger from Scry/inspector (explicit)
-- File watching (automatic, but adds complexity — is this Whet core's job or Scry's?)
-- Manual reload command
-
-### Global ConfigStore path default
-What's the sensible default path for the project-level global ConfigStore? E.g. `whet-config.json` in project root? Or user must always specify?
-
-### ConfigStore field in ProjectConfig
-Should ProjectConfig grow a `configStore` or `configStores` field for declarative setup? Or is imperative (`new ConfigStore(...)`) sufficient?
-
-### Interaction with commands
-When a stone provides CLI commands, should the ConfigStore patch be applied before command execution too? We do know which stone a command belongs to (it's passed to `addCommand`). Probably yes for consistency, but needs verification.
-
-### AudioDb migration path
-How does AudioDb evolve once ConfigStore exists? The per-entry audio config (opusConfig, aacConfig, preprocess) could move into a ConfigStore. But AudioDb also creates/destroys stones dynamically, which ConfigStore doesn't handle. Is there a clean incremental path, or do they remain separate patterns?
-
-### Edge cases with non-data config values
-Some config fields are borderline — e.g. `encodingOptions: string[]` in Audio is data-like but set via `setOpusConfig()`/`setAacConfig()` helper methods that have logic. If a ConfigStore patches `encodingOptions` directly, the helper's logic is bypassed. Is this fine (user knows what they're doing) or do we need a hook system?
+### Dynamic router upgrades
+`paths` and similar structural fields that instantiate Routers/Files stones at construction time can't be patched by ConfigStore. A future extension could support dynamic router reconfiguration, but this is a separate concern.
 
 ## Reference: Real Stone Config Patterns
 
 Key files examined during planning:
 - `SharpStone.mjs`: operations pipeline, operationsMap, outputs, keepOriginalIfNoOps — all pure data, ideal ConfigStore target
-- `Audio.mjs`: container, encoder, encodingOptions — data, but set via helper methods
+- `Audio.mjs`: container, encoder, encodingOptions — data, set via helper methods (to be refactored to defaults)
 - `AudioWav.mjs`: preprocess (startTime, duration) — simple data
-- `AudioDb.mjs`: dynamic stone creation from JSON — higher-level pattern, not directly ConfigStore's scope
+- `AudioDb.mjs`: dynamic stone creation from JSON — to be replaced by batch stones + ConfigStore
 - `Inkscape.mjs`: ids array [{id, scale, name}] — data, good ConfigStore target
-- `Files.hx`: paths, recursive — mostly structural (paths = what to read)
+- `Files.hx`: paths, recursive — `paths` is structural (non-patchable), `recursive` is data
 - `Stone.hx`: base StoneConfig (cacheStrategy, id, project, dependencies) — all structural, never patched
