@@ -178,8 +178,11 @@ abstract class Stone<T:StoneConfig> {
      * Used by cache. Returns either null, or result of `generateHash` finalized by adding 
      * dependencies.
      */
-    @:allow(whet.cache) function finalMaybeHash():Promise<Null<SourceHash>>
-        return generateHash().then(hash -> finalizeHash(hash));
+    @:allow(whet.cache) function finalMaybeHash():Promise<Null<SourceHash>> {
+        var store:ConfigStore = config.configStore ?? project.configStore;
+        var patchPromise = if (store != null) store.ensureApplied(this) else Promise.resolve(null);
+        return patchPromise.then(_ -> generateHash().then(hash -> finalizeHash(hash)));
+    }
 
     /**
      * Abstract method.
@@ -343,6 +346,9 @@ typedef StoneConfig = {
      * Do not create cyclic dependencies!
      */
     var ?dependencies:whet.magic.MaybeArray<AnyStone>;
+
+    /** Optional ConfigStore for persistent per-stone config patching. Overrides project-level configStore. */
+    var ?configStore:ConfigStore;
 
     // Note: See `SourceHash.fromConfig` when adding fields here.
 

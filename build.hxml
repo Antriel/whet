@@ -9,6 +9,7 @@
 -w -WDeprecated
 --main whet.Whet
 whet.Project
+whet.ConfigStore
 whet.route.Router
 --macro addGlobalMetadata('whet.stones', '@:expose')
 --macro include('whet.stones')

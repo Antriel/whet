@@ -15,8 +15,9 @@ export class MockStone extends Stone {
     hashKey = "static",
     dependencies = null,
     cacheStrategy = null,
+    configStore = null,
   } = {}) {
-    super({ project, id, outputs, delayMs, hashKey, dependencies, cacheStrategy });
+    super({ project, id, outputs, delayMs, hashKey, dependencies, cacheStrategy, configStore });
     this.generateCount = 0;
   }
 

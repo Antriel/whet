@@ -13,6 +13,7 @@ class Project {
     public final description:String;
     public final rootDir:SourceId;
     public final cache:CacheManager = null;
+    public final configStore:ConfigStore = null;
     public final stones:Array<AnyStone> = [];
     public var onInit:(config:Dynamic) -> Promise<Any>;
     /** The object passed to `onInit`. */
@@ -43,6 +44,7 @@ class Project {
             rootDir = (IdUtils.normalize(js.node.Path.relative(js.Node.process.cwd(), file)):SourceId).dir;
             // TODO write tests for this.
         } else rootDir = config.rootDir;
+        configStore = config.configStore;
         cache = config.cache == null ? new CacheManager(this) : config.cache;
         projects.push(this);
         Log.info('New project created.', { project: this, projectCount: projects.length });
@@ -98,6 +100,9 @@ typedef ProjectConfig = {
     /**
      * Array of Commander.js options this project supports. Use `addOption` to get Option instance.
      */
+    /** Project-level ConfigStore, applies to any stone without an explicit configStore. */
+    public var ?configStore:ConfigStore;
+
     public var ?options:Array<commander.Option>;
 
     /**

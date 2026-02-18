@@ -1,11 +1,11 @@
 ---
 # whet-giem
 title: 'ConfigStore: persistent per-stone config patches'
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-02-17T08:33:20Z
-updated_at: 2026-02-17T16:52:24Z
+updated_at: 2026-02-18T09:37:50Z
 parent: whet-juli
 blocked_by:
     - whet-v815
@@ -176,20 +176,20 @@ For `setOpusConfig()`/`setAacConfig()` style helpers that have logic: turn the c
 
 ## Tests
 
-- [ ] Patch application produces correct merged config (nested objects, arrays, primitives)
-- [ ] `null` in patch sets key to `null` (no special delete semantics)
-- [ ] Flush writes JSON to expected path; load reads it back (round-trip)
-- [ ] Re-apply from baseline is idempotent (changing file content applies cleanly)
-- [ ] Structural fields (Router, Stone instances) are excluded from baseline/patching
-- [ ] Unknown stone IDs in the file are preserved (forward compat)
-- [ ] Multiple stones sharing same ConfigStore instance work independently
-- [ ] Project-level ConfigStore applies to stones without explicit configStore
-- [ ] Stone-level configStore overrides project-level
-- [ ] Stale file detection: mtime change triggers reload and re-apply
-- [ ] Entry unchanged after file reload: no unnecessary config mutation
-- [ ] WeakMap cleanup: GC'd stones don't leak baseline/patch state
-- [ ] `configStore` field itself excluded from `fromConfig` hashing
-- [ ] Config patching happens before command execution
+- [x] Patch application produces correct merged config (nested objects, arrays, primitives)
+- [x] `null` in patch sets key to `null` (no special delete semantics)
+- [x] Flush writes JSON to expected path; load reads it back (round-trip)
+- [x] Re-apply from baseline is idempotent (changing file content applies cleanly)
+- [x] Structural fields (Router, Stone instances) are excluded from baseline/patching
+- [x] Unknown stone IDs in the file are preserved (forward compat)
+- [x] Multiple stones sharing same ConfigStore instance work independently
+- [x] Project-level ConfigStore applies to stones without explicit configStore
+- [x] Stone-level configStore overrides project-level
+- [x] Stale file detection: mtime change triggers reload and re-apply
+- [x] Entry unchanged after file reload: no unnecessary config mutation
+- [x] WeakMap cleanup: GC'd stones don't leak baseline/patch state (by design — WeakMap)
+- [x] `configStore` field itself excluded from `fromConfig` hashing
+- [x] Config patching happens before command execution
 
 ## Open Questions (for future sessions)
 
@@ -209,3 +209,18 @@ Key files examined during planning:
 - `Inkscape.mjs`: ids array [{id, scale, name}] — data, good ConfigStore target
 - `Files.hx`: paths, recursive — `paths` is structural (non-patchable), `recursive` is data
 - `Stone.hx`: base StoneConfig (cacheStrategy, id, project, dependencies) — all structural, never patched
+
+## Summary of Changes
+
+Implemented ConfigStore — a persistent, per-stone config patching system.
+
+**New files:**
+- `src/whet/ConfigStore.hx` — Core class with lazy file loading, baseline capture, deep merge patching, WeakMap-based per-stone state, and single-flight reload.
+- `test/config-store.test.mjs` — 13 tests covering all spec requirements.
+
+**Modified files:**
+- `src/whet/Stone.hx` — Added `configStore` to `StoneConfig`; hooked `finalMaybeHash()` to call `store.ensureApplied()` before hash computation.
+- `src/whet/SourceHash.hx` — Added `configStore` to `fromConfig` skip list.
+- `src/whet/Project.hx` — Added `configStore` to `ProjectConfig` and `Project` class for project-level store.
+- `build.hxml` — Added `whet.ConfigStore` for compilation/exposure.
+- `test/helpers/mock-stone.mjs` — Added `configStore` passthrough in constructor.

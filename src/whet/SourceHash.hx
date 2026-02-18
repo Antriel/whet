@@ -69,7 +69,7 @@ class SourceHash {
     @:keep public static function fromConfig(obj:haxe.DynamicAccess<Dynamic>,
             ?ignoreList:Array<String>):Promise<SourceHash> {
         var keys = [for (key => _ in obj) switch key {
-            case 'cacheStrategy' | 'id' | 'project' | 'dependencies': continue;
+            case 'cacheStrategy' | 'id' | 'project' | 'dependencies' | 'configStore': continue;
             case key if (ignoreList != null && ignoreList.contains(key)): continue;
             case _: key;
         }];
