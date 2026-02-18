@@ -95,7 +95,9 @@ new SharpStone({
 });
 ```
 
-**Lookup chain** in a stone: `this.config.configStore ?? this.config.project?.config.configStore ?? null`
+**Lookup chain** in a stone: `this.config.configStore ?? this.config.project?.configStore ?? null`
+
+Note: `project.config` is CLI/options runtime state (from `program.opts()`), not construction config. So `configStore` is a first-class field on `Project` itself (like `cache`, `rootDir`), populated from `ProjectConfig`.
 
 Stone-level overrides project-level. The project-level store naturally serves as a "global" store — no explicit binding to all stones needed, they just fall through to it on demand.
 
@@ -114,46 +116,49 @@ Stone-level overrides project-level. The project-level store naturally serves as
 - Objects: recursive merge (patch keys override base keys)
 - Arrays: replace (patch array replaces base array entirely)
 - Primitives: replace
-- `null` value in patch: deletes the key from effective config
+- `null` value in patch: sets the key to `null` (no special delete semantics — omit key from patch to restore baseline)
 
 ## State Split
 
 **On ConfigStore instance** (shared across all stones using this store):
 - `path: string` — file path
-- `_data: object | null` — parsed JSON content of the whole file
-- `_mtime: number | null` — last known file modification time
+- `data: object | null` — parsed JSON content of the whole file
+- `mtimeMs: number | null` — last known file modification time (milliseconds)
+- `size: number | null` — last known file size (bytes, for invalidation alongside mtimeMs)
 
 **On ConfigStore, per-stone** (via WeakMap, keyed by stone):
-- `_baselines: WeakMap<Stone, object>` — original config values before any patch
-- `_appliedPatches: WeakMap<Stone, object>` — last applied patch entry (for change detection)
+- `baselines: WeakMap<Stone, object>` — original config values before any patch
+- `appliedPatches: WeakMap<Stone, object>` — last applied patch entry (for change detection)
 
 WeakMap ensures: no memory leak if stones are GC'd (relevant for AudioDb-style dynamic stones), and all patching logic lives on ConfigStore rather than scattered across stones. The stone itself only has `config.configStore` — a plain reference.
 
 ## Integration with Hash / Cache: Hook Point
 
-The natural hook point is **`getHash()`** in `Stone.hx`. This is the upstream chokepoint — all paths that read config flow through here. Before computing the hash, we ensure config reflects the current state of the backing file.
+The natural hook point is **`finalMaybeHash()`** in `Stone.hx`. This is the true upstream chokepoint — all cache paths (`BaseCache.get()`, `BaseCache.getPartial()`, `CacheManager` for None strategy) call `stone.finalMaybeHash()` directly, never `stone.getHash()`. Before computing the hash, we ensure config reflects the current state of the backing file.
 
 ```haxe
-// In Stone.getHash(), before existing logic:
-var store = config.configStore ?? config.project?.config.configStore;
+// In Stone.finalMaybeHash(), before existing logic:
+var store = config.configStore ?? config.project?.configStore;
 var patchPromise = if (store != null) store.ensureApplied(this) else Promise.resolve(null);
-return patchPromise.then(_ -> { /* existing getHash body */ });
+return patchPromise.then(_ -> generateHash().then(hash -> finalizeHash(hash)));
 ```
 
 ### `ensureApplied(stone)` flow:
 1. No data loaded? → `fs.stat` + `fs.readFile`, parse JSON, capture baseline from stone's current config, apply patch for `stone.config.id`
-2. Data loaded? → `fs.stat`, compare mtime → changed: reload file, re-apply from baseline → unchanged: no-op (also compare entry to `_appliedPatches` — file might have changed but this stone's entry didn't)
+2. Data loaded? → `fs.stat`, compare mtimeMs + size → changed: reload file, re-apply from baseline → unchanged: no-op (also compare entry to `_appliedPatches` — file might have changed but this stone's entry didn't)
 3. Entry same as last applied? → no-op, return immediately
+
+**Concurrency**: Multiple stones sharing one ConfigStore could trigger concurrent `stat`/`readFile` calls. The ConfigStore holds a single in-flight promise for the reload operation — if a reload is already in progress, subsequent callers await the same promise (single-flight pattern).
 
 ### Why this works for both hash paths:
 - **Stones with `generateHash()`**: They read `this.config` which has patched values → hash reflects patches naturally.
-- **Stones without `generateHash()`**: Falls through to output byte hash via `getSource()` → `generateSource()`. But `getHash()` runs first (called by cache), so config is patched before `generate()` reads it. Output reflects patches → byte hash reflects patches.
+- **Stones without `generateHash()`**: Falls through to output byte hash via `getSource()` → `generateSource()`. But `finalMaybeHash()` runs first (called by cache), so config is patched before `generate()` reads it. Output reflects patches → byte hash reflects patches.
 
 ### No direct hash injection needed
 We do NOT inject the config store entry hash separately. Modifying config values is sufficient — the existing hash mechanisms (`fromConfig`, custom `generateHash`, or output byte hash) pick up the changed values naturally. This avoids the problem of the whole ConfigStore file affecting unrelated stones' hashes.
 
 ### Interaction with commands
-Config store patches are applied before command execution too. Since patches are applied lazily via `getHash()`/`getSource()`, any code path that reads config after these calls sees patched values. For commands, we ensure `ensureApplied` runs before the command's action.
+Config store patches are applied lazily via `finalMaybeHash()`/`getSource()`, so any code path that reads config after these calls sees patched values. Most commands trigger hash/source generation and get patches applied naturally. No separate per-command wrapping mechanism is needed — the `finalMaybeHash()` hook covers all paths.
 
 ## Relationship to Other Beans
 
@@ -172,7 +177,7 @@ For `setOpusConfig()`/`setAacConfig()` style helpers that have logic: turn the c
 ## Tests
 
 - [ ] Patch application produces correct merged config (nested objects, arrays, primitives)
-- [ ] `null` in patch removes key from effective config
+- [ ] `null` in patch sets key to `null` (no special delete semantics)
 - [ ] Flush writes JSON to expected path; load reads it back (round-trip)
 - [ ] Re-apply from baseline is idempotent (changing file content applies cleanly)
 - [ ] Structural fields (Router, Stone instances) are excluded from baseline/patching
@@ -189,7 +194,7 @@ For `setOpusConfig()`/`setAacConfig()` style helpers that have logic: turn the c
 ## Open Questions (for future sessions)
 
 ### Re-apply triggers beyond builds
-Currently, config is patched lazily when `getHash()`/`getSource()` is called. For the inspector UI (Scry), an explicit WS/API endpoint can trigger re-evaluation of affected stones. File watching is not in scope for v1 — explicit triggers only.
+Currently, config is patched lazily when `finalMaybeHash()`/`getSource()` is called. For the inspector UI (Scry), an explicit WS/API endpoint can trigger re-evaluation of affected stones. File watching is not in scope for v1 — explicit triggers only.
 
 ### Dynamic router upgrades
 `paths` and similar structural fields that instantiate Routers/Files stones at construction time can't be patched by ConfigStore. A future extension could support dynamic router reconfiguration, but this is a separate concern.
