@@ -41,7 +41,8 @@ abstract class Stone<T:StoneConfig> {
         // Note: `this` is already in project.stones but with id=null, so it won't match.
         var duplicates = 0;
         for (stone in project.stones) {
-            if (stone.id == id || (!isExplicitId && StringTools.startsWith(stone.id, id + ':')))
+            if (stone.id == id
+                || (!isExplicitId && stone.id != null && StringTools.startsWith(stone.id, id + ':')))
                 duplicates++;
         }
         if (duplicates > 0) {

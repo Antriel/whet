@@ -1,12 +1,16 @@
 package whet;
 
+import js.node.Fs;
 import whet.Log.LogLevel;
 
 var program = new commander.Command('whet');
 
 function main() {
     // Only run CLI when executed directly, not when imported as a library.
-    final entryUrl = js.node.Url.pathToFileURL(js.Node.process.argv[1] ?? "").href;
+    // Use realpathSync to resolve symlinks (e.g. from npm link) before comparing.
+    final argv1 = js.Node.process.argv[1] ?? "";
+    final realArgv1:String = try Fs.realpathSync(argv1) catch(e:Dynamic) argv1;
+    final entryUrl = js.node.Url.pathToFileURL(realArgv1).href;
     final thisUrl:String = js.Syntax.code("new URL('../whet.js',import.meta.url).href");
     if (entryUrl != thisUrl) return;
 

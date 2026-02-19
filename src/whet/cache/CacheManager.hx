@@ -61,7 +61,8 @@ class CacheManager {
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
      */
     public function getDir(stone:AnyStone, ?hash:SourceHash):SourceId {
-        var baseDir:SourceId = stone.id + '/';
+        var safeId = ~/[^a-zA-Z0-9_\-.]/g.replace(stone.id, '_');
+        var baseDir:SourceId = safeId + '/';
         if (stone.cacheStrategy.match(None | InMemory(_))) baseDir = baseDir.getPutInDir('.temp/');
         baseDir = baseDir.getPutInDir('.whet/');
         var id = switch stone.cacheStrategy {

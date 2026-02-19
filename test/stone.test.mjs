@@ -124,3 +124,32 @@ test("Stones with different IDs are not affected by dedup", async () => {
   assert.equal(b.id, "beta");
   await env.cleanup();
 });
+
+test("Stone with colon in ID can use file cache without path issues", async () => {
+  const env = await createTestProject("stone-colon-id");
+  const stone = new MockStone({
+    project: env.project,
+    id: "MyStone:2",
+    outputs: [{ id: "out.txt", content: "hello" }],
+    cacheStrategy: CacheStrategy.InFile(CacheDurability.KeepForever, null),
+  });
+
+  // Should not throw despite colon in ID
+  const source = await stone.getSource();
+  assert.equal(source.get().data.toString("utf-8"), "hello");
+  await env.cleanup();
+});
+
+test("Stone with arbitrary special chars in ID can use file cache", async () => {
+  const env = await createTestProject("stone-special-id");
+  const stone = new MockStone({
+    project: env.project,
+    id: "my/stone?id=1&v=2",
+    outputs: [{ id: "out.txt", content: "world" }],
+    cacheStrategy: CacheStrategy.InFile(CacheDurability.KeepForever, null),
+  });
+
+  const source = await stone.getSource();
+  assert.equal(source.get().data.toString("utf-8"), "world");
+  await env.cleanup();
+});
