@@ -12,7 +12,7 @@ package whet.route;
     public final source:AnyStone;
 
     public function get():Promise<SourceData> {
-        return source.getSource().then(data -> data.get(sourceId));
+        return source.getPartialSource(sourceId).then(s -> if (s != null) s.get() else null);
     }
 
     /** Get the raw Buffer directly. */

@@ -1,10 +1,11 @@
 ---
 # whet-rx3s
 title: Router should use getPartialSource for single-file requests
-status: todo
+status: completed
 type: task
+priority: normal
 created_at: 2026-02-17T13:56:26Z
-updated_at: 2026-02-17T13:56:26Z
+updated_at: 2026-02-19T10:27:51Z
 blocked_by:
     - whet-8gja
 ---
