@@ -1,11 +1,11 @@
 ---
 # whet-mwft
 title: Unified routed asset contract (IRouteSource / AssetRef direction)
-status: draft
+status: scrapped
 type: feature
 priority: low
 created_at: 2026-02-17T08:34:38Z
-updated_at: 2026-02-17T08:34:38Z
+updated_at: 2026-02-19T10:18:46Z
 parent: whet-juli
 ---
 

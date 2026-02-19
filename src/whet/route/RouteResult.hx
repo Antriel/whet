@@ -15,4 +15,19 @@ package whet.route;
         return source.getSource().then(data -> data.get(sourceId));
     }
 
+    /** Get the raw Buffer directly. */
+    public function getData():Promise<js.node.Buffer> {
+        return get().then(sd -> sd.data);
+    }
+
+    /** Get the output as a UTF-8 string. */
+    public function getString():Promise<String> {
+        return getData().then(d -> d.toString('utf-8'));
+    }
+
+    /** Get the output parsed as JSON. */
+    public function getJson():Promise<Dynamic> {
+        return getString().then(s -> haxe.Json.parse(s));
+    }
+
 }

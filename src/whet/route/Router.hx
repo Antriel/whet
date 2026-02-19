@@ -110,6 +110,21 @@ class Router {
             });
     }
 
+    /** Get the raw Buffer of the first matching result. */
+    public function getData(pattern:MinimatchType = null):Promise<js.node.Buffer> {
+        return get(pattern).then(r -> r[0].getData());
+    }
+
+    /** Get the first matching result as a UTF-8 string. */
+    public function getString(pattern:MinimatchType = null):Promise<String> {
+        return get(pattern).then(r -> r[0].getString());
+    }
+
+    /** Get the first matching result parsed as JSON. */
+    public function getJson(pattern:MinimatchType = null):Promise<Dynamic> {
+        return get(pattern).then(r -> r[0].getJson());
+    }
+
     public function listContents(pattern:MinimatchType = null):Promise<String> {
         return get(pattern).then(files -> {
             var ids = files.map(f -> f.serveId);

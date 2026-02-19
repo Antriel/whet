@@ -304,6 +304,21 @@ abstract class Stone<T:StoneConfig> {
         });
     }
 
+    /** Get the raw Buffer of the first (or only) output. */
+    @:keep public final function getData():Promise<js.node.Buffer> {
+        return getSource().then(s -> s.get().data);
+    }
+
+    /** Get the first (or only) output as a UTF-8 string. */
+    @:keep public final function getString():Promise<String> {
+        return getData().then(d -> d.toString('utf-8'));
+    }
+
+    /** Get the first (or only) output parsed as JSON. */
+    @:keep public final function getJson():Promise<Dynamic> {
+        return getString().then(s -> haxe.Json.parse(s));
+    }
+
     /**
      * Convenient function to get CWD-relative path from project-relative one.
      * Useful for pure JS stones.
