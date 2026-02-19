@@ -218,6 +218,7 @@ class ConfigStore {
 
     public static function deepClone(val:Dynamic):Dynamic {
         if (val == null) return null;
+        if (!isJsonSerializable(val)) return null;
         if (val is Array) {
             var arr:Array<Dynamic> = val;
             return arr.map(item -> deepClone(item));
