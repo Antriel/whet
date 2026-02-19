@@ -3,8 +3,9 @@
 title: Native dynamic Stone creation (AudioDb pattern replacement)
 status: draft
 type: feature
+priority: low
 created_at: 2026-02-18T08:04:06Z
-updated_at: 2026-02-18T08:04:06Z
+updated_at: 2026-02-18T09:57:47Z
 parent: whet-juli
 ---
 

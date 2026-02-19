@@ -12,6 +12,7 @@ class ConfigStore {
     public final path:String;
 
     var data:Null<DynamicAccess<Dynamic>> = null;
+    var persistedData:Null<DynamicAccess<Dynamic>> = null;
     var mtimeMs:Null<Float> = null;
     var size:Null<Float> = null;
     var loadPromise:Null<Promise<Nothing>> = null;
@@ -49,6 +50,43 @@ class ConfigStore {
         });
     }
 
+    public function getEntryById(stoneId:String):Dynamic {
+        if (data == null) return null;
+        return data.get(stoneId);
+    }
+
+    public function setEntry(stoneId:String, patch:Dynamic):Void {
+        if (data == null) data = new DynamicAccess();
+        data.set(stoneId, patch);
+    }
+
+    public function clearEntry(stoneId:String):Void {
+        if (data == null) return;
+        if (persistedData != null && persistedData.exists(stoneId)) {
+            data.set(stoneId, deepClone(persistedData.get(stoneId)));
+        } else {
+            data.remove(stoneId);
+        }
+    }
+
+    public function flush():Promise<Nothing> {
+        return writeFile();
+    }
+
+    public function isDirty(?stoneId:String):Bool {
+        if (stoneId != null) {
+            var current = if (data != null) data.get(stoneId) else null;
+            var persisted = if (persistedData != null) persistedData.get(stoneId) else null;
+            if (current == persisted) return false;
+            if (current == null || persisted == null) return true;
+            return haxe.Json.stringify(current) != haxe.Json.stringify(persisted);
+        }
+        // Global dirty check.
+        var currentStr = if (data != null) haxe.Json.stringify(data) else "{}";
+        var persistedStr = if (persistedData != null) haxe.Json.stringify(persistedData) else "{}";
+        return currentStr != persistedStr;
+    }
+
     function reload():Promise<Nothing> {
         if (loadPromise != null) return loadPromise;
         loadPromise = doReload().then(result -> {
@@ -65,7 +103,10 @@ class ConfigStore {
         return statFile().then(stats -> {
             if (stats == null) {
                 // File doesn't exist (yet).
-                if (data == null) data = new DynamicAccess();
+                if (data == null) {
+                    data = new DynamicAccess();
+                    persistedData = new DynamicAccess();
+                }
                 return Promise.resolve(null);
             }
             var newMtime:Float = (cast stats).mtimeMs;
@@ -96,6 +137,7 @@ class ConfigStore {
             if (err != null) rej(err)
             else {
                 data = haxe.Json.parse(content);
+                persistedData = deepClone(data);
                 res(null);
             }
         }));
@@ -111,6 +153,7 @@ class ConfigStore {
                     else {
                         mtimeMs = (cast stats).mtimeMs;
                         size = (cast stats).size;
+                        persistedData = deepClone(data);
                         res(null);
                     }
                 });
@@ -123,7 +166,7 @@ class ConfigStore {
         return data.get(stone.id);
     }
 
-    static final BASE_CONFIG_KEYS = ['cacheStrategy', 'id', 'project', 'dependencies', 'configStore'];
+    public static final BASE_CONFIG_KEYS = ['cacheStrategy', 'id', 'project', 'dependencies', 'configStore'];
 
     function captureBaseline(stone:AnyStone):Void {
         var baseline = new DynamicAccess<Dynamic>();
@@ -165,7 +208,7 @@ class ConfigStore {
         appliedPatches.set(stone, if (entry != null) deepClone(entry) else null);
     }
 
-    static function isJsonSerializable(val:Dynamic):Bool {
+    public static function isJsonSerializable(val:Dynamic):Bool {
         if (val == null) return true;
         if (val is Stone) return false;
         if (val is Router) return false;
@@ -173,7 +216,7 @@ class ConfigStore {
         return true;
     }
 
-    static function deepClone(val:Dynamic):Dynamic {
+    public static function deepClone(val:Dynamic):Dynamic {
         if (val == null) return null;
         if (val is Array) {
             var arr:Array<Dynamic> = val;

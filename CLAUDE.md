@@ -106,3 +106,18 @@ Stones automatically:
 - **@:expose metadata**: Makes classes available to JavaScript (see build.hxml for `whet.stones` exposure)
 - **JS interop**: Use `js.Syntax.code()` for raw JavaScript when needed
 - **Type unification**: `cast` is used for Promise type unification
+
+# Bash Tips
+
+**CRITICAL: Backticks in beans commands** — When updating bean body content that contains backticks (code snippets, template literals, etc.), you MUST use a heredoc with a QUOTED delimiter to prevent bash command substitution:
+  ```bash
+  # WRONG - backticks will be interpreted by bash
+  beans update <id> --body-append "text with \`code\`"
+  echo "text with \`code\`" | beans update <id> --body-append -
+
+  # CORRECT - heredoc with quoted delimiter (<<'EOF' not <<EOF)
+  beans update <id> --body-append "$(cat <<'EOF'
+  text with `code` and `backticks`
+  EOF
+  )"
+  ```

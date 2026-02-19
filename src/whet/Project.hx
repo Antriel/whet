@@ -78,6 +78,58 @@ class Project {
         else stone.getSource();
     }
 
+    public function getStoneConfig(id:String):Promise<Null<StoneConfigView>> {
+        final stone = getStone(id);
+        if (stone == null) return Promise.resolve(null);
+        final store:ConfigStore = stone.config.configStore ?? configStore;
+        // Ensure patches are applied before reading config.
+        var init = if (store != null) store.ensureApplied(stone) else Promise.resolve(null);
+        return init.then(_ -> {
+            var editable = new haxe.DynamicAccess<Dynamic>();
+            var configObj:haxe.DynamicAccess<Dynamic> = cast stone.config;
+            for (key => val in configObj) {
+                if (ConfigStore.BASE_CONFIG_KEYS.contains(key)) continue;
+                if (ConfigStore.isJsonSerializable(val))
+                    editable.set(key, ConfigStore.deepClone(val));
+            }
+            var depIds:Array<String> = [];
+            if (stone.config.dependencies != null) {
+                var deps:Array<AnyStone> = whet.magic.MaybeArray.makeArray(stone.config.dependencies);
+                depIds = [for (d in deps) d.id];
+            }
+            var view:StoneConfigView = {
+                id: stone.id,
+                editable: editable,
+                meta: {
+                    className: getTypeName(stone),
+                    cacheStrategy: stone.cacheStrategy,
+                    dependencyIds: depIds,
+                    hasStoneConfigStore: stone.config.configStore != null,
+                    hasProjectConfigStore: configStore != null,
+                }
+            };
+            return view;
+        });
+    }
+
+    public function setStoneConfig(id:String, patch:Dynamic, mode:ConfigPatchMode):Promise<Bool> {
+        final stone = getStone(id);
+        if (stone == null) return Promise.resolve(false);
+        final store:ConfigStore = stone.config.configStore ?? configStore;
+        if (store == null) return Promise.resolve(false);
+        store.setEntry(stone.id, patch);
+        return if (mode == Persist) store.flush().then(_ -> true) else Promise.resolve(true);
+    }
+
+    public function clearStoneConfigPreview(id:String):Promise<Bool> {
+        final stone = getStone(id);
+        if (stone == null) return Promise.resolve(false);
+        final store:ConfigStore = stone.config.configStore ?? configStore;
+        if (store == null) return Promise.resolve(false);
+        store.clearEntry(stone.id);
+        return Promise.resolve(true);
+    }
+
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {
         var cmd = new commander.Command(name);
         if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
@@ -119,4 +171,24 @@ typedef StoneDescription = {
     var ?outputFilter:OutputFilter;
     var ?cacheStrategy:CacheStrategy;
 
+}
+
+enum abstract ConfigPatchMode(String) {
+    var Preview = "preview";
+    var Persist = "persist";
+}
+
+typedef StoneConfigView = {
+    var id:String;
+    var editable:Dynamic;
+    var meta:StoneConfigMeta;
+}
+
+typedef StoneConfigMeta = {
+    var className:String;
+    var cacheStrategy:CacheStrategy;
+    var dependencyIds:Array<String>;
+    var hasStoneConfigStore:Bool;
+    var hasProjectConfigStore:Bool;
+    var ?uiHints:Dynamic;
 }
