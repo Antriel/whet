@@ -19,6 +19,7 @@ function main() {
         .usage('[options] [command] [+ [command]...]')
         .version(Macros.getVersion(), '-v, --version')
         .allowUnknownOption(true)
+        .allowExcessArguments(true)
         .showSuggestionAfterError(true)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info')
