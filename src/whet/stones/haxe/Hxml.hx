@@ -13,6 +13,7 @@ class Hxml extends Stone<HxmlConfig> {
             hxml: this,
             id: (this.config.id ?? 'haxe') + '-build',
             project: config.project,
+            exposeCommands: config.exposeCommands,
         });
     }
 
@@ -144,7 +145,8 @@ class Hxml extends Stone<HxmlConfig> {
             main: config.main,
             debug: config.debug,
             flags: [for (fa in makeArray(config.flags)) makeArray(fa).copy()],
-            platform: config.platform
+            platform: config.platform,
+            exposeCommands: false,
         };
     }
 
@@ -160,6 +162,7 @@ typedef HxmlConfig = StoneConfig & {
     var ?debug:Null<Bool>;
     var ?flags:MaybeArray<MaybeArray<String>>;
     var ?platform:BuildPlatform;
+    var ?exposeCommands:Bool;
 
 }
 

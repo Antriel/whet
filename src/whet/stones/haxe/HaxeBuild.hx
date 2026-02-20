@@ -49,6 +49,7 @@ class HaxeBuild extends Stone<BuildConfig> {
     }
 
     override function addCommands():Void {
+        if (this.config.exposeCommands != false)
         project.addCommand('build', this).action(_ -> this.cache.refreshSource(this));
     }
 
@@ -73,5 +74,6 @@ typedef BuildConfig = StoneConfig & {
     var ?useNpx:Bool;
     var ?filename:String;
     var ?cwd:String;
+    var ?exposeCommands:Bool;
 
 }
