@@ -9,7 +9,11 @@ class Hxml extends Stone<HxmlConfig> {
 
     override function initConfig() {
         if (config.cacheStrategy == null) config.cacheStrategy = InFile(LimitCountByLastUse(1));
-        build = new HaxeBuild({ hxml: this, id: 'build', project: config.project });
+        build = new HaxeBuild({
+            hxml: this,
+            id: (this.config.id ?? 'haxe') + '-build',
+            project: config.project,
+        });
     }
 
     public function clone(id:StoneIdType = null):Hxml {

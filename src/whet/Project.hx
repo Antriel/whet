@@ -131,10 +131,28 @@ class Project {
     }
 
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {
-        var cmd = new commander.Command(name);
-        if (stone != null) cmd.alias(stone.id + '.' + cmd.name());
+        var cmdName = name;
+        var cmdAlias:Null<String> = null;
+        if (stone != null) {
+            final alias = stone.id + '.' + name;
+            if (isCommandNameTaken(name)) {
+                cmdName = alias;
+            } else {
+                cmdAlias = alias;
+            }
+        }
+        var cmd = new commander.Command(cmdName);
+        if (cmdAlias != null) cmd.alias(cmdAlias);
         whet.Whet.program.addCommand(cmd);
         return cmd;
+    }
+
+    private function isCommandNameTaken(name:String):Bool {
+        for (cmd in whet.Whet.program.commands) {
+            if (cmd.name() == name) return true;
+            for (a in cmd.aliases()) if (a == name) return true;
+        }
+        return false;
     }
 
     public function toString() return '$name@$rootDir';
