@@ -1,6 +1,6 @@
 {
     "name": "whet",
-    "version": "0.0.34",
+    "version": "0.1.0",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
         "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
@@ -26,7 +26,7 @@
     },
     "homepage": "https://github.com/Antriel/whet#readme",
     "dependencies": {
-        "commander": "^9.0.0",
+        "commander": "^14.0.3",
         "mime": "^3.0.0",
         "minimatch": "^5.1.0",
         "pino-pretty": "^9.1.0"
