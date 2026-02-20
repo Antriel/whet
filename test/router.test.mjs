@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { Minimatch } from "minimatch";
 
 import { Router } from "../bin/whet.js";
 import { CacheStrategy, CacheDurability } from "../bin/whet/cache/Cache.js";
@@ -61,6 +62,25 @@ test("Router supports nested composition and mutation via route()", async () => 
 
   const listed = lines(await root.listContents());
   assert.deepEqual(listed, ["first/a.txt", "second/b.txt"]);
+  await env.cleanup();
+});
+
+test("Router get() accepts a Minimatch instance instead of a string", async () => {
+  const env = await createTestProject("router-minimatch-instance");
+  const stone = new MockStone({
+    project: env.project,
+    id: "mm",
+    outputs: [
+      { id: "dir/x.txt", content: "X" },
+      { id: "dir/y.txt", content: "Y" },
+    ],
+  });
+  const router = new Router([["public/", stone]]);
+
+  const pattern = new Minimatch("public/**/x.txt");
+  const results = await router.get(pattern);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].serveId, "public/dir/x.txt");
   await env.cleanup();
 });
 

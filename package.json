@@ -3,7 +3,7 @@
     "version": "0.1.0",
     "description": "NodeJS based assets management and project tooling library.",
     "scripts": {
-        "devinit": "npx dts2hx commander pino-pretty --modular --noLibWrap",
+        "devinit": "npx dts2hx commander pino-pretty minimatch --modular --noLibWrap",
         "build": "npx haxe build.hxml",
         "test": "node --test \"test/**/*.test.mjs\""
     },
@@ -27,13 +27,11 @@
     "homepage": "https://github.com/Antriel/whet#readme",
     "dependencies": {
         "commander": "^14.0.3",
-        "mime": "^3.0.0",
-        "minimatch": "^5.1.0",
+        "minimatch": "^10.2.2",
         "pino-pretty": "^9.1.0"
     },
     "devDependencies": {
-        "@types/minimatch": "^5.1.0",
-        "dts2hx": "^0.18.1",
-        "lix": "^15.11.6"
+        "dts2hx": "^0.20.0",
+        "lix": "^16.0.2"
     }
 }

@@ -1,6 +1,6 @@
 package whet.route;
 
-import whet.extern.Minimatch;
+import minimatch.Minimatch;
 
 /**
  * Utility for matching queries against Stone output filters.
@@ -33,7 +33,7 @@ class OutputFilterMatcher {
             // Query is a specific file - check if it matches any output pattern
             for (pattern in filter.patterns) {
                 // Use **/ prefix to match pattern at any route depth
-                if (Minimatch.makeNew("**/" + pattern).match(query)) {
+                if (new Minimatch("**/" + pattern).match(query)) {
                     return true;  // Matches at least one pattern
                 }
             }

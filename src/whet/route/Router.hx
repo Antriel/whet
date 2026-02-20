@@ -2,7 +2,7 @@ package whet.route;
 
 import haxe.extern.EitherType;
 import js.node.Path;
-import whet.extern.Minimatch;
+import minimatch.Minimatch;
 import whet.magic.MinimatchType;
 import whet.magic.RoutePathType;
 

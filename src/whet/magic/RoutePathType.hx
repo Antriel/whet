@@ -1,6 +1,6 @@
 package whet.magic;
 
-import whet.extern.Minimatch;
+import minimatch.Minimatch;
 import whet.magic.MinimatchType;
 import whet.route.Router;
 import whet.stones.Files;
