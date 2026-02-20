@@ -14,7 +14,7 @@ class JsonStone extends Stone<JsonStoneConfig> {
         return this;
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         var obj:DynamicAccess<Dynamic> = { }
         for (field => val in data) obj[field] = val; // Copy our data first.
         return config.mergeFiles.get().then(list -> Promise.all(list.map(r -> r.get())))

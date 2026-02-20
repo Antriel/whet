@@ -187,12 +187,23 @@ abstract class Stone<T:StoneConfig> {
     }
 
     /**
-     * Abstract method.
-     * Function that actually generates the source. Passed hash is only non-null
-     * if `generateHash()` is implemented. It can be used for `CacheManager.getDir` and
-     * is passed mainly as optimization.
+     * Override to generate all source data at once. Passed hash is only non-null
+     * if `generateHash()` is implemented.
+     * Default implementation calls list() + generatePartial() for each ID.
+     * Stones must implement either this method or list() + generatePartial().
      */
-    private abstract function generate(hash:SourceHash):Promise<Array<SourceData>>;
+    private function generate(hash:SourceHash):Promise<Array<SourceData>> {
+        return list().then(ids -> {
+            if (ids == null)
+                throw new js.lib.Error("Stone must implement either generate() or list() + generatePartial().");
+            return cast Promise.all([for (id in ids) generatePartial(id, hash)])
+                .then((results:Array<Null<Array<SourceData>>>) -> {
+                    var all:Array<SourceData> = [];
+                    for (r in results) if (r != null) for (d in r) all.push(d);
+                    return all;
+                });
+        });
+    }
 
     /**
      * Optional override: return the list of output sourceIds this stone produces,

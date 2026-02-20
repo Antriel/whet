@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
+import { Stone } from "../bin/whet.js";
 import {
   CacheStrategy,
   CacheDurability,
@@ -556,6 +557,121 @@ test("listIds() falls back to full generation when list() returns null", async (
   const ids = await stone.listIds();
   assert.deepEqual(ids, ["x.txt", "y.txt"]);
   assert.equal(stone.generateCount, 1); // had to generate to get IDs
+  await env.cleanup();
+});
+
+// ---------------------------------------------------------------------------
+// Auto-derived generate() from list() + generatePartial()
+// ---------------------------------------------------------------------------
+
+/**
+ * A Stone that only implements list() + generatePartial(), no generate() override.
+ * Tests the auto-derived generate() default in Stone base class.
+ */
+class PartialOnlyStone extends Stone {
+  constructor(opts = {}) {
+    super({
+      project: opts.project,
+      id: opts.id ?? "partial-only",
+      cacheStrategy: opts.cacheStrategy,
+    });
+    this._outputs = opts.outputs ?? [];
+    this._hashKey = opts.hashKey ?? "static";
+    this.partialGenerateCount = 0;
+    this.listCallCount = 0;
+  }
+
+  async generateHash() {
+    if (this._hashKey === null) return null;
+    return SourceHash.fromString(String(this._hashKey));
+  }
+
+  async list() {
+    this.listCallCount += 1;
+    return this._outputs.map((o) => o.id);
+  }
+
+  async generatePartial(sourceId, hash) {
+    this.partialGenerateCount += 1;
+    const match = this._outputs.find((d) => d.id === sourceId);
+    if (!match) return null;
+    return [SourceData.fromString(match.id, String(match.content))];
+  }
+}
+
+test("auto-derived generate(): getSource works with only list()+generatePartial()", async () => {
+  const env = await createTestProject("auto-derive-gen");
+  const stone = new PartialOnlyStone({
+    project: env.project,
+    id: "auto-gen",
+    outputs: [
+      { id: "a.txt", content: "A" },
+      { id: "b.txt", content: "B" },
+      { id: "c.txt", content: "C" },
+    ],
+    cacheStrategy: CacheStrategy.None,
+  });
+
+  const source = await stone.getSource();
+  assert.equal(source.data.length, 3);
+  assert.equal(source.get("a.txt").data.toString("utf-8"), "A");
+  assert.equal(source.get("b.txt").data.toString("utf-8"), "B");
+  assert.equal(source.get("c.txt").data.toString("utf-8"), "C");
+  assert.equal(stone.listCallCount, 1);
+  assert.equal(stone.partialGenerateCount, 3);
+  await env.cleanup();
+});
+
+test("auto-derived generate(): works with InMemory cache", async () => {
+  const env = await createTestProject("auto-derive-cache");
+  const stone = new PartialOnlyStone({
+    project: env.project,
+    id: "auto-cache",
+    outputs: [
+      { id: "x.txt", content: "X" },
+      { id: "y.txt", content: "Y" },
+    ],
+    cacheStrategy: CacheStrategy.InMemory(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  const source = await stone.getSource();
+  assert.equal(source.data.length, 2);
+
+  // Second call should hit cache, no regeneration.
+  const source2 = await stone.getSource();
+  assert.equal(source2.data.length, 2);
+  assert.equal(stone.partialGenerateCount, 2); // only from first call
+  await env.cleanup();
+});
+
+test("auto-derived generate(): partial then full with PartialOnlyStone", async () => {
+  const env = await createTestProject("auto-derive-partial-full");
+  const stone = new PartialOnlyStone({
+    project: env.project,
+    id: "auto-pf",
+    outputs: [
+      { id: "a.txt", content: "A" },
+      { id: "b.txt", content: "B" },
+    ],
+    cacheStrategy: CacheStrategy.InMemory(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  // Partial request first.
+  const partial = await stone.getPartialSource("a.txt");
+  assert.notEqual(partial, null);
+  assert.equal(partial.get().data.toString("utf-8"), "A");
+  assert.equal(stone.partialGenerateCount, 1);
+
+  // Full request: list() provides IDs, generates only missing b.txt.
+  const full = await stone.getSource();
+  assert.equal(full.data.length, 2);
+  assert.equal(stone.partialGenerateCount, 2); // 1 (partial a) + 1 (completion b via generatePartialSource)
   await env.cleanup();
 });
 

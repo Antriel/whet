@@ -20,7 +20,7 @@ class ZipStone extends Stone<ZipConfig> {
         });
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Zipping files.');
         final level = config.level;
         return config.sources.get().then(files -> {

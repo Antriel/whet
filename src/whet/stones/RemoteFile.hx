@@ -11,7 +11,7 @@ class RemoteFile extends Stone<RemoteFileConfig> {
         if (config.cacheStrategy == null) config.cacheStrategy = InFile(KeepForever);
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Downloading file.', { url: config.url });
         #if tests
         var file = '' + TestRemoteFileStone.counter++;

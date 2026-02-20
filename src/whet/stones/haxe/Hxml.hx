@@ -114,7 +114,7 @@ class Hxml extends Stone<HxmlConfig> {
         }
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         Log.info('Generating hxml file.');
         return Promise.resolve([SourceData.fromString(filename(), getFileContent())]);
     }

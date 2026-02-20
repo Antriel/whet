@@ -33,7 +33,7 @@ class HaxeBuild extends Stone<BuildConfig> {
         });
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         if (config.hxml.isSingleFile()) {
             var pathId = config.hxml.getBuildExportPath();
             var path = pathId.toCwdPath(project);

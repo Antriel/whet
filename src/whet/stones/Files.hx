@@ -25,7 +25,7 @@ class Files extends Stone<FilesConfig> {
         );
     }
 
-    function generate(hash:SourceHash):Promise<Array<SourceData>> {
+    override function generate(hash:SourceHash):Promise<Array<SourceData>> {
         return walk(
             (path) -> SourceData.fromFile(path.withExt, cwdPath(path), path),
             (dir, dirFile) -> {
