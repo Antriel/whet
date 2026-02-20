@@ -18,7 +18,7 @@ class Hxml extends Stone<HxmlConfig> {
 
     public function clone(id:StoneIdType = null):Hxml {
         var configClone = cloneConfig(config);
-        configClone.id = makeStoneId(id == null ? this.id : id);
+        configClone.id = makeStoneId(id == null ? this.id + '-clone' : id);
         return new Hxml(configClone);
     }
 

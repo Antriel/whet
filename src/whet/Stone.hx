@@ -32,8 +32,8 @@ abstract class Stone<T:StoneConfig> {
         if (config == null) throw new js.lib.Error('Config must be supplied.');
         this.config = config;
         project = if (config.project != null) config.project else Project.projects[Project.projects.length - 1];
-        if (project == null) throw new js.lib.Error("Did not find a project. Create one before creating stones.");
-        project.stones.push(this);
+        if (project == null)
+            throw new js.lib.Error("Did not find a project. Create one before creating stones.");
         initConfig();
         final isExplicitId = config.id != null;
         id = if (isExplicitId) makeStoneId(config.id) else makeStoneId(this);
@@ -51,6 +51,7 @@ abstract class Stone<T:StoneConfig> {
             else
                 id = id + ':' + (duplicates + 1);
         }
+        project.stones.push(this);
         cacheStrategy = config.cacheStrategy == null ? cache.defaultStrategy : config.cacheStrategy;
         addCommands();
     }
