@@ -39,7 +39,7 @@ function main() {
         if (n == null) program.error('Invalid value for --log-level');
         else Log.logLevel = n;
     }
-    if (options.pretty) Log.stream = PinoPretty.default_();
+    if (options.pretty) Log.stream = PinoPretty.call();
 
     js.Node.setImmediate(init, options); // Init next tick, in case the project file was executed directly.
 }
