@@ -194,6 +194,15 @@ class ConfigStore {
             }
         }
 
+        // Apply patch keys that don't exist in baseline (new keys introduced by patch).
+        if (entry != null) {
+            for (key => val in entry) {
+                if (!baseline.exists(key)) {
+                    configObj.set(key, deepClone(val));
+                }
+            }
+        }
+
         // Remove keys that were added by a previous patch but not in new patch and not in baseline.
         var prevApplied = appliedPatches.get(stone);
         if (prevApplied != null) {

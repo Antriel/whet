@@ -7,6 +7,7 @@ class Files extends Stone<FilesConfig> {
 
     override function initConfig() {
         this.config.recursive ??= true;
+        this.config.id ??= makeArray(this.config.paths)[0];
     }
 
     override function generateHash():Promise<SourceHash> {
