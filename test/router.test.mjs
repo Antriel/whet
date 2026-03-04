@@ -121,6 +121,35 @@ test("Router getHash includes serveId effects", async () => {
   await env.cleanup();
 });
 
+test("Router filter negation pattern excludes matching files", async () => {
+  const env = await createTestProject("router-negation-filter");
+  const stone = new MockStone({
+    project: env.project,
+    id: "negation",
+    outputs: [
+      { id: "wall.png", content: "W" },
+      { id: "wall_inpaint.png", content: "I" },
+      { id: "photo.jpg", content: "J" },
+    ],
+  });
+
+  // Simple negation — excludes *_inpaint.png but passes all other extensions too.
+  const r1 = new Router([["", stone, "!*_inpaint.png"]]);
+  assert.deepEqual(lines(await r1.listContents()), ["photo.jpg", "wall.png"]);
+
+  // Extglob with nonegate:true — leading ! is parsed as extglob !() rather than
+  // whole-pattern negation, so the .png extension is also enforced.
+  const r2 = new Router([["", stone, new Minimatch("!(*_inpaint).png", { nonegate: true })]]);
+  assert.deepEqual(lines(await r2.listContents()), ["wall.png"]);
+
+  // Same extglob as a plain string — wrap in @() so ! is no longer the leading
+  // character and minimatch won't consume it as a negation prefix.
+  const r3 = new Router([["", stone, "@(!(*_inpaint)).png"]]);
+  assert.deepEqual(lines(await r3.listContents()), ["wall.png"]);
+
+  await env.cleanup();
+});
+
 test("Router saveInto clears destination when clearFirst=true", async () => {
   const env = await createTestProject("router-save-into");
   await env.write("src/a.txt", "A");
