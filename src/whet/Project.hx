@@ -97,9 +97,24 @@ class Project {
                 var deps:Array<AnyStone> = whet.magic.MaybeArray.makeArray(stone.config.dependencies);
                 depIds = [for (d in deps) d.id];
             }
+            var fixed = new haxe.DynamicAccess<Dynamic>();
+            for (key => val in configObj) {
+                if (ConfigStore.BASE_CONFIG_KEYS.contains(key)) continue;
+                if (ConfigStore.isJsonSerializable(val)) continue;
+                if (val is Stone) {
+                    fixed.set(key, { type: "stone", stoneId: (cast val:AnyStone).id });
+                } else if (val is whet.route.Router) {
+                    fixed.set(key, { type: "stones", stoneIds: (cast val:whet.route.Router).collectStoneIds() });
+                } else if (val is Array) {
+                    var arr:Array<Dynamic> = val;
+                    if (arr.length > 0 && arr[0] is Stone)
+                        fixed.set(key, { type: "stones", stoneIds: [for (s in (cast arr:Array<AnyStone>)) s.id] });
+                }
+            }
             var view:StoneConfigView = {
                 id: stone.id,
                 editable: editable,
+                fixed: fixed,
                 meta: {
                     className: getTypeName(stone),
                     cacheStrategy: stone.cacheStrategy,
@@ -200,6 +215,7 @@ typedef StoneConfigView = {
     var id:String;
     var editable:Dynamic;
     var meta:StoneConfigMeta;
+    var fixed:Dynamic;
 }
 
 typedef StoneConfigMeta = {

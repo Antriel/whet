@@ -18,6 +18,21 @@ class Router {
     public inline function route(r:RoutePathType)
         for (path in makeRoutePath(r)) routes.push(path);
 
+    /** Recursively collect all Stone IDs referenced in this Router's routes. */
+    public function collectStoneIds():Array<String> {
+        var ids:Array<String> = [];
+        for (route in routes) {
+            if (route.source is AnyStone) {
+                var id = (cast route.source:AnyStone).id;
+                if (ids.indexOf(id) == -1) ids.push(id);
+            } else if (route.source is Router) {
+                for (id in (cast route.source:Router).collectStoneIds())
+                    if (ids.indexOf(id) == -1) ids.push(id);
+            }
+        }
+        return ids;
+    }
+
     /**
      * Find data sources routed under `pattern`.
      * @param pattern A glob pattern to search for.
