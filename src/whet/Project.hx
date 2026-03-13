@@ -78,6 +78,12 @@ class Project {
         else stone.getSource();
     }
 
+    @:keep public function refreshStoneSource(id:String):Promise<Null<Source>> {
+        final stone = getStone(id);
+        return if (stone == null) Promise.resolve(null)
+        else cache.refreshSource(stone);
+    }
+
     public function getStoneConfig(id:String):Promise<Null<StoneConfigView>> {
         final stone = getStone(id);
         if (stone == null) return Promise.resolve(null);
