@@ -19,7 +19,6 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
   - `commander`: CLI argument parsing
   - `pino-pretty`: Logging
   - `minimatch`: Glob pattern matching
-  - `mime`: MIME type detection
 
 # Architecture
 
@@ -63,7 +62,7 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 - All paths use `/` as separator (cross-platform)
 - Paths are relative to project root
 - Directory paths end with `/` (e.g., `assets/` is a directory, `assets` is a file)
-- `SourceId` is a type alias for relative paths
+- `SourceId` is a abstract type over string for type safe and performance optimized id/relative paths handling
 
 ## Command Chaining
 
@@ -110,14 +109,14 @@ Stones automatically:
 # Bash Tips
 
 **CRITICAL: Backticks in beans commands** — When updating bean body content that contains backticks (code snippets, template literals, etc.), you MUST use a heredoc with a QUOTED delimiter to prevent bash command substitution:
-  ```bash
-  # WRONG - backticks will be interpreted by bash
-  beans update <id> --body-append "text with \`code\`"
-  echo "text with \`code\`" | beans update <id> --body-append -
+```bash
+# WRONG - backticks will be interpreted by bash
+beans update <id> --body-append "text with \`code\`"
+echo "text with \`code\`" | beans update <id> --body-append -
 
-  # CORRECT - heredoc with quoted delimiter (<<'EOF' not <<EOF)
-  beans update <id> --body-append "$(cat <<'EOF'
-  text with `code` and `backticks`
-  EOF
-  )"
-  ```
+# CORRECT - heredoc with quoted delimiter (<<'EOF' not <<EOF)
+beans update <id> --body-append "$(cat <<'EOF'
+text with `code` and `backticks`
+EOF
+)"
+```
