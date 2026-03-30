@@ -5,7 +5,7 @@ status: draft
 type: epic
 priority: high
 created_at: 2026-03-28T06:46:54Z
-updated_at: 2026-03-28T09:40:01Z
+updated_at: 2026-03-30T07:09:46Z
 ---
 
 Add optional profiling to Whet: track stone generation timing, cache hits/misses, dependency chains, and generation reasons. Support live streaming for long-lived services. Negligible overhead when disabled.
@@ -532,7 +532,7 @@ When UwsServerStone handles an HTTP request for `game.js`, it starts a `Serve` s
 ### Implementation Plan
 
 - [x] Phase 1: Core Profiler (Whet-side, Haxe) — see whet-j8n9
-- [ ] Phase 2: Export and Analysis
+- [x] Phase 2: Export and Analysis
   - [ ] JSON export format
   - [ ] Chrome Trace export format (with epoch microsecond timestamp conversion)
   - [ ] Summary stats aggregation (from SpanStats)

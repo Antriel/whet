@@ -24,6 +24,7 @@ function main() {
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info')
         .option('--no-pretty', 'disable pretty logging')
+        .option('--profile <format>', 'enable profiling, export to whet-profile.json on exit (format: json or trace, default: json)', 'json')
         .exitOverride();
 
     try {
@@ -77,6 +78,23 @@ private function initProjects() {
     var initProm = if (commands.length > 0) {
         var res = program.parseOptions(commands[0]);
         commands[0] = res.operands.concat(res.unknown);
+
+        // Enable profiling on all projects if --profile flag is set.
+        var profileFormat:Dynamic = program.opts().profile;
+        if (profileFormat != null) {
+            var format:String = if (profileFormat == true) "json" else profileFormat;
+            for (p in Project.projects) p.enableProfiling();
+            var onExit = () -> {
+                for (p in Project.projects) {
+                    if (p.profiler != null) {
+                        var data = p.profiler.exportProfile(format);
+                        var json:String = haxe.Json.stringify(data, null, '  ');
+                        js.node.Fs.writeFileSync('whet-profile.json', json);
+                    }
+                }
+            };
+            js.Node.process.on('exit', onExit);
+        }
 
         var promises:Array<Promise<Any>> = [];
         for (p in Project.projects) if (p.onInit != null) {

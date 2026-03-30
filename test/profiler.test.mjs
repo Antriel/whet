@@ -268,3 +268,174 @@ test("profiler: all spans reference correct stone id", async () => {
   }
   await env.cleanup();
 });
+
+// --- Phase 2: Export and Analysis tests ---
+
+test("profiler: JSON export contains spans array and meta", async () => {
+  const env = await createTestProject("prof-export-json");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const result = env.project.profiler.export("json");
+  assert.ok(Array.isArray(result.spans), "should have spans array");
+  assert.ok(result.spans.length > 0, "should have recorded spans");
+  assert.ok(result.meta, "should have meta object");
+  assert.equal(typeof result.meta.spanCount, "number");
+  assert.equal(typeof result.meta.stoneCount, "number");
+  assert.equal(typeof result.meta.totalGenerations, "number");
+  assert.equal(typeof result.meta.cacheHitRate, "number");
+  assert.equal(result.meta.stoneCount, 1);
+  assert.equal(result.meta.totalGenerations, 1);
+  await env.cleanup();
+});
+
+test("profiler: JSON export serializes span fields correctly", async () => {
+  const env = await createTestProject("prof-export-fields");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const result = env.project.profiler.export("json");
+  const span = result.spans[0];
+  assert.equal(typeof span.id, "number");
+  assert.equal(typeof span.stone, "string");
+  assert.equal(typeof span.operation, "string");
+  assert.equal(typeof span.startTime, "number");
+  assert.equal(typeof span.endTime, "number");
+  assert.equal(typeof span.duration, "number");
+  assert.ok(
+    span.status === "ok" || span.status.startsWith("error:"),
+    "status should be serialized as string",
+  );
+  await env.cleanup();
+});
+
+test("profiler: Chrome Trace export has correct format", async () => {
+  const env = await createTestProject("prof-export-trace");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const result = env.project.profiler.export("trace");
+  assert.ok(
+    Array.isArray(result.traceEvents),
+    "should have traceEvents array",
+  );
+  assert.ok(result.traceEvents.length > 0, "should have trace events");
+
+  const event = result.traceEvents[0];
+  assert.equal(event.ph, "X", "should be complete event");
+  assert.equal(event.cat, "whet");
+  assert.equal(typeof event.ts, "number", "ts should be microseconds");
+  assert.equal(typeof event.dur, "number", "dur should be microseconds");
+  assert.equal(event.pid, 1);
+  assert.equal(typeof event.tid, "number");
+  assert.ok(event.name.length > 0, "should have a name");
+  // Timestamps should be epoch microseconds (much larger than performance.now ms)
+  assert.ok(event.ts > 1e12, "ts should be epoch microseconds");
+  await env.cleanup();
+});
+
+test("profiler: Chrome Trace assigns different tids per stone", async () => {
+  const env = await createTestProject("prof-trace-tids");
+  env.project.enableProfiling();
+
+  const s1 = new MockStone({ project: env.project, id: "alpha" });
+  const s2 = new MockStone({ project: env.project, id: "beta" });
+  await Promise.all([s1.getSource(), s2.getSource()]);
+
+  const result = env.project.profiler.export("trace");
+  const alphaEvents = result.traceEvents.filter((e) =>
+    e.name.includes("alpha"),
+  );
+  const betaEvents = result.traceEvents.filter((e) =>
+    e.name.includes("beta"),
+  );
+  assert.ok(alphaEvents.length > 0);
+  assert.ok(betaEvents.length > 0);
+  assert.notEqual(
+    alphaEvents[0].tid,
+    betaEvents[0].tid,
+    "different stones should get different tids",
+  );
+  await env.cleanup();
+});
+
+test("profiler: getSummary aggregates byStone and byOperation", async () => {
+  const env = await createTestProject("prof-summary");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    hashKey: () => Math.random(),
+  });
+  await stone.getSource();
+  await stone.getSource();
+
+  const summary = env.project.profiler.getSummary();
+  assert.ok(summary.byStone, "should have byStone");
+  assert.ok(summary.byOperation, "should have byOperation");
+  assert.equal(typeof summary.cacheHitRate, "number");
+
+  // byStone should track Generate spans
+  assert.ok(summary.byStone.s1, "should have entry for s1");
+  assert.equal(summary.byStone.s1.generates, 2);
+  assert.ok(summary.byStone.s1.avgDuration >= 0);
+  assert.ok(summary.byStone.s1.lastDuration >= 0);
+
+  // byOperation should have all operations
+  assert.ok(summary.byOperation.LockHeld, "should have LockHeld");
+  assert.ok(summary.byOperation.Hash, "should have Hash");
+  assert.ok(summary.byOperation.Generate, "should have Generate");
+  assert.equal(summary.byOperation.Generate.count, 2);
+  assert.ok(summary.byOperation.Generate.totalMs >= 0);
+  await env.cleanup();
+});
+
+test("profiler: getSummary tracks cache hits", async () => {
+  const env = await createTestProject("prof-summary-cache");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  // First call: cache miss (generates)
+  await stone.getSource();
+  // Second call: cache hit
+  await stone.getSource();
+
+  const summary = env.project.profiler.getSummary();
+  // Should track that there was 1 generate and at least 1 cache-related span
+  assert.ok(summary.byStone.s1, "should have entry for s1");
+  assert.equal(summary.byStone.s1.generates, 1, "only one generate on cache miss");
+  await env.cleanup();
+});
+
+test("profiler: getSpansSince delegates to recorder", async () => {
+  const env = await createTestProject("prof-spans-since");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    hashKey: () => Math.random(),
+  });
+  await stone.getSource();
+  const allSpans = env.project.profiler.recorder.getSpans();
+  const midId = allSpans[Math.floor(allSpans.length / 2)].id;
+
+  await stone.getSource();
+  const since = env.project.profiler.getSpansSince(midId);
+  assert.ok(since.length > 0, "should have spans after midpoint");
+  for (const span of since) {
+    assert.ok(span.id > midId, `span id ${span.id} should be > ${midId}`);
+  }
+  await env.cleanup();
+});
