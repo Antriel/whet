@@ -6,6 +6,7 @@ import whet.magic.MaybeArray.makeArray;
 import whet.magic.StoneId.StoneIdType;
 import whet.magic.StoneId.getTypeName;
 import whet.magic.StoneId.makeStoneId;
+import whet.profiler.Span;
 
 @:expose
 abstract class Stone<T:StoneConfig> {
@@ -69,6 +70,10 @@ abstract class Stone<T:StoneConfig> {
         Log.trace('Acquiring lock on a stone.', { stone: this });
         if (locked) {
             Log.debug('Stone is locked, waiting.', { stone: this });
+            var waitSpan = profilerStartSpan(SpanOp.LockWait, {
+                queuePosition: lockQueue.length,
+                queueLength: lockQueue.length + 1
+            });
             var deferredRes:T->Void;
             var deferredRej:Dynamic;
             var deferred = new Promise((res, rej) -> {
@@ -76,7 +81,10 @@ abstract class Stone<T:StoneConfig> {
                 deferredRej = rej;
             });
             lockQueue.push({
-                run: run,
+                run: () -> {
+                    profilerEndSpan(waitSpan);
+                    return profilerWithSpan(SpanOp.LockHeld, run);
+                },
                 res: deferredRes,
                 rej: deferredRej
             });
@@ -93,7 +101,7 @@ abstract class Stone<T:StoneConfig> {
                     Log.trace('No function in lock queue. Stone is now unlocked.', { stone: this });
                 }
             }
-            return run().finally(runNext);
+            return profilerWithSpan(SpanOp.LockHeld, run).finally(runNext);
         }
     }
 
@@ -138,10 +146,13 @@ abstract class Stone<T:StoneConfig> {
     @:allow(whet.cache) final function generateSource(hash:Null<SourceHash>):Promise<Source> {
         if (!this.locked) throw new js.lib.Error("Acquire a lock before generating.");
         Log.debug('Generating source.', { stone: this, hash: hash });
-        var init = if (config.dependencies != null) Promise.all([
-            // Make sure dependencies are up to date.
-            for (stone in makeArray(config.dependencies)) stone.getSource()
-        ]) else Promise.resolve(null);
+        var deps = if (config.dependencies != null) makeArray(config.dependencies) else null;
+        var init = if (deps != null)
+            profilerWithSpan(SpanOp.DependencyResolve,
+                // Make sure dependencies are up to date.
+                () -> cast Promise.all([for (stone in deps) stone.getSource()]),
+                { dependencyIds: [for (s in deps) s.id] })
+        else Promise.resolve(null);
         return init.then(_ -> {
             var dataPromise = generate(hash);
             return if (dataPromise != null) dataPromise.then(data -> {
@@ -338,6 +349,22 @@ abstract class Stone<T:StoneConfig> {
      */
     @:keep public function cwdPath(path:SourceId):String {
         return path.toCwdPath(project);
+    }
+
+    /** Wraps an async operation in a profiler span. No-op when profiler is null. */
+    @:allow(whet.cache) inline function profilerWithSpan<T, R>(op:SpanOp<T>, fn:Void->Promise<R>,
+            ?meta:T):Promise<R> {
+        return if (project.profiler != null) project.profiler.withSpan(this, op, fn, meta) else fn();
+    }
+
+    /** Starts a manual profiler span. Returns null when profiler is null. */
+    @:allow(whet.cache) inline function profilerStartSpan<T>(op:SpanOp<T>, ?meta:T):Null<AnySpan> {
+        return if (project.profiler != null) project.profiler.startSpan(this, op, meta) else null;
+    }
+
+    /** Ends a manual profiler span. No-op when span is null. */
+    @:allow(whet.cache) inline function profilerEndSpan(span:Null<AnySpan>):Void {
+        if (span != null) project.profiler.endSpan(span);
     }
 
     private inline function get_cache() return project.cache;

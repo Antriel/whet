@@ -1,6 +1,7 @@
 package whet.cache;
 
 import whet.cache.Cache;
+import whet.profiler.Span.SpanOp;
 
 abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; final complete:Bool;}> implements Cache {
 
@@ -14,11 +15,13 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
     }
 
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
-        return stone.acquire(() -> return stone.finalMaybeHash().then(hash -> {
+        return stone.acquire(() -> return stone.profilerWithSpan(SpanOp.Hash, () ->
+            stone.finalMaybeHash()).then(hash -> {
             // Default hash is hash of generated source, but generate it only once as optimization.
             if (hash == null)
                 Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
-            return if (hash == null) stone.generateSource(null).then(generatedSource -> {
+            return if (hash == null) stone.profilerWithSpan(SpanOp.Generate, () ->
+                stone.generateSource(null)).then(generatedSource -> {
                 generatedSource: generatedSource,
                 hash: generatedSource.hash
             }) else {
@@ -48,8 +51,10 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
                     (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
                         if (check.match(AllOnSet)) checkDurability(stone, values, durability,
                             v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-                        (generatedSource != null ? Promise.resolve(generatedSource) : stone.generateSource(hash))
-                            .then(src -> set(src)).then(val -> source(stone, val));
+                        (generatedSource != null ? Promise.resolve(generatedSource) : stone.profilerWithSpan(SpanOp.Generate, () ->
+                            stone.generateSource(hash)))
+                            .then(src -> stone.profilerWithSpan(SpanOp.CacheWrite, () -> set(src)))
+                            .then(val -> source(stone, val));
                     });
                 } else if (!src.complete) {
                     Log.trace('Found partial entry in cache, completing.', { stone: stone, cache: this });
@@ -68,7 +73,8 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
 
     public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Null<Source>> {
         // Hash is guaranteed non-null here (gated in Stone.getPartialSource).
-        return stone.acquire(() -> stone.finalMaybeHash().then(hash -> {
+        return stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () ->
+            stone.finalMaybeHash()).then(hash -> {
             var values = cache.get(key(stone));
             var value:Value = null;
             if (values != null && values.length > 0) {
@@ -83,7 +89,10 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
                 return Promise.resolve(null);
             } else {
                 // Need to generate: either no entry, or incomplete entry missing this sourceId.
-                return stone.generatePartialSource(sourceId, hash).then(result -> {
+                return stone.profilerWithSpan(SpanOp.GeneratePartial,
+                    () -> stone.generatePartialSource(sourceId, hash),
+                    { sourceId: (sourceId:String) }
+                ).then(result -> {
                     if (result.complete) {
                         // generatePartial not supported — got full source back.
                         var storePromise = if (value != null)
@@ -143,7 +152,7 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
      * falls back to full generateSource() if list() returns null.
      */
     function completePartialEntry(stone:AnyStone, existing:Value, hash:SourceHash):Promise<Value> {
-        return stone.list().then(allIds -> {
+        return stone.profilerWithSpan(SpanOp.List, () -> stone.list()).then(allIds -> {
             if (allIds != null) {
                 // Incremental completion: generate only missing items.
                 var missingIds = allIds.filter(id -> !hasSourceId(existing, id));

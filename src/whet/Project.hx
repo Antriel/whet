@@ -2,6 +2,8 @@ package whet;
 
 import whet.Stone.OutputFilter;
 import whet.magic.StoneId.getTypeName;
+import whet.profiler.Profiler;
+import whet.profiler.Profiler.ProfilerConfig;
 
 @:expose var addOption = commander.Option.new;
 
@@ -14,6 +16,7 @@ class Project {
     public final rootDir:SourceId;
     public final cache:CacheManager = null;
     public final configStore:ConfigStore = null;
+    public var profiler:Null<Profiler> = null;
     public final stones:Array<AnyStone> = [];
     public var onInit:(config:Dynamic) -> Promise<Any>;
     /** The object passed to `onInit`. */
@@ -46,6 +49,7 @@ class Project {
         } else rootDir = config.rootDir;
         configStore = config.configStore;
         cache = config.cache == null ? new CacheManager(this) : config.cache;
+        if (config.profiler != null) profiler = new Profiler(config.profiler);
         projects.push(this);
         Log.info('New project created.', { project: this, projectCount: projects.length });
     }
@@ -151,6 +155,14 @@ class Project {
         return Promise.resolve(true);
     }
 
+    @:keep public function enableProfiling(?config:ProfilerConfig):Void {
+        if (profiler == null) profiler = new Profiler(config);
+    }
+
+    @:keep public function disableProfiling():Void {
+        profiler = null;
+    }
+
     public function addCommand(name:String, ?stone:AnyStone):commander.Command {
         var cmdName = name;
         var cmdAlias:Null<String> = null;
@@ -193,6 +205,9 @@ typedef ProjectConfig = {
      */
     /** Project-level ConfigStore, applies to any stone without an explicit configStore. */
     public var ?configStore:ConfigStore;
+
+    /** Enable profiling with optional config. */
+    public var ?profiler:ProfilerConfig;
 
     public var ?options:Array<commander.Option>;
 

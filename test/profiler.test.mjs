@@ -1,0 +1,270 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { MockStone } from "./helpers/mock-stone.mjs";
+import { createTestProject } from "./helpers/test-env.mjs";
+import {
+  CacheStrategy,
+  CacheDurability,
+} from "../bin/whet/cache/Cache.js";
+import { SpanEventType } from "../bin/whet/profiler/Span.js";
+
+test("profiler disabled by default: getSource works, no spans", async () => {
+  const env = await createTestProject("prof-disabled");
+  assert.equal(env.project.profiler, null);
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  const src = await stone.getSource();
+  assert.ok(src);
+  assert.equal(stone.generateCount, 1);
+  await env.cleanup();
+});
+
+test("profiler enabled: getSource records LockHeld, Hash, Generate spans", async () => {
+  const env = await createTestProject("prof-spans");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  assert.ok(spans.length > 0, "should have recorded spans");
+
+  const ops = spans.map((s) => s.operation);
+  assert.ok(ops.includes("LockHeld"), "should have LockHeld span");
+  assert.ok(ops.includes("Hash"), "should have Hash span");
+  assert.ok(ops.includes("Generate"), "should have Generate span");
+  await env.cleanup();
+});
+
+test("profiler: span parent-child relationships are correct", async () => {
+  const env = await createTestProject("prof-parents");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const lockHeld = spans.find((s) => s.operation === "LockHeld");
+  const hash = spans.find((s) => s.operation === "Hash");
+  const generate = spans.find((s) => s.operation === "Generate");
+
+  assert.ok(lockHeld);
+  assert.ok(hash);
+  assert.ok(generate);
+  // Hash and Generate should be children of LockHeld
+  assert.equal(hash.parentId, lockHeld.id);
+  assert.equal(generate.parentId, lockHeld.id);
+  await env.cleanup();
+});
+
+test("profiler: cache hit skips Generate (InMemory cache)", async () => {
+  const env = await createTestProject("prof-cache-hit");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource();
+  const firstCount = env.project.profiler.recorder.getSpans().length;
+
+  await stone.getSource();
+  const allSpans = env.project.profiler.recorder.getSpans();
+  const secondSpans = allSpans.slice(firstCount);
+
+  const secondOps = secondSpans.map((s) => s.operation);
+  assert.ok(secondOps.includes("Hash"), "cache hit still hashes");
+  assert.ok(!secondOps.includes("Generate"), "cache hit should not Generate");
+  assert.equal(stone.generateCount, 1, "stone should only generate once");
+  await env.cleanup();
+});
+
+test("profiler: LockWait span recorded when lock is contended", async () => {
+  const env = await createTestProject("prof-lock-wait");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    delayMs: 30,
+  });
+
+  // Fire two concurrent getSource calls — second one should wait for lock
+  const [src1, src2] = await Promise.all([
+    stone.getSource(),
+    stone.getSource(),
+  ]);
+  assert.ok(src1);
+  assert.ok(src2);
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const lockWaits = spans.filter((s) => s.operation === "LockWait");
+  assert.equal(lockWaits.length, 1, "one call should have waited for the lock");
+  assert.ok(lockWaits[0].duration >= 0, "LockWait should have a duration");
+  await env.cleanup();
+});
+
+test("profiler: subscribe receives Start and End events", async () => {
+  const env = await createTestProject("prof-subscribe");
+  env.project.enableProfiling();
+
+  const events = [];
+  env.project.profiler.subscribe((event) => {
+    events.push({
+      type: event.type === SpanEventType.Start ? "start" : "end",
+      op: event.span.operation,
+    });
+  });
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+  await stone.getSource();
+
+  const starts = events.filter((e) => e.type === "start");
+  const ends = events.filter((e) => e.type === "end");
+  assert.ok(starts.length > 0, "should have start events");
+  assert.ok(ends.length > 0, "should have end events");
+  assert.equal(starts.length, ends.length, "every start should have an end");
+  await env.cleanup();
+});
+
+test("profiler: spans have timing data", async () => {
+  const env = await createTestProject("prof-timing");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    delayMs: 10,
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  for (const span of spans) {
+    assert.ok(span.startTime > 0, `${span.operation} should have startTime`);
+    assert.ok(span.endTime > 0, `${span.operation} should have endTime`);
+    assert.ok(span.duration >= 0, `${span.operation} should have non-negative duration`);
+    assert.ok(span.endTime >= span.startTime, `${span.operation} endTime >= startTime`);
+  }
+  await env.cleanup();
+});
+
+test("profiler: SpanStats provides estimates on subsequent runs", async () => {
+  const env = await createTestProject("prof-stats");
+  env.project.enableProfiling({ maxSpans: 100 });
+
+  // hashKey returns random value to force regeneration each time
+  const stone = new MockStone({ project: env.project, id: "s1", hashKey: () => Math.random() });
+
+  await stone.getSource();
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const generates = spans.filter((s) => s.operation === "Generate");
+  assert.equal(generates.length, 2, "should have two Generate spans");
+  assert.ok(generates[1].estimatedDuration > 0, "second run should have estimated duration from first");
+  await env.cleanup();
+});
+
+test("profiler: DependencyResolve span wraps dependency resolution", async () => {
+  const env = await createTestProject("prof-deps");
+  env.project.enableProfiling();
+
+  const dep = new MockStone({ project: env.project, id: "dep" });
+  const main = new MockStone({
+    project: env.project,
+    id: "main",
+    dependencies: dep,
+  });
+
+  await main.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const depResolve = spans.find(
+    (s) => s.operation === "DependencyResolve" && s.stone === "main",
+  );
+  assert.ok(depResolve, "should have DependencyResolve span for main stone");
+  assert.ok(depResolve.metadata?.dependencyIds, "should have dependencyIds metadata");
+  assert.deepEqual(depResolve.metadata.dependencyIds, ["dep"]);
+  await env.cleanup();
+});
+
+test("profiler: ring buffer evicts old spans when maxSpans exceeded", async () => {
+  const env = await createTestProject("prof-ring");
+  env.project.enableProfiling({ maxSpans: 5 });
+
+  // hashKey returns random value to force regeneration each time
+  const stone = new MockStone({ project: env.project, id: "s1", hashKey: () => Math.random() });
+
+  for (let i = 0; i < 5; i++) {
+    await stone.getSource();
+  }
+
+  const spans = env.project.profiler.recorder.getSpans();
+  assert.ok(spans.length <= 5, `ring buffer should cap at maxSpans, got ${spans.length}`);
+  assert.ok(
+    env.project.profiler.recorder.totalCount > 5,
+    "totalCount should track all spans ever recorded",
+  );
+  await env.cleanup();
+});
+
+test("profiler: disableProfiling stops recording", async () => {
+  const env = await createTestProject("prof-disable");
+  env.project.enableProfiling();
+
+  // hashKey returns random value to force regeneration each time
+  const stone = new MockStone({ project: env.project, id: "s1", hashKey: () => Math.random() });
+  await stone.getSource();
+  const countWhileEnabled = env.project.profiler.recorder.totalCount;
+  assert.ok(countWhileEnabled > 0);
+
+  env.project.disableProfiling();
+  assert.equal(env.project.profiler, null);
+
+  await stone.getSource();
+  // No profiler = no spans, no errors
+  assert.equal(stone.generateCount, 2);
+  await env.cleanup();
+});
+
+test("profiler: CacheWrite span recorded on cache miss (InMemory)", async () => {
+  const env = await createTestProject("prof-cache-write");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const cacheWrite = spans.find((s) => s.operation === "CacheWrite");
+  assert.ok(cacheWrite, "cache miss should produce a CacheWrite span");
+  assert.equal(cacheWrite.stone, "s1");
+  await env.cleanup();
+});
+
+test("profiler: all spans reference correct stone id", async () => {
+  const env = await createTestProject("prof-stone-id");
+  env.project.enableProfiling();
+
+  const s1 = new MockStone({ project: env.project, id: "alpha" });
+  const s2 = new MockStone({ project: env.project, id: "beta" });
+
+  await Promise.all([s1.getSource(), s2.getSource()]);
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const stoneIds = new Set(spans.map((s) => s.stone));
+  assert.ok(stoneIds.has("alpha"), "should have spans for alpha");
+  assert.ok(stoneIds.has("beta"), "should have spans for beta");
+
+  for (const span of spans) {
+    assert.ok(
+      span.stone === "alpha" || span.stone === "beta",
+      `unexpected stone id: ${span.stone}`,
+    );
+  }
+  await env.cleanup();
+});

@@ -5,7 +5,7 @@ status: draft
 type: epic
 priority: high
 created_at: 2026-03-28T06:46:54Z
-updated_at: 2026-03-28T06:49:30Z
+updated_at: 2026-03-28T09:40:01Z
 ---
 
 Add optional profiling to Whet: track stone generation timing, cache hits/misses, dependency chains, and generation reasons. Support live streaming for long-lived services. Negligible overhead when disabled.
@@ -531,17 +531,7 @@ When UwsServerStone handles an HTTP request for `game.js`, it starts a `Serve` s
 
 ### Implementation Plan
 
-- [ ] Phase 1: Core Profiler (Whet-side, Haxe)
-  - [ ] `Span<T>` class and `SpanOp<T>` abstract enum (test GADT unification)
-  - [ ] `SpanRecorder` with ring buffer (`haxe.ds.Vector`)
-  - [ ] `SpanStats` incremental timing tracker
-  - [ ] `Profiler` class with `withSpan`, `startSpan`/`endSpan`, subscribe
-  - [ ] `SpanEvent` type (Start + End) for live streaming
-  - [ ] `ProfilerConfig` typedef, `Project.enableProfiling`/`disableProfiling`
-  - [ ] `AsyncLocalStorage` extern + context propagation
-  - [ ] Instrument `Stone.hx`: `acquire()` (LockWait + LockHeld via withSpan)
-  - [ ] Instrument `BaseCache.hx`: `get()` (Hash, Generate, CacheWrite via withSpan), `getPartial()` (GeneratePartial), `completePartialEntry()` (List)
-  - [ ] Instrument `Stone.generateSource()`: DependencyResolve wrapping `Promise.all(deps)`
+- [x] Phase 1: Core Profiler (Whet-side, Haxe) — see whet-j8n9
 - [ ] Phase 2: Export and Analysis
   - [ ] JSON export format
   - [ ] Chrome Trace export format (with epoch microsecond timestamp conversion)
