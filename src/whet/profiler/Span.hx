@@ -93,7 +93,6 @@ typedef GenerateMeta = {
 
     var ?outputCount:Int;
     var ?totalBytes:Int;
-    var ?cacheResult:String;
 
 }
 

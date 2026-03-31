@@ -70,6 +70,11 @@ class Profiler {
         emit(End, span);
     }
 
+    /** Returns the current span from AsyncLocalStorage context, or null if none. */
+    public function getCurrentSpan():Null<AnySpan> {
+        return context.getStore();
+    }
+
     /** Subscribe to span events. Returns unsubscribe function. */
     @:keep public function subscribe(listener:SpanEvent->Void):Void->Void {
         listeners.push(listener);

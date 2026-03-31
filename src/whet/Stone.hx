@@ -367,6 +367,11 @@ abstract class Stone<T:StoneConfig> {
         if (span != null) project.profiler.endSpan(span);
     }
 
+    /** Returns the current span from ALS context, or null when profiler is disabled. */
+    @:allow(whet.cache) inline function profilerGetCurrentSpan():Null<AnySpan> {
+        return if (project.profiler != null) project.profiler.getCurrentSpan() else null;
+    }
+
     private inline function get_cache() return project.cache;
 
     @:keep public function toString():String {

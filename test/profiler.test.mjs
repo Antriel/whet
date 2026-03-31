@@ -418,6 +418,158 @@ test("profiler: getSummary tracks cache hits", async () => {
   await env.cleanup();
 });
 
+// --- Metadata tests ---
+
+test("profiler: Hash span has hashHex metadata (InMemory cache)", async () => {
+  const env = await createTestProject("prof-meta-hash");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const hash = spans.find((s) => s.operation === "Hash");
+  assert.ok(hash, "should have Hash span");
+  assert.ok(hash.metadata, "Hash span should have metadata");
+  assert.equal(typeof hash.metadata.hashHex, "string", "hashHex should be a string");
+  assert.ok(hash.metadata.hashHex.length > 0, "hashHex should not be empty");
+  await env.cleanup();
+});
+
+test("profiler: Generate span has outputCount and totalBytes metadata", async () => {
+  const env = await createTestProject("prof-meta-generate");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    outputs: [
+      { id: "a.txt", content: "hello" },
+      { id: "b.txt", content: "world" },
+    ],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const gen = spans.find((s) => s.operation === "Generate");
+  assert.ok(gen, "should have Generate span");
+  assert.ok(gen.metadata, "Generate span should have metadata");
+  assert.equal(gen.metadata.outputCount, 2, "should report 2 outputs");
+  assert.equal(typeof gen.metadata.totalBytes, "number", "totalBytes should be a number");
+  assert.ok(gen.metadata.totalBytes > 0, "totalBytes should be positive");
+  await env.cleanup();
+});
+
+test("profiler: LockHeld span has cacheResult 'miss' on first access", async () => {
+  const env = await createTestProject("prof-meta-miss");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const lockHeld = spans.find((s) => s.operation === "LockHeld");
+  assert.ok(lockHeld, "should have LockHeld span");
+  assert.ok(lockHeld.metadata, "LockHeld should have metadata");
+  assert.equal(lockHeld.metadata.cacheResult, "miss", "first access should be a cache miss");
+  await env.cleanup();
+});
+
+test("profiler: LockHeld span has cacheResult 'hit' on cached access", async () => {
+  const env = await createTestProject("prof-meta-hit");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource(); // miss
+  const firstCount = env.project.profiler.recorder.getSpans().length;
+
+  await stone.getSource(); // hit
+  const allSpans = env.project.profiler.recorder.getSpans();
+  const secondSpans = allSpans.slice(firstCount);
+  const lockHeld = secondSpans.find((s) => s.operation === "LockHeld");
+  assert.ok(lockHeld, "should have LockHeld span on second call");
+  assert.ok(lockHeld.metadata, "LockHeld should have metadata");
+  assert.equal(lockHeld.metadata.cacheResult, "hit", "second access should be a cache hit");
+  await env.cleanup();
+});
+
+test("profiler: getSummary cacheHitRate reflects LockHeld cacheResult metadata", async () => {
+  const env = await createTestProject("prof-meta-summary");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  await stone.getSource(); // miss
+  await stone.getSource(); // hit
+  await stone.getSource(); // hit
+
+  const summary = env.project.profiler.getSummary();
+  // 3 lookups: 1 miss + 2 hits = 2/3 hit rate
+  assert.ok(summary.cacheHitRate > 0.6, `hit rate should be ~0.67, got ${summary.cacheHitRate}`);
+  assert.ok(summary.cacheHitRate < 0.7, `hit rate should be ~0.67, got ${summary.cacheHitRate}`);
+  assert.equal(summary.byStone.s1.cacheHits, 2);
+  await env.cleanup();
+});
+
+test("profiler: DependencyResolve span has dependencyIds metadata", async () => {
+  const env = await createTestProject("prof-meta-deps");
+  env.project.enableProfiling();
+
+  const dep1 = new MockStone({ project: env.project, id: "dep-a" });
+  const dep2 = new MockStone({ project: env.project, id: "dep-b" });
+  const main = new MockStone({
+    project: env.project,
+    id: "main",
+    dependencies: [dep1, dep2],
+  });
+  await main.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const depResolve = spans.find(
+    (s) => s.operation === "DependencyResolve" && s.stone === "main",
+  );
+  assert.ok(depResolve, "should have DependencyResolve span");
+  assert.deepEqual(depResolve.metadata.dependencyIds, ["dep-a", "dep-b"]);
+  await env.cleanup();
+});
+
+test("profiler: LockWait span has queuePosition and queueLength metadata", async () => {
+  const env = await createTestProject("prof-meta-lockwait");
+  env.project.enableProfiling();
+
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    delayMs: 30,
+  });
+
+  await Promise.all([stone.getSource(), stone.getSource()]);
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const lockWait = spans.find((s) => s.operation === "LockWait");
+  assert.ok(lockWait, "should have LockWait span");
+  assert.ok(lockWait.metadata, "LockWait should have metadata");
+  assert.equal(lockWait.metadata.queuePosition, 0, "first waiter at position 0");
+  assert.equal(lockWait.metadata.queueLength, 1, "queue length should be 1");
+  await env.cleanup();
+});
+
 test("profiler: getSpansSince delegates to recorder", async () => {
   const env = await createTestProject("prof-spans-since");
   env.project.enableProfiling();

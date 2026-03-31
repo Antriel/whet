@@ -1,6 +1,7 @@
 package whet.cache;
 
 import whet.cache.Cache;
+import whet.profiler.Span.AnySpan;
 import whet.profiler.Span.SpanOp;
 
 abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; final complete:Bool;}> implements Cache {
@@ -15,15 +16,22 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
     }
 
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
-        return stone.acquire(() -> return stone.profilerWithSpan(SpanOp.Hash, () ->
-            stone.finalMaybeHash()).then(hash -> {
+        return stone.acquire(() -> {
+        var lockHeldSpan = stone.profilerGetCurrentSpan();
+        return stone.profilerWithSpan(SpanOp.Hash, () ->
+            stone.finalMaybeHash().then(hash -> {
+                setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
+                return hash;
+            })).then(hash -> {
             // Default hash is hash of generated source, but generate it only once as optimization.
             if (hash == null)
                 Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
             return if (hash == null) stone.profilerWithSpan(SpanOp.Generate, () ->
-                stone.generateSource(null)).then(generatedSource -> {
-                generatedSource: generatedSource,
-                hash: generatedSource.hash
+                stone.generateSource(null).then(src -> {
+                    setGenerateMeta(stone.profilerGetCurrentSpan(), src);
+                    return src;
+                })).then(generatedSource -> {
+                { generatedSource: generatedSource, hash: generatedSource.hash };
             }) else {
                 Log.debug('Stone provided hash.', { stone: stone, hash: hash.toHex() });
                 Promise.resolve({
@@ -48,19 +56,25 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
             var srcPromise = (value != null ? source(stone, value) : Promise.resolve(null)).then(src -> {
                 return if (src == null) {
                     Log.trace('Not cached.', { stone: stone, cache: this });
+                    setSpanMeta(lockHeldSpan, { cacheResult: "miss" });
                     (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
                         if (check.match(AllOnSet)) checkDurability(stone, values, durability,
                             v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
                         (generatedSource != null ? Promise.resolve(generatedSource) : stone.profilerWithSpan(SpanOp.Generate, () ->
-                            stone.generateSource(hash)))
+                            stone.generateSource(hash).then(src -> {
+                                setGenerateMeta(stone.profilerGetCurrentSpan(), src);
+                                return src;
+                            })))
                             .then(src -> stone.profilerWithSpan(SpanOp.CacheWrite, () -> set(src)))
                             .then(val -> source(stone, val));
                     });
                 } else if (!src.complete) {
                     Log.trace('Found partial entry in cache, completing.', { stone: stone, cache: this });
+                    setSpanMeta(lockHeldSpan, { cacheResult: "partial" });
                     completePartialEntry(stone, value, hash).then(val -> source(stone, val));
                 } else {
                     Log.trace('Found in cache', { stone: stone, cache: this });
+                    setSpanMeta(lockHeldSpan, { cacheResult: "hit" });
                     Promise.resolve(src);
                 }
             });
@@ -68,13 +82,17 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
                 if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
                 return src;
             });
-        }));
+        });
+        });
     }
 
     public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Null<Source>> {
         // Hash is guaranteed non-null here (gated in Stone.getPartialSource).
         return stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () ->
-            stone.finalMaybeHash()).then(hash -> {
+            stone.finalMaybeHash().then(hash -> {
+                setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
+                return hash;
+            })).then(hash -> {
             var values = cache.get(key(stone));
             var value:Value = null;
             if (values != null && values.length > 0) {
@@ -152,7 +170,10 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
      * falls back to full generateSource() if list() returns null.
      */
     function completePartialEntry(stone:AnyStone, existing:Value, hash:SourceHash):Promise<Value> {
-        return stone.profilerWithSpan(SpanOp.List, () -> stone.list()).then(allIds -> {
+        return stone.profilerWithSpan(SpanOp.List, () -> stone.list().then(ids -> {
+            setSpanMeta(stone.profilerGetCurrentSpan(), { resultCount: ids != null ? ids.length : null });
+            return ids;
+        })).then(allIds -> {
             if (allIds != null) {
                 // Incremental completion: generate only missing items.
                 var missingIds = allIds.filter(id -> !hasSourceId(existing, id));
@@ -235,6 +256,18 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
 
     @:keep public function toString() {
         return Type.getClassName(Type.getClass(this));
+    }
+
+    static inline function setSpanMeta(span:Null<AnySpan>, meta:Dynamic):Void {
+        if (span != null) span.metadata = meta;
+    }
+
+    static function setGenerateMeta(span:Null<AnySpan>, src:Source):Void {
+        if (span != null) {
+            var totalBytes = 0;
+            for (d in src.data) totalBytes += d.length;
+            span.metadata = { outputCount: src.data.length, totalBytes: totalBytes };
+        }
     }
 
 }
