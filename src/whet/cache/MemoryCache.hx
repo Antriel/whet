@@ -24,7 +24,8 @@ class MemoryCache extends BaseCache<AnyStone, Source> {
         return Lambda.exists(value.data, d -> d.id == sourceId);
     }
 
-    function mergePartial(stone:AnyStone, existing:Source, addition:Source, markComplete:Bool):Promise<Source> {
+    function mergePartial(stone:AnyStone, existing:Source, addition:Source,
+            markComplete:Bool):Promise<Source> {
         // Build merged data: upsert by sourceId.
         var mergedData = existing.data.copy();
         if (addition != null) {

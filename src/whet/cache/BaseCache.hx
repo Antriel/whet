@@ -4,9 +4,11 @@ import whet.cache.Cache;
 import whet.profiler.Span.AnySpan;
 import whet.profiler.Span.SpanOp;
 
-abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; final complete:Bool;}> implements Cache {
+abstract class BaseCache<Key,
+    Value:{final hash:SourceHash; final ctime:Float; final complete:Bool;}> implements Cache {
 
-    final cache:Map<Key, Array<Value>>; // Value array is ordered by use time, starting from most recently used.
+    // Value array is ordered by use time, starting from most recently used.
+    final cache:Map<Key, Array<Value>>; 
     final rootDir:RootDir;
 
     public function new(rootDir:RootDir, cache) {
@@ -17,79 +19,81 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
 
     public function get(stone:AnyStone, durability:CacheDurability, check:DurabilityCheck):Promise<Source> {
         return stone.acquire(() -> {
-        var lockHeldSpan = stone.profilerGetCurrentSpan();
-        return stone.profilerWithSpan(SpanOp.Hash, () ->
-            stone.finalMaybeHash().then(hash -> {
+            var lockHeldSpan = stone.profilerGetCurrentSpan();
+            return stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash().then(hash -> {
                 setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
                 return hash;
             })).then(hash -> {
-            // Default hash is hash of generated source, but generate it only once as optimization.
-            if (hash == null)
-                Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
-            return if (hash == null) stone.profilerWithSpan(SpanOp.Generate, () ->
-                stone.generateSource(null).then(src -> {
+                // Default hash is hash of generated source, but generate it only once as optimization.
+                if (hash == null)
+                    Log.debug('Generating source, because it does not supply a hash.', { stone: stone, cache: this });
+                return if (hash == null) stone.profilerWithSpan(SpanOp.Generate, () ->
+                    stone.generateSource(null).then(src -> {
                     setGenerateMeta(stone.profilerGetCurrentSpan(), src);
                     return src;
                 })).then(generatedSource -> {
-                { generatedSource: generatedSource, hash: generatedSource.hash };
-            }) else {
-                Log.debug('Stone provided hash.', { stone: stone, hash: hash.toHex() });
-                Promise.resolve({
-                    generatedSource: null,
-                    hash: hash
-                });
-            }
-        }).then(data -> {
-            var generatedSource = data.generatedSource;
-            var hash = data.hash;
-            var values = cache.get(key(stone));
-            var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
-            var value:Value = null;
-            if (values != null && values.length > 0) {
-                value = Lambda.find(values, v -> v.hash.equals(hash));
-                if (value != null && check.match(SingleOnGet) && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
-                    remove(stone, value);
-                    value = null;
+                    { generatedSource: generatedSource, hash: generatedSource.hash };
+                }) else {
+                    Log.debug('Stone provided hash.', { stone: stone, hash: hash.toHex() });
+                    Promise.resolve({
+                        generatedSource: null,
+                        hash: hash
+                    });
                 }
-                if (value != null) setRecentUseOrder(values, value);
-            }
-            var srcPromise = (value != null ? source(stone, value) : Promise.resolve(null)).then(src -> {
-                return if (src == null) {
-                    Log.trace('Not cached.', { stone: stone, cache: this });
-                    setSpanMeta(lockHeldSpan, { cacheResult: "miss" });
-                    (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
-                        if (check.match(AllOnSet)) checkDurability(stone, values, durability,
-                            v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
-                        (generatedSource != null ? Promise.resolve(generatedSource) : stone.profilerWithSpan(SpanOp.Generate, () ->
-                            stone.generateSource(hash).then(src -> {
+            }).then(data -> {
+                var generatedSource = data.generatedSource;
+                var hash = data.hash;
+                var values = cache.get(key(stone));
+                var ageCount = val -> Lambda.count(values, v -> v != val && v.ctime > val.ctime);
+                var value:Value = null;
+                if (values != null && values.length > 0) {
+                    value = Lambda.find(values, v -> v.hash.equals(hash));
+                    if (value != null && check.match(SingleOnGet)
+                        && !shouldKeep(stone, value, durability, v -> 0, ageCount)) {
+                        remove(stone, value);
+                        value = null;
+                    }
+                    if (value != null) setRecentUseOrder(values, value);
+                }
+                var srcPromise = (value != null ? source(stone, value) : Promise.resolve(null)).then(src -> {
+                    return if (src == null) {
+                        Log.trace('Not cached.', { stone: stone, cache: this });
+                        setSpanMeta(lockHeldSpan, { cacheResult: "miss" });
+                        (if (value != null) remove(stone, value) else Promise.resolve(null)).then(_ -> {
+                            if (check.match(AllOnSet)) checkDurability(stone, values, durability,
+                                v -> values.indexOf(v) + 1, v -> ageCount(v) + 1);
+                            (generatedSource != null ? Promise.resolve(generatedSource) : stone.profilerWithSpan(SpanOp.Generate, () ->
+                                stone.generateSource(hash).then(src -> {
                                 setGenerateMeta(stone.profilerGetCurrentSpan(), src);
                                 return src;
                             })))
-                            .then(src -> stone.profilerWithSpan(SpanOp.CacheWrite, () -> set(src)))
-                            .then(val -> source(stone, val));
-                    });
-                } else if (!src.complete) {
-                    Log.trace('Found partial entry in cache, completing.', { stone: stone, cache: this });
-                    setSpanMeta(lockHeldSpan, { cacheResult: "partial" });
-                    completePartialEntry(stone, value, hash).then(val -> source(stone, val));
-                } else {
-                    Log.trace('Found in cache', { stone: stone, cache: this });
-                    setSpanMeta(lockHeldSpan, { cacheResult: "hit" });
-                    Promise.resolve(src);
-                }
+                                .then(src -> stone.profilerWithSpan(SpanOp.CacheWrite, () -> set(src)))
+                                .then(val -> source(stone, val));
+                        });
+                    } else if (!src.complete) {
+                        Log.trace('Found partial entry in cache, completing.', { stone: stone, cache: this });
+                        setSpanMeta(lockHeldSpan, { cacheResult: "partial" });
+                        completePartialEntry(stone, value, hash).then(val -> source(stone, val));
+                    } else {
+                        Log.trace('Found in cache', { stone: stone, cache: this });
+                        setSpanMeta(lockHeldSpan, { cacheResult: "hit" });
+                        Promise.resolve(src);
+                    }
+                });
+                return srcPromise.then(src -> {
+                    if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v ->
+                        values.indexOf(v), ageCount);
+                    return src;
+                });
             });
-            return srcPromise.then(src -> {
-                if (check.match(AllOnUse | null)) checkDurability(stone, values, durability, v -> values.indexOf(v), ageCount);
-                return src;
-            });
-        });
         });
     }
 
-    public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability, check:DurabilityCheck):Promise<Null<Source>> {
+    public function getPartial(stone:AnyStone, sourceId:SourceId, durability:CacheDurability,
+            check:DurabilityCheck):Promise<Null<Source>> {
         // Hash is guaranteed non-null here (gated in Stone.getPartialSource).
-        return stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () ->
-            stone.finalMaybeHash().then(hash -> {
+        return stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash()
+            .then(hash -> {
                 setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
                 return hash;
             })).then(hash -> {
@@ -183,25 +187,22 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
                 }
                 var chain:Promise<Value> = Promise.resolve(existing);
                 for (missingId in missingIds) {
-                    chain = chain.then(current ->
-                        stone.generatePartialSource(missingId, hash).then(result ->
-                            mergePartial(stone, current, result.source, false)
-                        )
+                    chain = chain.then(current -> stone.generatePartialSource(missingId, hash)
+                        .then(result -> mergePartial(stone, current, result.source, false))
                     );
                 }
                 // After all missing items merged, mark complete.
                 return chain.then(current -> mergePartial(stone, current, null, true));
             } else {
                 // Can't enumerate — full generation, replace entry.
-                return stone.generateSource(hash).then(fullSource ->
-                    replaceEntry(stone, existing, fullSource)
-                );
+                return stone.generateSource(hash)
+                    .then(fullSource -> replaceEntry(stone, existing, fullSource));
             }
         });
     }
 
-    function checkDurability(stone:AnyStone, values:Array<Value>, durability:CacheDurability, useIndex:Value->Int,
-            ageIndex:Value->Int):Void {
+    function checkDurability(stone:AnyStone, values:Array<Value>, durability:CacheDurability,
+            useIndex:Value->Int, ageIndex:Value->Int):Void {
         Log.debug("Checking durability.", { stone: stone, durability: Std.string(durability) });
         if (values == null || values.length == 0) return;
         var i = values.length;
@@ -210,14 +211,16 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
         }
     }
 
-    function shouldKeep(stone:AnyStone, val:Value, durability:CacheDurability, useIndex:Value->Int, ageIndex:Value->Int):Bool {
+    function shouldKeep(stone:AnyStone, val:Value, durability:CacheDurability, useIndex:Value->Int,
+            ageIndex:Value->Int):Bool {
         return switch durability {
             case KeepForever: true;
             case LimitCountByLastUse(count): useIndex(val) < count;
             case LimitCountByAge(count): ageIndex(val) < count;
             case MaxAge(seconds): (Sys.time() - val.ctime) <= seconds;
             case Custom(keep): keep(stone, val);
-            case All(keepIfAll): Lambda.foreach(keepIfAll, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
+            case All(keepIfAll):
+                Lambda.foreach(keepIfAll, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
             case Any(keepIfAny): Lambda.exists(keepIfAny, d -> shouldKeep(stone, val, d, useIndex, ageIndex));
         }
     }
@@ -249,7 +252,8 @@ abstract class BaseCache<Key, Value:{final hash:SourceHash; final ctime:Float; f
     abstract function hasSourceId(value:Value, sourceId:SourceId):Bool;
 
     /** Merge partial source data into an existing entry, returns the updated value. */
-    abstract function mergePartial(stone:AnyStone, existing:Value, addition:Source, markComplete:Bool):Promise<Value>;
+    abstract function mergePartial(stone:AnyStone, existing:Value, addition:Source,
+        markComplete:Bool):Promise<Value>;
 
     /** Replace an existing entry with a new complete source. */
     abstract function replaceEntry(stone:AnyStone, existing:Value, replacement:Source):Promise<Value>;

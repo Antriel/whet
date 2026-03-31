@@ -75,12 +75,16 @@ class HashCache {
 }
 
 typedef CachedHash = {
+
     final mtime:Float;
     final size:Int;
     final hash:String;
+
 }
 
 typedef FileStats = {
+
     final mtime:Float;
     final size:Int;
+
 }

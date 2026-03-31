@@ -19,7 +19,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     final dbFile:String;
     var flushTimerId:Dynamic = null;
-    var flushResolve:(Dynamic)->Void = null;
+    var flushResolve:(Dynamic) -> Void = null;
     var flushPromise:Promise<Void> = null;
 
     public function new(rootDir:RootDir) {
@@ -111,7 +111,8 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 }
             });
         })]).then(
-            data -> new Source(cast data, value.hash, stone, value.ctime, value.complete != null ? value.complete : true),
+            data ->
+                new Source(cast data, value.hash, stone, value.ctime, value.complete != null ? value.complete : true),
             rejected -> rejected == 'Invalid.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
         );
     }
@@ -150,14 +151,16 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 res(null);
             } else if (files.length == 0)
                 Fs.rmdir(value.baseDir.toCwdPath(rootDir), err -> {
-                    if (err != null) Log.error("Error removing directory.", { dir: value.baseDir.toCwdPath(rootDir), error: err });
+                    if (err != null)
+                        Log.error("Error removing directory.", { dir: value.baseDir.toCwdPath(rootDir), error: err });
                     res(null);
                 })
             else res(null);
         })));
     }
 
-    override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>, value:RuntimeFileCacheValue):Bool {
+    override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>,
+            value:RuntimeFileCacheValue):Bool {
         var changed = super.setRecentUseOrder(values, value);
         if (changed) flush();
         return changed;
@@ -169,7 +172,8 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         return Lambda.exists(value.files, f -> f.id == sourceId);
     }
 
-    function mergePartial(stone:AnyStone, existing:RuntimeFileCacheValue, addition:Source, markComplete:Bool):Promise<RuntimeFileCacheValue> {
+    function mergePartial(stone:AnyStone, existing:RuntimeFileCacheValue, addition:Source,
+            markComplete:Bool):Promise<RuntimeFileCacheValue> {
         // Build merged file list: upsert by sourceId.
         var mergedFiles = [for (f in existing.files) f];
         if (addition != null) {
@@ -216,7 +220,8 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         }
     }
 
-    function replaceEntry(stone:AnyStone, existing:RuntimeFileCacheValue, replacement:Source):Promise<RuntimeFileCacheValue> {
+    function replaceEntry(stone:AnyStone, existing:RuntimeFileCacheValue,
+            replacement:Source):Promise<RuntimeFileCacheValue> {
         return value(replacement).then(newVal -> {
             var values = cache.get(key(stone));
             var idx = values.indexOf(existing);
@@ -255,8 +260,13 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
             }]
         }]);
         Utils.saveContent(dbFile, haxe.Json.stringify(db, null, '\t')).then(
-            _ -> { Log.trace('FileCache DB saved.'); resolve(null); },
-            err -> { Log.error('FileCache DB save error.', err); resolve(null); }
+            _ -> {
+                Log.trace('FileCache DB saved.');
+                resolve(null);
+            },
+            err -> {
+                Log.error('FileCache DB save error.', err);
+                resolve(null); }
         );
     }
 
