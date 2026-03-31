@@ -5,6 +5,12 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "command": "npm test",
+            "name": "Run npm test",
+            "request": "launch",
+            "type": "node-terminal"
+        },
+        {
             "name": "Launch Project Directly",
             "program": "${workspaceFolder}/example/Project.mjs",
             "request": "launch",
@@ -17,7 +23,10 @@
         {
             "name": "Launch Whet",
             "program": "${workspaceFolder}/bin/whet.js",
-            "args": ["--project=example/Project.mjs", "--build=debug"],
+            "args": [
+                "--project=example/Project.mjs",
+                "--build=debug"
+            ],
             "request": "launch",
             "skipFiles": [
                 "<node_internals>/**"

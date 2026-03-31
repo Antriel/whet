@@ -24,7 +24,7 @@ function main() {
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info')
         .option('--no-pretty', 'disable pretty logging')
-        .option('--profile <format>', 'enable profiling, export to whet-profile.json on exit (format: json or trace, default: json)', 'json')
+        .option('--profile <format>', 'enable profiling, export to whet-profile.json on exit (format: json or trace, default: json)')
         .exitOverride();
 
     try {
