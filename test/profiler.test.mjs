@@ -570,6 +570,36 @@ test("profiler: LockWait span has queuePosition and queueLength metadata", async
   await env.cleanup();
 });
 
+test("profiler: None cacheStrategy sets metadata on Hash and Generate spans", async () => {
+  // Regression: CacheManager's None path created spans but never called setSpanMeta /
+  // setGenerateMeta, so Hash.metadata and Generate.metadata were always null.
+  const env = await createTestProject("prof-meta-none");
+  env.project.enableProfiling();
+
+  // No cacheStrategy = None (the default) — goes through CacheManager directly, not BaseCache
+  const stone = new MockStone({
+    project: env.project,
+    id: "s1",
+    outputs: [{ id: "out.txt", content: "hello" }],
+  });
+  await stone.getSource();
+
+  const spans = env.project.profiler.recorder.getSpans();
+  const hash = spans.find((s) => s.operation === "Hash" && s.stone === "s1");
+  const gen = spans.find((s) => s.operation === "Generate" && s.stone === "s1");
+
+  assert.ok(hash, "should have Hash span");
+  assert.ok(hash.metadata, "Hash span should have metadata (was null before fix)");
+  assert.equal(typeof hash.metadata.hashHex, "string", "hashHex should be a string");
+  assert.ok(hash.metadata.hashHex.length > 0, "hashHex should be non-empty");
+
+  assert.ok(gen, "should have Generate span");
+  assert.ok(gen.metadata, "Generate span should have metadata (was null before fix)");
+  assert.equal(gen.metadata.outputCount, 1, "should report 1 output");
+  assert.ok(gen.metadata.totalBytes > 0, "totalBytes should be positive");
+  await env.cleanup();
+});
+
 test("profiler: getSpansSince delegates to recorder", async () => {
   const env = await createTestProject("prof-spans-since");
   env.project.enableProfiling();

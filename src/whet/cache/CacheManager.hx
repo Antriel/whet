@@ -25,8 +25,18 @@ class CacheManager {
     public function getSource(stone:AnyStone):Promise<Source> {
         Log.trace('Determining cache status.', { stone: stone, strategy: stone.cacheStrategy.getName() });
         return switch stone.cacheStrategy {
-            case None: stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash())
-                    .then(hash -> stone.profilerWithSpan(SpanOp.Generate, () -> stone.generateSource(hash))));
+            case None: stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash()
+                    .then(hash -> {
+                        BaseCache.setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
+                        return hash;
+                    }))
+                    .then(hash -> stone.profilerWithSpan(SpanOp.Generate, () -> stone.generateSource(hash)
+                        .then(src -> {
+                            BaseCache.setGenerateMeta(stone.profilerGetCurrentSpan(), src);
+                            return src;
+                        }))
+                    )
+                );
             case InMemory(durability, check): memCache.get(stone, durability, check != null ? check : AllOnUse);
             case InFile(durability, check) | AbsolutePath(_, durability, check):
                 fileCache.get(stone, durability, check != null ? check : AllOnUse);
@@ -36,11 +46,16 @@ class CacheManager {
     public function getPartialSource(stone:AnyStone, sourceId:SourceId):Promise<Null<Source>> {
         return switch stone.cacheStrategy {
             case None:
-                stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash())
-                    .then(hash -> stone.profilerWithSpan(SpanOp.GeneratePartial,
-                        () -> stone.generatePartialSource(sourceId, hash).then(r ->
-                            r.source.filterTo(sourceId)),
-                        { sourceId: (sourceId:String) })));
+                stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash()
+                    .then(hash -> {
+                        BaseCache.setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
+                        return hash;
+                    }))
+                    .then(hash -> stone.profilerWithSpan(SpanOp.GeneratePartial, () ->
+                        stone.generatePartialSource(sourceId, hash)
+                        .then(r -> r.source.filterTo(sourceId)), { sourceId: (sourceId:String) })
+                    )
+                );
             case InMemory(durability, check):
                 memCache.getPartial(stone, sourceId, durability, check != null ? check : AllOnUse);
             case InFile(durability, check) | AbsolutePath(_, durability, check):
@@ -54,8 +69,17 @@ class CacheManager {
     @:keep public function refreshSource(stone:AnyStone):Promise<Source> {
         Log.trace('Re-generating cached stone.', { stone: stone });
         return switch stone.cacheStrategy {
-            case None: stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash())
-                    .then(hash -> stone.profilerWithSpan(SpanOp.Generate, () -> stone.generateSource(hash))));
+            case None: stone.acquire(() -> stone.profilerWithSpan(SpanOp.Hash, () -> stone.finalMaybeHash()
+                    .then(hash -> {
+                        BaseCache.setSpanMeta(stone.profilerGetCurrentSpan(), { hashHex: hash != null ? hash.toHex() : null });
+                        return hash;
+                    })
+                ).then(hash -> stone.profilerWithSpan(SpanOp.Generate, () -> stone.generateSource(hash)
+                        .then(src -> {
+                            BaseCache.setGenerateMeta(stone.profilerGetCurrentSpan(), src);
+                            return src;
+                        })
+                )));
             case InMemory(_): memCache.get(stone, MaxAge(-1), SingleOnGet);
             case InFile(_) | AbsolutePath(_):
                 fileCache.get(stone, MaxAge(-1), SingleOnGet);

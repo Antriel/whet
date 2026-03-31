@@ -262,11 +262,11 @@ abstract class BaseCache<Key,
         return Type.getClassName(Type.getClass(this));
     }
 
-    static inline function setSpanMeta(span:Null<AnySpan>, meta:Dynamic):Void {
+    @:allow(whet.cache) static inline function setSpanMeta(span:Null<AnySpan>, meta:Dynamic):Void {
         if (span != null) span.metadata = meta;
     }
 
-    static function setGenerateMeta(span:Null<AnySpan>, src:Source):Void {
+    @:allow(whet.cache) static function setGenerateMeta(span:Null<AnySpan>, src:Source):Void {
         if (span != null) {
             var totalBytes = 0;
             for (d in src.data) totalBytes += d.length;
