@@ -175,24 +175,119 @@ class Profiler {
 
     function exportChromeTrace():Dynamic {
         var spans = recorder.getSpans();
-        var stoneToTid = new haxe.ds.StringMap<Int>();
+        // Build lookup and children map
+        var spanById = new Map<Int, AnySpan>();
+        for (span in spans) spanById.set(span.id, span);
+
+        var childrenOf = new Map<Int, Array<AnySpan>>();
+        var roots:Array<AnySpan> = [];
+        for (span in spans) {
+            var pid = span.parentId;
+            if (pid == null || !spanById.exists(pid)) {
+                roots.push(span);
+            } else {
+                if (!childrenOf.exists(pid)) childrenOf.set(pid, []);
+                childrenOf.get(pid).push(span);
+            }
+        }
+
+        // Assign tids using concurrent-lane decomposition.
+        // Sequential children share the parent's tid (lane 0); concurrent
+        // siblings that overlap in time get new tids. This ensures no two
+        // X events on the same tid ever partially overlap.
+        var spanTid = new Map<Int, Int>();
         var nextTid = 1;
+        function assignTids(span:AnySpan, tid:Int):Void {
+            spanTid.set(span.id, tid);
+            var children = childrenOf.get(span.id);
+            if (children == null || children.length == 0) return;
+
+            children.sort((a, b) -> Reflect.compare(a.startTime, b.startTime));
+
+            var laneEndTimes:Array<Float> = [];
+            var laneTids:Array<Int> = [];
+
+            for (child in children) {
+                var lane = -1;
+                for (i in 0...laneEndTimes.length) {
+                    if (laneEndTimes[i] <= child.startTime) {
+                        lane = i;
+                        break;
+                    }
+                }
+                if (lane == -1) {
+                    lane = laneEndTimes.length;
+                    laneTids.push(lane == 0 ? tid : nextTid++);
+                    laneEndTimes.push(child.endTime);
+                } else {
+                    laneEndTimes[lane] = child.endTime;
+                }
+                assignTids(child, laneTids[lane]);
+            }
+        }
+
+        roots.sort((a, b) -> Reflect.compare(a.startTime, b.startTime));
+        for (root in roots) assignTids(root, nextTid++);
+
         var events:Array<Dynamic> = [];
 
+        // Thread name metadata events (label each tid with the first stone seen on it)
+        var tidNames = new Map<Int, String>();
         for (span in spans) {
-            if (!stoneToTid.exists(span.stone)) {
-                stoneToTid.set(span.stone, nextTid++);
-            }
+            var tid = spanTid.get(span.id);
+            if (tid != null && !tidNames.exists(tid)) tidNames.set(tid, span.stone);
+        }
+        for (tid => name in tidNames) {
+            events.push({ ph: "M", pid: 1, tid: tid, name: "thread_name", args: { name: name } });
+        }
+
+        // Span events + flow arrows for cross-tid causality
+        var flowId = 0;
+        for (span in spans) {
+            var tid = spanTid.get(span.id);
+            if (tid == null) continue;
+            var ts = baseEpochUs + (span.startTime * 1000 - basePerfUs);
             events.push({
                 ph: "X",
                 name: (span.operation:String) + " " + span.stone,
                 cat: "whet",
-                ts: baseEpochUs + (span.startTime * 1000 - basePerfUs),
+                ts: ts,
                 dur: span.duration * 1000,
                 pid: 1,
-                tid: stoneToTid.get(span.stone),
-                args: span.metadata
+                tid: tid,
+                args: span.metadata != null ? span.metadata : { }
             });
+            // When a child is on a different tid than its parent, draw a flow
+            // arrow so you can trace why an operation was triggered.
+            if (span.parentId != null) {
+                var parent = spanById.get(span.parentId);
+                if (parent != null) {
+                    var parentTid = spanTid.get(parent.id);
+                    if (parentTid != null && parentTid != tid) {
+                        var parentTs = baseEpochUs + (parent.startTime * 1000 - basePerfUs);
+                        events.push({
+                            ph: "s",
+                            id: flowId,
+                            pid: 1,
+                            tid: parentTid,
+                            ts: parentTs,
+                            name: "trigger",
+                            cat: "flow"
+                        });
+                        events.push({
+                            ph: "f",
+                            bp: "e",
+                            id: flowId,
+                            pid: 1,
+                            tid: tid,
+                            ts: ts,
+                            name: "trigger",
+                            cat: "flow"
+                        });
+                        flowId++;
+                    }
+                }
+            }
         }
 
         return { traceEvents: events };

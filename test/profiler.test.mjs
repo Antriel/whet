@@ -327,8 +327,8 @@ test("profiler: Chrome Trace export has correct format", async () => {
   );
   assert.ok(result.traceEvents.length > 0, "should have trace events");
 
-  const event = result.traceEvents[0];
-  assert.equal(event.ph, "X", "should be complete event");
+  const event = result.traceEvents.find((e) => e.ph === "X");
+  assert.ok(event, "should have at least one complete event");
   assert.equal(event.cat, "whet");
   assert.equal(typeof event.ts, "number", "ts should be microseconds");
   assert.equal(typeof event.dur, "number", "dur should be microseconds");
