@@ -1,6 +1,7 @@
 package whet.profiler;
 
 import js.lib.Promise;
+import whet.cache.AsyncLocalStorage;
 import whet.profiler.Span;
 
 class Profiler {
@@ -340,15 +341,3 @@ typedef ProfilerConfig = {
 
 }
 
-@:jsRequire("node:async_hooks", "AsyncLocalStorage")
-extern class AsyncLocalStorage<T> {
-
-    function new();
-
-    /** Returns the current store. Undefined if called outside of an async context initialized by `run`. */
-    function getStore():Null<T>;
-
-    /** Runs a function synchronously within a context and returns its return value. */
-    function run<R>(store:T, callback:Void->R):R;
-
-}

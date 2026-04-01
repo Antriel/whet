@@ -5,7 +5,7 @@ status: in-progress
 type: feature
 priority: high
 created_at: 2026-03-31T07:45:47Z
-updated_at: 2026-04-01T06:24:32Z
+updated_at: 2026-04-01T07:01:21Z
 ---
 
 Memoize `getSource()`/`getHash()`/`getPartialSource()` per async call tree using AsyncLocalStorage to eliminate redundant cache lookups in DAG diamond dependencies.
@@ -272,20 +272,20 @@ No special error handling needed in the memo layer.
 
 ## Implementation Tasks
 
-- [ ] Extract `AsyncLocalStorage` extern to shared location (out of `Profiler.hx`)
-- [ ] Create `src/whet/cache/MemoContext.hx` with ALS instance, three maps, `getStore()`, `run()`, and `ensure()` helper
-- [ ] Modify `Stone.getSource()` to check/populate memo, auto-create context
-- [ ] Modify `Stone.getHash()` to check/populate memo, auto-create context, extract `_computeHash()`
-- [ ] Modify `Stone.getPartialSource()` to check partial memo, check full `sources` map shortcut, auto-create context, extract `_computePartialSource()`
-- [ ] Modify `Router.get()` to wrap in `MemoContext.ensure()`
-- [ ] Modify `Router.getHash()` to wrap in `MemoContext.ensure()`
-- [ ] Add test: diamond dependency — Stone A depends on B and C, both depend on D. `A.getSource()` triggers D's cache only once
-- [ ] Add test: separate top-level calls create independent contexts (no cross-call contamination)
-- [ ] Add test: `getHash()` memo — multiple `getHash()` calls on same stone in same tree return same promise
-- [ ] Add test: `getPartialSource()` returns filtered full source when full source is memoized
-- [ ] Add test: memo works through Router (`Router.get()` with overlapping stones shares context with subsequent `routeResult.get()`)
-- [ ] Add test: works with profiling both enabled and disabled
-- [ ] Build and run full test suite to verify no regressions
+- [x] Extract `AsyncLocalStorage` extern to shared location (out of `Profiler.hx`)
+- [x] Create `src/whet/cache/MemoContext.hx` with ALS instance, three maps, `getStore()`, `run()`, and `ensure()` helper
+- [x] Modify `Stone.getSource()` to check/populate memo, auto-create context
+- [x] Modify `Stone.getHash()` to check/populate memo, auto-create context, extract `_computeHash()`
+- [x] Modify `Stone.getPartialSource()` to check partial memo, check full `sources` map shortcut, auto-create context, extract `_computePartialSource()`
+- [x] Modify `Router.get()` to wrap in `MemoContext.ensure()`
+- [x] Modify `Router.getHash()` to wrap in `MemoContext.ensure()`
+- [x] Add test: diamond dependency — Stone A depends on B and C, both depend on D. `A.getSource()` triggers D's cache only once
+- [x] Add test: separate top-level calls create independent contexts (no cross-call contamination)
+- [x] Add test: `getHash()` memo — multiple `getHash()` calls on same stone in same tree return same promise
+- [x] Add test: `getPartialSource()` returns filtered full source when full source is memoized
+- [x] Add test: memo works through Router (`Router.get()` with overlapping stones shares context with subsequent `routeResult.get()`)
+- [x] Add test: works with profiling both enabled and disabled
+- [x] Build and run full test suite to verify no regressions
 - [ ] Profile game project's `manifest.getSource()` before/after — expect ~80% reduction in ScryMultiAtlas entries
 
 ## Open Questions

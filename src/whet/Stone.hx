@@ -2,6 +2,7 @@ package whet;
 
 import js.node.Path;
 import whet.Source;
+import whet.cache.MemoContext;
 import whet.magic.MaybeArray.makeArray;
 import whet.magic.StoneId.StoneIdType;
 import whet.magic.StoneId.getTypeName;
@@ -105,22 +106,59 @@ abstract class Stone<T:StoneConfig> {
         }
     }
 
-    /** 
+    /**
      * **Do not override.**
      * Get Source for this stone. Goes through the cache.
      */
     public final function getSource():Promise<Source> {
         Log.debug('Getting source.', { stone: this });
-        return cache.getSource(this);
+        var ctx = MemoContext.getStore();
+        if (ctx != null) {
+            var cached = ctx.sources.get(this);
+            if (cached != null) {
+                Log.trace('Source memo hit.', { stone: this });
+                return cached;
+            }
+            var p = cache.getSource(this);
+            ctx.sources.set(this, p);
+            return p;
+        }
+        // No context — create one. ALS propagates to all async descendants.
+        return MemoContext.ensure(() -> {
+            var newCtx = MemoContext.getStore();
+            var p = cache.getSource(this);
+            newCtx.sources.set(this, p);
+            return p;
+        });
     }
 
-    /** 
+    /**
      * **Do not override.**
      * Hash of this stone with its current config. Defaults to hash of generated source.
      * Hashes of dependency stones (see `config.dependencies`) will be added to the hash.
      */
     public final function getHash():Promise<SourceHash> {
         Log.debug('Generating hash.', { stone: this });
+        var ctx = MemoContext.getStore();
+        if (ctx != null) {
+            var cached = ctx.hashes.get(this);
+            if (cached != null) {
+                Log.trace('Hash memo hit.', { stone: this });
+                return cached;
+            }
+            var p = _computeHash();
+            ctx.hashes.set(this, p);
+            return p;
+        }
+        return MemoContext.ensure(() -> {
+            var newCtx = MemoContext.getStore();
+            var p = _computeHash();
+            newCtx.hashes.set(this, p);
+            return p;
+        });
+    }
+
+    private inline function _computeHash():Promise<SourceHash> {
         return finalMaybeHash().then(hash -> {
             if (hash != null) hash else cast getSource().then(s -> s.hash);
         });
@@ -253,6 +291,41 @@ abstract class Stone<T:StoneConfig> {
      * Uses the same cache as getSource() — partial and full share the pool.
      */
     public final function getPartialSource(sourceId:SourceId):Promise<Null<Source>> {
+        var ctx = MemoContext.getStore();
+        if (ctx != null) {
+            // Check partial memo first.
+            var partialMap = ctx.partials.get(this);
+            if (partialMap != null) {
+                var cached = partialMap.get((sourceId:String));
+                if (cached != null) {
+                    Log.trace('Partial source memo hit.', { stone: this, sourceId: sourceId });
+                    return cached;
+                }
+            }
+            // Check if full source is already memoized — just filter it.
+            var fullCached = ctx.sources.get(this);
+            if (fullCached != null)
+                return fullCached.then(s -> s.filterTo(sourceId));
+            // Compute and store in memo.
+            var p = _computePartialSource(sourceId);
+            if (partialMap == null) {
+                partialMap = new js.lib.Map();
+                ctx.partials.set(this, partialMap);
+            }
+            partialMap.set((sourceId:String), p);
+            return p;
+        }
+        return MemoContext.ensure(() -> {
+            var newCtx = MemoContext.getStore();
+            var p = _computePartialSource(sourceId);
+            var partialMap = new js.lib.Map();
+            newCtx.partials.set(this, partialMap);
+            partialMap.set((sourceId:String), p);
+            return p;
+        });
+    }
+
+    private function _computePartialSource(sourceId:SourceId):Promise<Null<Source>> {
         return finalMaybeHash().then(hash -> {
             if (hash == null)
                 return cast getSource().then(source -> source.filterTo(sourceId));

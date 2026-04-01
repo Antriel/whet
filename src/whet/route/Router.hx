@@ -3,6 +3,7 @@ package whet.route;
 import haxe.extern.EitherType;
 import js.node.Path;
 import minimatch.Minimatch;
+import whet.cache.MemoContext;
 import whet.magic.MinimatchType;
 import whet.magic.RoutePathType;
 
@@ -38,7 +39,9 @@ class Router {
      * @param pattern A glob pattern to search for.
      */
     public function get(pattern:MinimatchType = null):Promise<Array<RouteResult>> {
-        return getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null), []);
+        return MemoContext.ensure(
+            () -> getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null), [])
+        );
     }
 
     function getResults(mainFilters:Filters, results:Array<RouteResult>):Promise<Array<RouteResult>> {
@@ -94,7 +97,7 @@ class Router {
      * Includes matched serveIds in hash to capture filter effects.
      */
     public function getHash(pattern:MinimatchType = null):Promise<SourceHash> {
-        return get(pattern).then(items -> {
+        return MemoContext.ensure(() -> get(pattern).then(items -> {
             var uniqueStones = [];
             var serveIds = [];
             for (item in items) {
@@ -109,7 +112,7 @@ class Router {
                     // Include serveIds in hash to capture filter effects
                     return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));
                 });
-        });
+        }));
     }
 
     /**
