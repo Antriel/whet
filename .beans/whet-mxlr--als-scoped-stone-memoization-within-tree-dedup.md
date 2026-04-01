@@ -1,14 +1,14 @@
 ---
 # whet-mxlr
 title: ALS-scoped Stone memoization (within-tree dedup)
-status: todo
+status: in-progress
 type: feature
 priority: high
 created_at: 2026-03-31T07:45:47Z
-updated_at: 2026-03-31T07:45:47Z
+updated_at: 2026-04-01T06:24:32Z
 ---
 
-Memoize `getSource()`/`getHash()` per async call tree using AsyncLocalStorage to eliminate redundant cache lookups in DAG diamond dependencies.
+Memoize `getSource()`/`getHash()`/`getPartialSource()` per async call tree using AsyncLocalStorage to eliminate redundant cache lookups in DAG diamond dependencies.
 
 ## Problem
 
@@ -18,7 +18,7 @@ The existing lock (`acquire()`) prevents parallel *generation* but not parallel 
 
 ## Solution: AsyncLocalStorage-scoped memo
 
-Use a dedicated `AsyncLocalStorage` instance (separate from profiling) to propagate a memo context through the async call tree. The first `getSource()`/`getHash()` call on a Stone creates the context if none exists; all downstream async operations inherit it via ALS. Subsequent calls to the same Stone within the same tree return the memoized Promise immediately — no lock, no hash, no cache lookup.
+Use a dedicated `AsyncLocalStorage` instance (separate from profiling) to propagate a memo context through the async call tree. The first entry point (`getSource()`/`getHash()`/`getPartialSource()` on a Stone, or `Router.get()`/`Router.getHash()`) creates the context if none exists; all downstream async operations inherit it via ALS. Subsequent calls to the same Stone within the same tree return the memoized Promise immediately — no lock, no hash, no cache lookup.
 
 ### Why ALS and not a generation counter
 
@@ -32,7 +32,7 @@ A global counter fails when multiple independent async chains overlap in time (e
 
 ### New file: `src/whet/cache/MemoContext.hx`
 
-A lightweight context holding two maps (sources and hashes), plus static methods for ALS access.
+A lightweight context holding three maps (sources, hashes, partials), plus static methods for ALS access.
 
 ```haxe
 package whet.cache;
@@ -44,17 +44,27 @@ class MemoContext {
     // Use js.lib.Map for object-identity keys (Stone instances).
     final sources:js.lib.Map<AnyStone, Promise<Source>> = new js.lib.Map();
     final hashes:js.lib.Map<AnyStone, Promise<SourceHash>> = new js.lib.Map();
+    // Nested map: Stone → (SourceId string → Promise<Null<Source>>)
+    final partials:js.lib.Map<AnyStone, js.lib.Map<String, Promise<Null<Source>>>> = new js.lib.Map();
 
     public static inline function getStore():Null<MemoContext> return als.getStore();
 
     /** Run callback within this context. Returns the callback's return value.
-        ALS.run is synchronous — it sets the store, runs the callback, restores. 
+        ALS.run is synchronous — it sets the store, runs the callback, restores.
         Promises created inside inherit the context for their async continuations. */
     public static inline function run<T>(ctx:MemoContext, fn:()->T):T return als.run(ctx, fn);
+
+    /** Execute fn within a MemoContext. Reuses existing context or creates a new one. */
+    public static function ensure<T>(fn:()->T):T {
+        if (als.getStore() != null) return fn();
+        return als.run(new MemoContext(), fn);
+    }
 }
 ```
 
-Uses `js.lib.Map` (native JS Map) for O(1) object-identity lookups. No Haxe `ObjectMap` overhead.
+Uses `js.lib.Map` (native JS Map) for O(1) object-identity lookups. Nested map for partials keyed by `(Stone, SourceId string)`.
+
+The `AsyncLocalStorage` extern already exists in `Profiler.hx` — extract it to a shared location (e.g., keep in `MemoContext.hx` or a small shared file, and import from both `Profiler.hx` and `MemoContext.hx`).
 
 ### Modifications to `src/whet/Stone.hx`
 
@@ -65,7 +75,6 @@ public final function getSource():Promise<Source> {
     Log.debug('Getting source.', { stone: this });
     var ctx = MemoContext.getStore();
     if (ctx != null) {
-        // Inside existing context — check memo.
         var cached = ctx.sources.get(this);
         if (cached != null) {
             Log.trace('Source memo hit.', { stone: this });
@@ -76,8 +85,8 @@ public final function getSource():Promise<Source> {
         return p;
     }
     // No context — create one. ALS propagates to all async descendants.
-    var newCtx = new MemoContext();
-    return MemoContext.run(newCtx, () -> {
+    return MemoContext.ensure(() -> {
+        var newCtx = MemoContext.getStore();
         var p = cache.getSource(this);
         newCtx.sources.set(this, p);
         return p;
@@ -99,47 +108,12 @@ public final function getHash():Promise<SourceHash> {
             Log.trace('Hash memo hit.', { stone: this });
             return cached;
         }
-    }
-    var p = finalMaybeHash().then(hash -> {
-        if (hash != null) hash else cast getSource().then(s -> s.hash);
-    });
-    if (ctx != null) {
-        ctx.hashes.set(this, p);
-    } else {
-        // getHash called as entry point (no getSource above it).
-        // Create context for downstream calls, but don't wrap the return —
-        // getSource inside will create its own context if needed.
-        // Actually: we should wrap so downstream getSource calls share context.
-        var newCtx = new MemoContext();
-        p = MemoContext.run(newCtx, () -> {
-            var inner = finalMaybeHash().then(hash -> {
-                if (hash != null) hash else cast getSource().then(s -> s.hash);
-            });
-            newCtx.hashes.set(this, inner);
-            return inner;
-        });
-    }
-    return p;
-}
-```
-
-Note: when `getHash()` is the entry point (no existing context), we need to create the context *before* calling `finalMaybeHash()` so that downstream `getSource()` calls on dependencies participate in the same memo. This means we can't reuse the already-started promise `p` — we restart inside the ALS context.
-
-Simplification: extract the core logic to avoid duplication:
-
-```haxe
-public final function getHash():Promise<SourceHash> {
-    Log.debug('Generating hash.', { stone: this });
-    var ctx = MemoContext.getStore();
-    if (ctx != null) {
-        var cached = ctx.hashes.get(this);
-        if (cached != null) return cached;
         var p = _computeHash();
         ctx.hashes.set(this, p);
         return p;
     }
-    var newCtx = new MemoContext();
-    return MemoContext.run(newCtx, () -> {
+    return MemoContext.ensure(() -> {
+        var newCtx = MemoContext.getStore();
         var p = _computeHash();
         newCtx.hashes.set(this, p);
         return p;
@@ -155,13 +129,127 @@ private inline function _computeHash():Promise<SourceHash> {
 
 #### `getPartialSource()`
 
-Same pattern — check memo, delegate. Keyed by `(Stone, SourceId)` pair. Since partial sources are less commonly in diamond patterns, this could be deferred to a follow-up if it adds complexity. For now, `getPartialSource()` at minimum benefits from the `getSource()` memo via its `getSource().then(source -> source.filterTo(sourceId))` fallback path, and from the `getHash()` memo via `finalMaybeHash()`.
+```haxe
+public final function getPartialSource(sourceId:SourceId):Promise<Null<Source>> {
+    var ctx = MemoContext.getStore();
+    if (ctx != null) {
+        // Check partial memo first.
+        var partialMap = ctx.partials.get(this);
+        if (partialMap != null) {
+            var cached = partialMap.get((sourceId:String));
+            if (cached != null) {
+                Log.trace('Partial source memo hit.', { stone: this, sourceId: sourceId });
+                return cached;
+            }
+        }
+        // Check if full source is already memoized — just filter it.
+        var fullCached = ctx.sources.get(this);
+        if (fullCached != null)
+            return fullCached.then(s -> s.filterTo(sourceId));
+        // Compute and store in memo.
+        var p = _computePartialSource(sourceId);
+        if (partialMap == null) {
+            partialMap = new js.lib.Map();
+            ctx.partials.set(this, partialMap);
+        }
+        partialMap.set((sourceId:String), p);
+        return p;
+    }
+    return MemoContext.ensure(() -> {
+        var newCtx = MemoContext.getStore();
+        var p = _computePartialSource(sourceId);
+        var partialMap = new js.lib.Map();
+        newCtx.partials.set(this, partialMap);
+        partialMap.set((sourceId:String), p);
+        return p;
+    });
+}
 
-If we want to memoize `getPartialSource()` itself, the context needs a nested map: `Map<AnyStone, Map<SourceId, Promise<Source>>>`. SourceId is a string abstract, so a nested `js.lib.Map<String, Promise<Source>>` works. Implement only if profiling shows it matters.
+private function _computePartialSource(sourceId:SourceId):Promise<Null<Source>> {
+    return finalMaybeHash().then(hash -> {
+        if (hash == null)
+            return cast getSource().then(source -> source.filterTo(sourceId));
+        else
+            return cache.getPartialSource(this, sourceId);
+    });
+}
+```
+
+Key feature: when a full source is already memoized (e.g., `listIds()` fell through to `getSource()` during Router resolution), `getPartialSource()` just filters it — no cache/lock interaction at all. This directly benefits the server pattern where `router.get()` resolves routes and then `routeResult.get()` fetches individual files.
 
 #### `listIds()`
 
-Benefits automatically from `getSource()` memoization (its fallback path). No change needed. If a Stone implements `list()` returning a fast array, repeated calls are cheap anyway.
+No memoization needed. Either `list()` returns a fast array directly, or it falls through to `getSource()` which is memoized.
+
+### Modifications to `src/whet/route/Router.hx`
+
+#### `get()`
+
+```haxe
+public function get(pattern:MinimatchType = null):Promise<Array<RouteResult>> {
+    return MemoContext.ensure(
+        () -> getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null), [])
+    );
+}
+```
+
+#### `getHash()`
+
+```haxe
+public function getHash(pattern:MinimatchType = null):Promise<SourceHash> {
+    return MemoContext.ensure(() -> get(pattern).then(items -> {
+        var uniqueStones = [];
+        var serveIds = [];
+        for (item in items) {
+            if (uniqueStones.indexOf(item.source) == -1) uniqueStones.push(item.source);
+            serveIds.push(item.serveId);
+        }
+        serveIds.sort((a, b) -> a.compare(b));
+        Promise.all(uniqueStones.map(s -> s.getHash()))
+            .then((hashes:Array<SourceHash>) -> {
+                hashes.sort((a, b) -> a.toString() < b.toString() ? -1 : a.toString() > b.toString() ? 1 : 0);
+                return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));
+            });
+    }));
+}
+```
+
+No other Router methods need changes — `saveInto()`, `listContents()`, `getData()`, `getString()`, `getJson()` all delegate through `get()` which creates the context. The context propagates through `.then()` continuations, so downstream `routeResult.get()` calls inherit it.
+
+### Entry point summary
+
+**Context creators** (create if none exists via `MemoContext.ensure`):
+- `Router.get()`, `Router.getHash()` — batch boundaries for cross-stone dedup
+- `Stone.getSource()`, `Stone.getHash()`, `Stone.getPartialSource()` — safety net for direct calls
+
+**Context consumers** (check memo, never create):
+- `finalizeHash()` → `stone.getHash()` on dependencies — inherits from caller
+- `generateSource()` → `stone.getSource()` on dependencies — inherits from caller
+- `RouteResult.get()` → `stone.getPartialSource()` — inherits from Router's context
+
+**Not needed**:
+- `Project.getStoneSource()` / `Project.listStoneOutputs()` — Stone's auto-create handles it
+- `Stone.acquire()` — too deep in the call chain, memo check happens before cache entry
+- `Stone.exportTo()` / `setAbsolutePath()` — Stone's auto-create handles it
+
+### ALS propagation through the server pattern
+
+In the UwsServerStone, each HTTP request flows as:
+
+```
+serveFile() → router.get(url) → [creates MemoContext]
+  → getResults() → stone.listIds() for each route  [shares context]
+  .then(results →
+    serveRouteResult(results[0]) → routeResult.get()
+      → stone.getPartialSource(sourceId)  [inherits context, checks sources map]
+  )
+```
+
+The `.then()` continuation inherits the ALS context from the promise created inside `MemoContext.ensure()`. So `getPartialSource()` sees the same context and can check the `sources` map for a full-source shortcut.
+
+For the `serveFromRouter` double-lookup case (directory search → index.html fallback), the second `router.get()` inside the `.then()` sees the existing context via `MemoContext.ensure()` and reuses it — both searches share the same memo.
+
+Each HTTP request fires on a separate event loop tick with no ALS context, so each request auto-creates an independent memo. Correct isolation.
 
 ### Auto-creation vs explicit context
 
@@ -172,17 +260,9 @@ The auto-creation design (first call creates context if none exists) means:
 
 The only downside: if two truly independent `getSource()` calls happen in sequence (not nested), each creates a separate context. The second doesn't benefit from the first's memo. This is correct behavior — between independent calls, files may have changed. Cross-call dedup is handled by the companion in-flight bean (whet-ctap).
 
-### Router interaction
-
-Router is not a Stone — it has its own `get()` and `getHash()` methods. Router.get() calls `stone.listIds()` on each stone, and Router.getHash() calls `stone.getHash()` on each unique stone. Both of these call Stone's public API methods which check the memo. No Router modifications needed.
-
-However, Router.get() starts multiple async operations in parallel via `Promise.all(allRouteProms)`. All these operations inherit the ALS context from the Router.get() call. So if two routes reference the same Stone, the second `listIds()` call hits the memo. This is the core win.
-
 ### Profiler interaction
 
 The memo check happens *before* entering the cache (and before any profiler spans). Memo hits won't produce profiler spans — they're invisible to the profiler. This is correct: the work didn't happen, so there's nothing to profile. We add `Log.trace` for memo hits instead.
-
-To track memo effectiveness, we could add a counter to MemoContext (hits/misses) and log it when the context is GC'd or at the end of a command. Optional, not in initial implementation.
 
 ### Error handling
 
@@ -192,20 +272,23 @@ No special error handling needed in the memo layer.
 
 ## Implementation Tasks
 
-- [ ] Create `src/whet/cache/MemoContext.hx` with ALS instance and `Map`-based storage
+- [ ] Extract `AsyncLocalStorage` extern to shared location (out of `Profiler.hx`)
+- [ ] Create `src/whet/cache/MemoContext.hx` with ALS instance, three maps, `getStore()`, `run()`, and `ensure()` helper
 - [ ] Modify `Stone.getSource()` to check/populate memo, auto-create context
-- [ ] Modify `Stone.getHash()` to check/populate memo, auto-create context
-- [ ] Verify `getPartialSource()` benefits from `getSource()`/`getHash()` memos (no change needed initially)
-- [ ] Add test: diamond dependency — Stone A depends on B and C, both depend on D. `A.getSource()` triggers D's cache only once (check `D.generateCount`)
+- [ ] Modify `Stone.getHash()` to check/populate memo, auto-create context, extract `_computeHash()`
+- [ ] Modify `Stone.getPartialSource()` to check partial memo, check full `sources` map shortcut, auto-create context, extract `_computePartialSource()`
+- [ ] Modify `Router.get()` to wrap in `MemoContext.ensure()`
+- [ ] Modify `Router.getHash()` to wrap in `MemoContext.ensure()`
+- [ ] Add test: diamond dependency — Stone A depends on B and C, both depend on D. `A.getSource()` triggers D's cache only once
 - [ ] Add test: separate top-level calls create independent contexts (no cross-call contamination)
 - [ ] Add test: `getHash()` memo — multiple `getHash()` calls on same stone in same tree return same promise
+- [ ] Add test: `getPartialSource()` returns filtered full source when full source is memoized
+- [ ] Add test: memo works through Router (`Router.get()` with overlapping stones shares context with subsequent `routeResult.get()`)
 - [ ] Add test: works with profiling both enabled and disabled
-- [ ] Add test: memo works through Router (Router.getHash() with overlapping stones)
 - [ ] Build and run full test suite to verify no regressions
 - [ ] Profile game project's `manifest.getSource()` before/after — expect ~80% reduction in ScryMultiAtlas entries
 
 ## Open Questions
 
-- [ ] Should `getPartialSource()` get its own memo map? Defer until profiling shows it matters.
 - [ ] Should we add memo hit/miss counters to MemoContext for observability? Nice-to-have, not blocking.
 - [ ] The existing `whet-v7y2` bean (shared generation context) is a different problem (sharing state across `generatePartial` calls within one Stone). It could potentially piggyback on MemoContext's ALS for propagation, but the use cases are orthogonal. Keep them separate.
