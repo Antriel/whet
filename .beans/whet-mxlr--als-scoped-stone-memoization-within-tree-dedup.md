@@ -1,11 +1,11 @@
 ---
 # whet-mxlr
 title: ALS-scoped Stone memoization (within-tree dedup)
-status: in-progress
+status: completed
 type: feature
 priority: high
 created_at: 2026-03-31T07:45:47Z
-updated_at: 2026-04-01T07:01:21Z
+updated_at: 2026-04-01T07:18:51Z
 ---
 
 Memoize `getSource()`/`getHash()`/`getPartialSource()` per async call tree using AsyncLocalStorage to eliminate redundant cache lookups in DAG diamond dependencies.

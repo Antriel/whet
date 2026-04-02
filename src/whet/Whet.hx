@@ -74,6 +74,11 @@ private function initProjects() {
     }
     program.allowUnknownOption(false);
 
+    var schemaCmd = new commander.Command('schema');
+    schemaCmd.description('Export project schema as JSON.');
+    schemaCmd.action(cast outputSchema);
+    program.addCommand(schemaCmd);
+
     var commands = getCommands(program.args);
     var initProm = if (commands.length > 0) {
         var res = program.parseOptions(commands[0]);
@@ -122,6 +127,45 @@ private function initProjects() {
 function executeCommand(cmd:Array<String>) {
     Log.trace('Executing command.', { command: cmd });
     return program.parseAsync(cmd, { from: 'user' });
+}
+
+private function outputSchema():Void {
+    Log.logLevel = 100;
+    var excludeCommands = ['help', 'schema'];
+    var schema:Dynamic = {
+        projects: [for (p in Project.projects) ({
+            name:p.name, id:p.id, description:p.description, options:[for (opt in p.options)
+                serializeOption(opt)],
+        }:Dynamic)],
+        commands: [for (cmd in (cast program.commands:Array<commander.Command>))
+            if (!excludeCommands.contains(cmd.name())) serializeCommand(cmd)
+        ],
+    };
+    js.Node.process.stdout.write(haxe.Json.stringify(schema, null, '  ') + '\n');
+}
+
+private function serializeOption(opt:commander.Option):Dynamic {
+    return {
+        name: opt.name(),
+        attributeName: opt.attributeName(),
+        flags: opt.flags,
+        description: opt.description,
+        choices: opt.argChoices,
+        defaultValue: opt.defaultValue,
+        required: opt.required,
+        mandatory: opt.mandatory,
+        boolean: opt.isBoolean(),
+        hidden: opt.hidden,
+    };
+}
+
+private function serializeCommand(cmd:commander.Command):Dynamic {
+    return {
+        name: cmd.name(),
+        description: cmd.description(),
+        aliases: cmd.aliases(),
+        options: [for (opt in (cast cmd.options:Array<commander.Option>)) serializeOption(opt)],
+    };
 }
 
 private function getCommands(args:Array<String>):Array<Array<String>> {

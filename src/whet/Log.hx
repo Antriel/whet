@@ -65,6 +65,7 @@ enum abstract LogLevel(Int) to Int from Int {
     var Warn = 40;
     var Error = 50;
     var Fatal = 60;
+    var Silent = 100;
 
     public static function normalize(i:Int):LogLevel {
         return if (i < (Debug:Int)) Trace;
@@ -72,7 +73,8 @@ enum abstract LogLevel(Int) to Int from Int {
         else if (i < (Warn:Int)) Info;
         else if (i < (Error:Int)) Warn;
         else if (i < (Fatal:Int)) Error;
-        else Fatal;
+        else if (i < (Silent:Int)) Fatal;
+        else Silent;
     }
 
     @:to public function toString():String {
@@ -83,6 +85,7 @@ enum abstract LogLevel(Int) to Int from Int {
             case Warn: "warn";
             case Error: "error";
             case Fatal: "fatal";
+            case Silent: "silent";
         }
     }
 
@@ -94,6 +97,7 @@ enum abstract LogLevel(Int) to Int from Int {
             case "warn": Warn;
             case "error": Error;
             case "fatal": Fatal;
+            case "silent": Silent;
             case _: null;
         }
     }
