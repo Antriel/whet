@@ -238,6 +238,11 @@ abstract class BaseCache<Key,
         return Promise.resolve(null);
     }
 
+    /** Remove all cached entries for a stone. */
+    public function clearStone(stone:AnyStone):Void {
+        cache.remove(key(stone));
+    }
+
     abstract function key(stone:AnyStone):Key;
 
     abstract function value(source:Source):Promise<Value>;

@@ -5,6 +5,17 @@ import whet.magic.MaybeArray.makeArray;
 
 class Files extends Stone<FilesConfig> {
 
+    /** Reuse an existing Files stone for this path, or create a new one. */
+    public static function fromPath(path:String):Files {
+        final project = Project.projects[Project.projects.length - 1];
+        if (project != null) {
+            for (stone in project.stones) {
+                if (stone.id == path && Std.isOfType(stone, Files)) return cast stone;
+            }
+        }
+        return new Files({ paths: [path] });
+    }
+
     override function initConfig() {
         this.config.recursive ??= true;
         this.config.id ??= makeArray(this.config.paths)[0];

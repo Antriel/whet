@@ -106,6 +106,12 @@ class CacheManager {
         // TODO clean tmp on start/end of process
     }
 
+    /** Remove all cached entries for a stone. Opt-in – not called automatically by Project.removeStone. */
+    @:keep public function clearStone(stone:AnyStone):Void {
+        memCache.clearStone(stone);
+        fileCache.clearStone(stone);
+    }
+
     @:keep public function close():Promise<Void> {
         return fileCache.close();
     }

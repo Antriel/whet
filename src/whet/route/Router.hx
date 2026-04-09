@@ -19,6 +19,11 @@ class Router {
     public inline function route(r:RoutePathType)
         for (path in makeRoutePath(r)) routes.push(path);
 
+    /** Remove all routes. */
+    public function clearRoutes():Void {
+        routes.resize(0);
+    }
+
     /** Recursively collect all Stone IDs referenced in this Router's routes. */
     public function collectStoneIds():Array<String> {
         var ids:Array<String> = [];

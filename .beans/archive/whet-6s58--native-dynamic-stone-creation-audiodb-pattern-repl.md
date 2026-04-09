@@ -1,13 +1,14 @@
 ---
 # whet-6s58
 title: Native dynamic Stone creation (AudioDb pattern replacement)
-status: draft
+status: completed
 type: feature
 priority: low
 created_at: 2026-02-18T08:04:06Z
-updated_at: 2026-02-18T09:57:47Z
+updated_at: 2026-04-07T12:00:58Z
 parent: whet-juli
 ---
+
 
 Native Whet support for dynamically creating and managing Stones from external data, replacing ad-hoc patterns like AudioDb's syncStones().
 
@@ -204,3 +205,50 @@ In `STONE_INSPECTOR_PLAN_v2.md`, replace/clarify wording that implies moving dat
 Proposed clarification:
 - Keep per-item stones for independently editable assets (audio-like workflows), and improve lifecycle ergonomics via native dynamic factory support.
 - Use batch stones where workload/config is predominantly uniform and partial generation provides meaningful wins.
+
+
+## Implementation Plan
+
+### Step 1: Core Primitives
+- [x] `Router.clearRoutes()` — public method to clear routes array
+- [x] `Project.removeStone(stone)` — remove stone from project.stones
+- [x] `CacheManager.clearStone(stone)` — opt-in cache cleanup
+  - [x] `MemoryCache.clearStone(stone)`
+  - [x] `FileCache.clearStone(stone)`
+
+### Step 2: StoneFactory Class
+- [x] `src/whet/stones/StoneFactory.hx` — new class extending Router
+  - `sync(data, keyFn)` — diff-based create/update/remove
+  - `createEntry(key, data)` — override in subclass
+  - `updateEntry(key, data, existing)` — override in subclass
+  - `addBaseRoutes()` — override in subclass
+  - `removeEntry(key)` — deregister stones from project
+
+### Step 3: Build & Test
+- [x] `haxe build.hxml` compiles
+- [x] Existing tests pass
+- [x] New tests for primitives + factory (12 tests in stone-factory.test.mjs)
+
+
+## Summary of Changes
+
+### Core Primitives (Haxe)
+- **`Router.clearRoutes()`** (`src/whet/route/Router.hx`) — public method to clear all routes, replacing the `this.routes.length = 0` hack
+- **`Project.removeStone(stone)`** (`src/whet/Project.hx`) — removes a stone from `project.stones`, returns false if not found. Does not clear cache (opt-in).
+- **`CacheManager.clearStone(stone)`** (`src/whet/cache/CacheManager.hx`) — removes all cached entries for a stone from both memory and file caches
+  - `BaseCache.clearStone()` — shared implementation using `cache.remove(key(stone))`
+  - `FileCache.clearStone()` — override that also flushes the cache DB
+
+### StoneFactory Class
+- **`src/whet/stones/StoneFactory.hx`** — new class extending Router for dynamic stone lifecycle management
+  - `sync(data, keyFn)` — diff-based sync: creates new entries, updates existing, removes absent. Returns array of removed keys.
+  - `createEntry(key, data)` — override in JS subclass to create stones + routes for a data entry
+  - `updateEntry(key, data, existing)` — override to update configs in-place (default: destroy+recreate)
+  - `addBaseRoutes()` — override for non-entry routes (e.g., database JSON)
+  - `removeEntry(key)` — deregisters entry's stones from project
+  - `getEntryMap()` — read access to the `Map<String, FactoryEntry>` of tracked entries
+  - Auto-exposed via `build.hxml` macro, exported from `whet.js`
+
+### Tests
+- 12 new tests in `test/stone-factory.test.mjs` covering all primitives and factory behavior
+- All 155 tests pass (143 existing + 12 new)

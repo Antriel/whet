@@ -2,8 +2,8 @@ package whet;
 
 import whet.Stone.OutputFilter;
 import whet.magic.StoneId.getTypeName;
-import whet.profiler.Profiler;
 import whet.profiler.Profiler.ProfilerConfig;
+import whet.profiler.Profiler;
 
 @:expose var addOption = commander.Option.new;
 
@@ -59,6 +59,14 @@ class Project {
             if (stone.id == id) return stone;
         }
         return null;
+    }
+
+    /** Remove a stone from the project. Does not clear cache — use cache.clearStone() separately if needed. */
+    @:keep public function removeStone(stone:AnyStone):Bool {
+        var idx = stones.indexOf(stone);
+        if (idx == -1) return false;
+        stones.splice(idx, 1);
+        return true;
     }
 
     public function describeStones():Array<StoneDescription> {

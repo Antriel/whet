@@ -150,6 +150,26 @@ test("Router filter negation pattern excludes matching files", async () => {
   await env.cleanup();
 });
 
+test("Router string source deduplicates Files stones (same path reuses stone)", async () => {
+  const env = await createTestProject("router-files-dedup");
+  await env.write("assets/a.txt", "A");
+
+  const r1 = new Router("assets/a.txt");
+  const stonesBefore = env.project.stones.length;
+  const r2 = new Router("assets/a.txt");
+  const stonesAfter = env.project.stones.length;
+
+  // Second Router with same string should reuse the Files stone, not create a new one.
+  assert.equal(stonesAfter, stonesBefore, "no new stone should be created for duplicate path");
+
+  // Both routers should serve the same content.
+  const res1 = await r1.get();
+  const res2 = await r2.get();
+  assert.equal((await res1[0].get()).data.toString("utf-8"), "A");
+  assert.equal((await res2[0].get()).data.toString("utf-8"), "A");
+  await env.cleanup();
+});
+
 test("Router saveInto clears destination when clearFirst=true", async () => {
   const env = await createTestProject("router-save-into");
   await env.write("src/a.txt", "A");

@@ -19,7 +19,7 @@ typedef RoutePathType = EitherType<BaseRouteType, EitherType<Array<BaseRouteType
 typedef BaseRouteType = EitherType<Router, EitherType<AnyStone, EitherType<MinimatchType, String>>>;
 
 function makeRoutePath(routerPathType:RoutePathType):Array<RoutePath> {
-    inline function source(src:BaseRouteType) return if (src is String) new Files({ paths: [src] }) else src;
+    inline function source(src:BaseRouteType) return if (src is String) Files.fromPath(cast src) else src;
     if (routerPathType is Router || routerPathType is AnyStone || routerPathType is String)
         return [{ routeUnder: '', source: source(routerPathType), filter: null, extractDirs: null }];
     if (!(routerPathType is Array))

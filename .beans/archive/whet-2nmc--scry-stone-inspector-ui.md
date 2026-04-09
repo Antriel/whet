@@ -1,16 +1,17 @@
 ---
 # whet-2nmc
 title: 'Scry: Stone Inspector UI'
-status: draft
+status: completed
 type: feature
 priority: low
 created_at: 2026-02-17T08:34:57Z
-updated_at: 2026-02-17T08:34:57Z
+updated_at: 2026-04-07T11:23:09Z
 parent: whet-juli
 blocked_by:
     - whet-xito
     - whet-h63a
 ---
+
 
 Build the Stone Inspector tool in Scry app (SvelteKit + Svelte 5 runes):
 

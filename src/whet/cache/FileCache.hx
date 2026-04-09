@@ -159,6 +159,11 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         })));
     }
 
+    override public function clearStone(stone:AnyStone):Void {
+        super.clearStone(stone);
+        flush();
+    }
+
     override function setRecentUseOrder(values:Array<RuntimeFileCacheValue>,
             value:RuntimeFileCacheValue):Bool {
         var changed = super.setRecentUseOrder(values, value);
