@@ -33,23 +33,34 @@ class Profiler {
         span.estimatedDuration = stats.getEstimate(stone.id, op);
         emit(Start, span);
         return context.run(span, () -> {
-            return fn().then(result -> {
-                span.endTime = perfNow();
-                span.duration = span.endTime - span.startTime;
-                span.status = Ok;
-                recorder.record(span);
-                stats.update(stone.id, op, span.duration);
-                emit(End, span);
-                return result;
-            }).catchError(err -> {
-                span.endTime = perfNow();
-                span.duration = span.endTime - span.startTime;
-                span.status = Error(Std.string(err));
-                recorder.record(span);
-                emit(End, span);
-                return Promise.reject(err);
-            });
+            // Guard against fn() throwing synchronously (or returning a non-Promise).
+            // Without this the End event would never be emitted -- Start was already
+            // broadcast, so the span leaks forever on live subscribers -- and, for a
+            // LockHeld span, the `.finally(runNext)` in Stone.acquire would never be
+            // attached, leaving the stone's lock permanently held.
+            return try {
+                fn().then(result -> {
+                    finishSpan(span, Ok);
+                    return result;
+                }).catchError(err -> {
+                    finishSpan(span, Error(Std.string(err)));
+                    return Promise.reject(err);
+                });
+            } catch (e:Dynamic) {
+                finishSpan(span, Error(Std.string(e)));
+                Promise.reject(e);
+            }
         });
+    }
+
+    /** Finalize a span's timing/status, record it, and emit the End event. */
+    function finishSpan(span:AnySpan, status:SpanStatus):Void {
+        span.endTime = perfNow();
+        span.duration = span.endTime - span.startTime;
+        span.status = status;
+        recorder.record(span);
+        if (status == Ok) stats.update(span.stone, span.operation, span.duration);
+        emit(End, span);
     }
 
     /** Secondary API: manual start for spans where no function can be wrapped (e.g. LockWait). */

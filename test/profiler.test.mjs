@@ -621,3 +621,59 @@ test("profiler: getSpansSince delegates to recorder", async () => {
   }
   await env.cleanup();
 });
+
+// --- Regression: synchronous throw inside withSpan must still emit End ---
+
+test("profiler: withSpan emits End when fn() throws synchronously", async () => {
+  const env = await createTestProject("prof-sync-throw");
+  env.project.enableProfiling();
+  const profiler = env.project.profiler;
+
+  let starts = 0;
+  let ends = 0;
+  profiler.subscribe((event) => {
+    if (event.type === SpanEventType.Start) starts++;
+    else ends++;
+  });
+
+  const stone = new MockStone({ project: env.project, id: "s1" });
+
+  // fn() throws synchronously (e.g. the `if (!locked) throw` guard in
+  // generateSource during a lock race). The span must not leak.
+  await assert.rejects(
+    () => profiler.withSpan(stone, "Generate", () => {
+      throw new Error("boom");
+    }),
+    /boom/,
+  );
+
+  assert.equal(starts, 1, "should have emitted exactly one Start");
+  assert.equal(ends, 1, "synchronous throw must still emit End");
+
+  const span = profiler.recorder.getSpans().at(-1);
+  assert.ok(span.endTime > 0, "leaked span would have no endTime");
+  const exported = profiler.export("json").spans.at(-1);
+  assert.ok(String(exported.status).startsWith("error:"), "should record error status");
+  await env.cleanup();
+});
+
+test("profiler: synchronous throw under acquire releases the lock", async () => {
+  const env = await createTestProject("prof-sync-throw-lock");
+  env.project.enableProfiling();
+  const profiler = env.project.profiler;
+  const stone = new MockStone({ project: env.project, id: "s1" });
+
+  // Run a synchronously-throwing op through acquire (mirrors a LockHeld fn
+  // throwing). Before the fix this left `locked` stuck true forever.
+  await assert.rejects(
+    () => stone.acquire(() => profiler.withSpan(stone, "Generate", () => {
+      throw new Error("boom");
+    })),
+    /boom/,
+  );
+
+  // The stone must be usable again — a hung lock would make this never resolve.
+  const src = await stone.getSource();
+  assert.ok(src, "lock should have been released after the synchronous throw");
+  await env.cleanup();
+});
