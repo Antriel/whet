@@ -11,6 +11,9 @@ class MemoContext {
     final hashes:js.lib.Map<AnyStone, Promise<SourceHash>> = new js.lib.Map();
     // Nested map: Stone → (SourceId string → Promise<Null<Source>>)
     final partials:js.lib.Map<AnyStone, js.lib.Map<String, Promise<Null<Source>>>> = new js.lib.Map();
+    // Per-request shared generation context, used by Stone.getContext() when the hash is null
+    // (no stable key to cache on the instance — see Stone.getContext).
+    final contexts:js.lib.Map<AnyStone, Promise<Dynamic>> = new js.lib.Map();
 
     public function new() { }
 

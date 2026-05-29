@@ -1,11 +1,11 @@
 ---
 # whet-v7y2
 title: Shared generation context for Stones (lazy-cached per batch)
-status: draft
+status: completed
 type: feature
 priority: normal
 created_at: 2026-02-25T09:49:20Z
-updated_at: 2026-02-25T09:51:12Z
+updated_at: 2026-05-29T14:17:27Z
 ---
 
 Add a mechanism for Stones to compute expensive shared state once per generation batch and reuse it across all generatePartial() calls.
@@ -100,7 +100,7 @@ The metadata-in-output approach is a clever hack but fights the system's design.
 
 ## Open Questions
 
-- [ ] **Type safety**: `Dynamic` return loses type information. Options:
+- [x] **Type safety**: `Dynamic` return loses type information. Options:
   - (a) Just use `Dynamic` — pragmatic, stone authors cast inside `generatePartial`. Simple.
   - (b) Add a second type parameter: `Stone<Config, Context>` — breaking change, heavy for a feature most stones won't use.
   - (c) Typed wrapper pattern: each stone defines its own `getTypedContext()` wrapping `getContext()` with a cast — boilerplate but type-safe at usage.
@@ -108,19 +108,36 @@ The metadata-in-output approach is a clever hack but fights the system's design.
 
 - [x] **Null hash**: Resolved. When `generateHash()` returns null, `getPartialSource()` bypasses partial caching entirely — it falls back to full `getSource()` + filter (Stone.hx:246-247). `generatePartial` only receives null hash when called from the default `generate()` batch path via `Promise.all`. The Promise-caching in `getContext` still works correctly here: all concurrent calls from the same `Promise.all` batch share the same Promise. We just need `getContext` to treat `null == null` as a cache hit (both old and new hash are null → reuse). No cross-invocation caching is needed or desired since there's no stable hash to key on — the context is computed once per batch, used N times, and naturally superseded on next invocation.
 
-- [ ] **Concurrent `getContext` calls**: The default `generate()` fires all `generatePartial()` calls via `Promise.all()`. Multiple `getContext(hash)` calls could race. Since JS is single-threaded, the first call's synchronous check will miss, starting `generateContext()`. Before that resolves, other calls also check and miss. **Must cache the Promise, not the resolved value**, to avoid duplicate computation. This is already addressed in the proposed API above.
+- [x] **Concurrent `getContext` calls**: The default `generate()` fires all `generatePartial()` calls via `Promise.all()`. Multiple `getContext(hash)` calls could race. Since JS is single-threaded, the first call's synchronous check will miss, starting `generateContext()`. Before that resolves, other calls also check and miss. **Must cache the Promise, not the resolved value**, to avoid duplicate computation. This is already addressed in the proposed API above.
 
-- [ ] **Method naming**: `generateContext` / `getContext` vs alternatives like `prepareContext` / `getSharedState` / `computeBatchState`. The `generate*` prefix is consistent with the existing `generate`/`generatePartial`/`generateHash` family.
+- [x] **Method naming**: `generateContext` / `getContext` vs alternatives like `prepareContext` / `getSharedState` / `computeBatchState`. The `generate*` prefix is consistent with the existing `generate`/`generatePartial`/`generateHash` family.
 
-- [ ] **Should context contribute to hash?**: Probably not — context is *derived from* the inputs that already contribute to the hash. Adding it would be circular. But worth confirming this assumption holds.
+- [x] **Should context contribute to hash?**: Probably not — context is *derived from* the inputs that already contribute to the hash. Adding it would be circular. But worth confirming this assumption holds.
 
-- [ ] **Interaction with `acquire()` locking**: When `getContext` is called from `generatePartial` (which runs inside `acquire()`), and `generateContext` itself calls `dependency.getSource()`, that call goes to a *different* stone's lock — no deadlock risk. But if `generateContext` somehow needed to call back into the *same* stone (e.g. `this.getPartialSource()`), that would deadlock since `acquire()` is already held. This should be documented as a constraint: `generateContext` must not call back into its own stone.
+- [x] **Interaction with `acquire()` locking**: When `getContext` is called from `generatePartial` (which runs inside `acquire()`), and `generateContext` itself calls `dependency.getSource()`, that call goes to a *different* stone's lock — no deadlock risk. But if `generateContext` somehow needed to call back into the *same* stone (e.g. `this.getPartialSource()`), that would deadlock since `acquire()` is already held. This should be documented as a constraint: `generateContext` must not call back into its own stone.
 
 ## Implementation Tasks
 
-- [ ] Add `generateContext(hash)` overridable method to Stone.hx (returns `Promise<Dynamic>`, default returns `Promise.resolve(null)`)
-- [ ] Add `getContext(hash)` internal method with Promise-level caching keyed by hash
-- [ ] Handle null-hash in `getContext` (`null == null` check, see updated snippet above)
-- [ ] Add tests: context computed once across N partial calls, recomputed on hash change, works with individual `getPartialSource` calls
-- [ ] Verify no interaction issues with BaseCache locking / acquire
-- [ ] Document the constraint that `generateContext` must not call back into the same stone
+- [x] Add `generateContext(hash)` overridable method to Stone.hx (returns `Promise<Dynamic>`, default returns `Promise.resolve(null)`)
+- [x] Add `getContext(?hash)` internal method with Promise-level caching keyed by hash
+- [x] Handle null-hash in `getContext` (`null == null` check, see updated snippet above)
+- [x] Add tests: context computed once across N partial calls, recomputed on hash change, works with individual `getPartialSource` calls
+- [x] Verify no interaction issues with BaseCache locking / acquire
+- [x] Document the constraint that `generateContext` must not call back into the same stone
+
+## Settled Decisions (2026-05-29)
+
+- **Type safety**: (a) `Dynamic`. Stone authors cast inside `generatePartial`/`list`.
+- **Caching scope**: Hybrid. Instance cache `_contextPromise` keyed by *stable* hash (cross-build reuse); for **null hash** scope per-request via a new `MemoContext.contexts` map. Fixes the latent staleness bug where instance-cached null-hash context would never invalidate across builds.
+- **Signature**: `getContext(?hash)`. When hash absent, derive via `finalMaybeHash()` (returns null without forcing generation) so `list()` / `generateHash()` can also use the context (matches the motivating `ScrySkinsAutoCompose` example whose `list()` enumerates per-recipe outputs).
+- Naming `generateContext`/`getContext`, context-not-in-hash, and the "must not call back into own stone under acquire()" constraint: kept as defined.
+
+## Summary of Changes
+
+Implemented `generateContext`/`getContext` on `Stone` plus a `contexts` map on `MemoContext`.
+
+- `src/whet/Stone.hx`: added overridable `generateContext(hash):Promise<Dynamic>` (default `null`), internal `getContext(?hash)` + `_contextForHash`, and instance field `_contextPromise`. Hybrid caching: stable (non-null) hash → instance cache keyed by hash (reused across builds); null hash → per-request scoping via `MemoContext.contexts` (avoids cross-build staleness). The *Promise* is cached so concurrent batch callers share one in-flight computation. `getContext()` with no arg derives the hash via `finalMaybeHash()` (no forced generation) so `list()`/`generateHash()` can use it too. Doc comment records the constraint: `generateContext` must not call back into its own stone (runs under `acquire()`).
+- `src/whet/cache/MemoContext.hx`: added `contexts:Map<AnyStone, Promise<Dynamic>>`.
+- `test/context.test.mjs`: 7 tests — once-per-batch (stable + null hash), reuse across separate `getPartialSource` calls, concurrent in-flight sharing, recompute on hash change, null-hash not stale across builds, default returns null.
+
+Deviations from the original draft (both confirmed with the user): (1) hybrid instance+MemoContext caching instead of pure instance — the bean's literal `null == null` instance cache held stale context across builds for stones without `generateHash()`; (2) `getContext(?hash)` optional rather than required, so `list()` (which has no hash) can read the context, matching the motivating `ScrySkinsAutoCompose` example. Full suite: 166/166 pass.

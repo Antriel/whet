@@ -285,6 +285,69 @@ abstract class Stone<T:StoneConfig> {
     }
 
     /**
+     * Optional override: compute expensive shared state once and reuse it across all
+     * `list()` / `generatePartial()` calls within a generation batch. Without this, work like
+     * enumerating inputs, resolving pipelines, or building lookup maps gets repeated once per output.
+     *
+     * Override to do the upfront work; call `getContext()` (not this) from `list()`/`generatePartial()`
+     * to read it. The result is cached (see `getContext` for the caching rules). The returned object
+     * is held by reference and never serialized — Maps, class instances, and closures are fine.
+     *
+     * **Constraint**: `generateContext` must not call back into this *same* stone's `getSource()` /
+     * `getPartialSource()` — it runs inside this stone's `acquire()` lock and would deadlock. Reading
+     * from *other* stones (dependencies) is fine.
+     */
+    private function generateContext(hash:SourceHash):Promise<Dynamic> {
+        return Promise.resolve(null);
+    }
+
+    /** Instance-level context cache, keyed by a stable (non-null) hash. See getContext. */
+    var _contextPromise:Null<{hash:SourceHash, promise:Promise<Dynamic>}> = null;
+
+    /**
+     * **Do not override** (override `generateContext` instead). Returns the shared context,
+     * computing it via `generateContext` at most once per key. Callable from `list()`,
+     * `generatePartial()`, or `generateHash()`.
+     *
+     * Caching:
+     * - With a stable (non-null) hash, the resolved Promise is cached on the stone instance keyed by
+     *   that hash, so it is reused across separate `getSource()`/`getPartialSource()` calls — even
+     *   across builds — as long as the hash matches. A changed hash recomputes.
+     * - With a null hash (a stone without `generateHash()`), there is no stable key, so the context is
+     *   scoped to the current request via `MemoContext` instead of the instance. This still shares it
+     *   across the `Promise.all` batch in the default `generate()`, but avoids holding stale state
+     *   across builds.
+     *
+     * In both cases the *Promise* (not the resolved value) is cached, so concurrent callers from the
+     * same batch share one in-flight computation rather than racing to start their own.
+     *
+     * @param hash Pass the hash when you already have it (from `generatePartial`); omit it elsewhere
+     * (e.g. `list()`) and it is derived via `finalMaybeHash()` without forcing generation.
+     */
+    private function getContext(?hash:SourceHash):Promise<Dynamic> {
+        if (hash != null) return _contextForHash(hash);
+        return finalMaybeHash().then(h -> _contextForHash(h));
+    }
+
+    private function _contextForHash(hash:Null<SourceHash>):Promise<Dynamic> {
+        if (hash == null) {
+            // No stable key — scope to the current request so we don't keep stale state across builds.
+            var ctx = MemoContext.getStore();
+            if (ctx == null) return generateContext(null);
+            var cached = ctx.contexts.get(this);
+            if (cached != null) return cached;
+            var p = generateContext(null);
+            ctx.contexts.set(this, p);
+            return p;
+        }
+        if (_contextPromise != null && _contextPromise.hash != null && _contextPromise.hash.equals(hash))
+            return _contextPromise.promise;
+        var p = generateContext(hash);
+        _contextPromise = { hash: hash, promise: p };
+        return p;
+    }
+
+    /**
      * Get source for a single output by sourceId.
      * If the stone implements generatePartial(), generates just the requested output.
      * Otherwise falls back to full generation + filter.
