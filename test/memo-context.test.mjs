@@ -110,8 +110,11 @@ test("Router.getHash with diamond: shared dep hashed once", async () => {
   const router = new Router([["a/", a], ["b/", b]]);
   const hash = await router.getHash();
   assert.ok(hash);
-  // shared should generate only once within the Router.getHash() context.
-  assert.equal(shared.generateCount, 1, "shared dep should generate once");
+  // Unfiltered getHash uses each source's hash directly, so nothing is generated just to hash.
+  assert.equal(shared.generateCount, 0, "hashing must not force generation");
+  assert.equal(a.generateCount, 0, "hashing must not force generation");
+  // Stable across repeated calls.
+  assert.equal((await router.getHash()).toString(), hash.toString());
   await env.cleanup();
 });
 

@@ -130,3 +130,27 @@ test("Router.getHash is stable for equivalent routes in different insertion orde
 
   await env.cleanup();
 });
+
+test("Router.getHash (no pattern) does not generate a stone that has a cheap hash but no list()", async () => {
+  const env = await createTestProject("router-hash-no-gen");
+  // MockStone implements generateHash() but not list() — mirrors ScrySkinsOptimizer, where
+  // enumerating ids used to force a full (expensive) generate just to compute the router hash.
+  const stone = new MockStone({
+    project: env.project,
+    id: "no-list",
+    hashKey: "v1",
+    outputs: [{ id: "a.txt", content: "A" }],
+  });
+  const router = new Router([["mount/", stone]]);
+
+  const h1 = await router.getHash();
+  assert.equal(stone.generateCount, 0, "hashing must not force generation");
+
+  // Hash must still move when the stone's outputs/id-set change (modelled via hashKey).
+  stone.setHashKey("v2");
+  const h2 = await router.getHash();
+  assert.notEqual(h1.toString(), h2.toString());
+  assert.equal(stone.generateCount, 0, "hashing must still not force generation");
+
+  await env.cleanup();
+});

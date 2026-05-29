@@ -102,6 +102,11 @@ class Router {
      * Includes matched serveIds in hash to capture filter effects.
      */
     public function getHash(pattern:MinimatchType = null):Promise<SourceHash> {
+        // Fast path: with no query filter, every child output is served, so the serve-id set is
+        // fully determined by each child's own id-set (captured by its hash) plus the static route
+        // structure. We can hash without enumerating ids — which would otherwise force generation
+        // for stones lacking list(). See getUnfilteredHash.
+        if (pattern == null) return MemoContext.ensure(() -> getUnfilteredHash());
         return MemoContext.ensure(() -> get(pattern).then(items -> {
             var uniqueStones = [];
             var serveIds = [];
@@ -118,6 +123,37 @@ class Router {
                     return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));
                 });
         }));
+    }
+
+    /**
+     * Hash for the no-query-filter case: a per-route token binding the source's hash to the
+     * static route structure (mount path, filter, extractDirs), then merged order-independently.
+     * Child routers recurse through getHash() with no pattern, so nested structure folds in at each
+     * level. No id enumeration, so stones without list() are not forced to generate.
+     *
+     * Binding structure to source per route is what keeps this false-hit-safe: the set of served
+     * ids is a function of each route's (mount/filter/extractDirs) plus its source id-set, and the
+     * source's hash moves with its id-set. Sorting the per-route tokens makes route order
+     * irrelevant (matching the long-standing contract) without losing that binding.
+     */
+    function getUnfilteredHash():Promise<SourceHash> {
+        var tokenProms:Array<Promise<SourceHash>> = [];
+        for (route in routes) {
+            var structure = route.routeUnder
+                + '|'
+                + (route.filter != null ? route.filter.pattern : '')
+                + '|'
+                + (route.extractDirs != null ? route.extractDirs.pattern : '');
+            var childHash:Promise<SourceHash> = if (route.source is AnyStone)
+                (cast route.source:AnyStone).getHash();
+            else if (route.source is Router) (cast route.source:Router).getHash();
+            else throw new js.lib.Error("Router source must be a Stone or a Router.");
+            tokenProms.push(childHash.then(h -> SourceHash.fromString(structure).add(h)));
+        }
+        return Promise.all(tokenProms).then((tokens:Array<SourceHash>) -> {
+            tokens.sort((a, b) -> a.toString() < b.toString() ? -1 : a.toString() > b.toString() ? 1 : 0);
+            return SourceHash.merge(...tokens);
+        });
     }
 
     /**

@@ -169,7 +169,6 @@ it("StoneFactory.removeEntry deregisters stones individually", async () => {
   env = await createTestProject("factory-remove-entry");
   const factory = new TestFactory();
   factory.sync([{ name: "x", content: "data" }], (d) => d.name);
-  console.log(factory.entryMap.get("x"));
   const stone = factory.entryMap.get("x").stone;
   assert.ok(env.project.stones.includes(stone));
 
