@@ -4,7 +4,6 @@ import haxe.DynamicAccess;
 import js.lib.WeakMap;
 import js.node.Fs;
 import js.node.Path;
-import whet.route.Router;
 
 @:expose
 class ConfigStore {
@@ -219,10 +218,14 @@ class ConfigStore {
 
     public static function isJsonSerializable(val:Dynamic):Bool {
         if (val == null) return true;
-        if (val is Stone) return false;
-        if (val is Router) return false;
         if (js.Syntax.code('typeof {0} === "function"', val)) return false;
-        return true;
+        if (js.Syntax.code('typeof {0} !== "object"', val)) return true; // primitives
+        if (val is Array) return true;
+        // Only plain objects are serializable. Any class instance (Stone, Router,
+        // server plugins, Node Timers, Map/Set/Date, ...) is not – deepClone would
+        // otherwise traverse its cyclic internals and could overflow the stack.
+        return js.Syntax.code(
+            '(Object.getPrototypeOf({0}) === null || Object.getPrototypeOf({0}) === Object.prototype)', val);
     }
 
     public static function deepClone(val:Dynamic):Dynamic {
