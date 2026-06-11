@@ -17,6 +17,12 @@ abstract class Stone<T:StoneConfig> {
     /** If true, hash of a cached file (not `stone.getHash()` but actual file contents) won't be checked. */
     public var ignoreFileHash:Bool = false;
 
+    /**
+     * If true, this stone's own method source code is excluded from its hash (opt out of the
+     * code-aware self-hash). Only relevant for stones that override `generateHash()`. See `codeHash`.
+     */
+    public var ignoreCodeHash:Bool = false;
+
     public var id(default, null):String;
     public var cacheStrategy:CacheStrategy;
     public var cache(get, never):CacheManager;
@@ -226,13 +232,89 @@ abstract class Stone<T:StoneConfig> {
 
     /**
      * **Do not override.**
-     * Used by cache. Returns either null, or result of `generateHash` finalized by adding 
+     * Used by cache. Returns either null, or result of `generateHash` finalized by adding
      * dependencies.
+     *
+     * When `generateHash()` returns a non-null hash, the stone's own code hash (`codeHash`) is mixed
+     * in, so editing the stone's generation logic busts the cache even though config/inputs are
+     * unchanged.
      */
     @:allow(whet.cache) function finalMaybeHash():Promise<Null<SourceHash>> {
         var store:ConfigStore = config.configStore ?? project.configStore;
         var patchPromise = if (store != null) store.ensureApplied(this) else Promise.resolve(null);
-        return patchPromise.then(_ -> generateHash().then(hash -> finalizeHash(hash)));
+        return patchPromise.then(_ -> generateHash().then(hash -> {
+            if (hash != null && !ignoreCodeHash) hash = hash.add(codeHash(this));
+            return finalizeHash(hash);
+        }));
+    }
+
+    /** Per-class memo for `codeHash`, keyed by constructor. Computed once per process per class. */
+    static var codeHashCache:js.lib.Map<Dynamic, SourceHash> = new js.lib.Map();
+
+    /**
+     * Hash of the stone class's own source: `Function.prototype.toString()` of *every* own method
+     * (instance/prototype methods, accessors, and static methods) defined on the stone's class and
+     * its ancestors down to — but excluding — `Stone` itself. Memoized per class.
+  
+     *
+     * **Limitations** (not reachable by reflection from the class object): does NOT capture changes
+     * in *module-level free functions* in the same file, nor in *imported helper modules* a method
+     * delegates to. Only class-level methods (instance + static) participate; instance-own function
+     * properties are intentionally excluded so the per-class memo stays sound.
+     */
+    static function codeHash(stone:AnyStone):SourceHash {
+        var ctor:Dynamic = js.Syntax.code("{0}.constructor", stone);
+        var cached = codeHashCache.get(ctor);
+        if (cached != null) return cached;
+        var parts:Array<String> = [];
+        // Instance/prototype methods: walk from the stone's class down to — but excluding — Stone,
+        // identified by ownership of the final `finalizeHash` method (never overridden). The prototype
+        // chain is reliably linked for both compiled (Haxe) and user (ES class) live instances.
+        var proto:Dynamic = js.lib.Object.getPrototypeOf(stone);
+        while (proto != null && !ownsFinalizeHash(proto)) {
+            collectOwnFunctions(proto, parts);
+            proto = js.lib.Object.getPrototypeOf(proto);
+        }
+        // Static methods: walk the constructor chain, collecting each class's own statics. Stop once a
+        // constructor's prototype is Stone's (same `finalizeHash` sentinel), so Stone's own statics are
+        // excluded. The Function.prototype / null guard terminates safely regardless.
+        var funcProto:Dynamic = js.Syntax.code("Function.prototype");
+        var klass:Dynamic = ctor;
+        while (klass != null && klass != funcProto) {
+            var kproto:Dynamic = js.Syntax.code("{0}.prototype", klass);
+            if (kproto != null && ownsFinalizeHash(kproto)) break;
+            collectOwnFunctions(klass, parts);
+            klass = js.lib.Object.getPrototypeOf(klass);
+        }
+        var hash = SourceHash.fromString(parts.join("\n"));
+        codeHashCache.set(ctor, hash);
+        return hash;
+    }
+
+    static inline function ownsFinalizeHash(obj:Dynamic):Bool
+        return js.Syntax.code("Object.prototype.hasOwnProperty.call({0}, 'finalizeHash')", obj);
+
+    /**
+     * Appends `name:slot:source` for every own function-valued slot (`value`/`get`/`set`) of `obj`'s
+     * own properties to `parts`, sorted by name for determinism. Uses property descriptors so getters
+     * and setters are read by source rather than invoked. Skips `constructor` and Haxe-internal
+     * bookkeeping props (`__class__`, `__super__`, `__name__`, …) — those aren't stone logic and
+     * `__super__` would otherwise pull the parent class's source into every subclass's hash.
+     */
+    static function collectOwnFunctions(obj:Dynamic, parts:Array<String>):Void {
+        var names:Array<String> = js.Syntax.code("Object.getOwnPropertyNames({0})", obj);
+        names.sort(Reflect.compare);
+        for (name in names) {
+            if (name == "constructor" || StringTools.startsWith(name, "__")) continue;
+            var desc:Dynamic = js.Syntax.code("Object.getOwnPropertyDescriptor({0}, {1})", obj, name);
+            if (desc == null) continue;
+            for (slot in ["value", "get", "set"]) {
+                var fn:Dynamic = js.Syntax.code("{0}[{1}]", desc, slot);
+                if (fn != null && js.Syntax.code("typeof {0} === 'function'", fn))
+                    parts.push(name + ":" + slot + ":"
+                        + (js.Syntax.code("Function.prototype.toString.call({0})", fn) : String));
+            }
+        }
     }
 
     /**
