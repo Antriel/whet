@@ -45,7 +45,7 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 - `src/whet/Source.hx`: Generated asset data and file operations
 - `src/whet/SourceHash.hx`: Content hashing utilities
 - `src/whet/cache/`: Caching infrastructure (CacheManager, FileCache, MemoryCache)
-- `src/whet/stones/`: Built-in Stone implementations (Files, JsonStone, RemoteFile, Server, Zip, HaxeBuild)
+- `src/whet/stones/`: Built-in Stone implementations (Files, JsonStone, RemoteFile, Zip, HaxeBuild)
 - `src/whet/magic/`: Type system abstractions (StoneId, MaybeArray, RoutePathType, MinimatchType)
 - `externs/`: TypeScript definition conversions for Node.js libraries
 

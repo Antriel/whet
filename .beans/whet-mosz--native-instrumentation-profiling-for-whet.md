@@ -1,11 +1,11 @@
 ---
 # whet-mosz
 title: Native Instrumentation & Profiling for Whet
-status: draft
+status: completed
 type: epic
 priority: high
 created_at: 2026-03-28T06:46:54Z
-updated_at: 2026-03-30T07:09:46Z
+updated_at: 2026-06-11T14:52:10Z
 ---
 
 Add optional profiling to Whet: track stone generation timing, cache hits/misses, dependency chains, and generation reasons. Support live streaming for long-lived services. Negligible overhead when disabled.

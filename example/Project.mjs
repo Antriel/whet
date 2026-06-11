@@ -2,7 +2,6 @@ import { Files, RemoteFile } from "../bin/whet.js";
 import { ZipStone } from "../bin/whet.js";
 import { Project, JsonStone, Router, Log } from "../bin/whet.js";
 import { CacheDurability, CacheStrategy, DurabilityCheck } from "../bin/whet/cache/Cache.js";
-import { Server } from "../bin/whet/stones/Server.js";
 import { Command, Option } from 'commander';
 
 // Log.logLevel = 10;
@@ -52,5 +51,3 @@ const router = new Router([
 console.log(await router.listContents());
 
 // await new ZipStone({sources: router}).setAbsolutePath('bundle.zip');
-
-const s = new Server({ router: router });
