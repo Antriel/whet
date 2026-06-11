@@ -5,6 +5,12 @@ import whet.Log.LogLevel;
 
 var program = new commander.Command('whet');
 
+/** 
+ * True when the invocation requested top-level help (`whet --help` / `-h`), as
+ * opposed to a subcommand help (`whet greet --help`). Set after the first parse.
+ */
+private var topLevelHelp = false;
+
 function main() {
     // Only run CLI when executed directly, not when imported as a library.
     // Use realpathSync to resolve symlinks (e.g. from npm link) before comparing.
@@ -21,6 +27,11 @@ function main() {
         .allowUnknownOption(true)
         .allowExcessArguments(true)
         .showSuggestionAfterError(true)
+        // Disable the built-in help option for this first parse: the project isn't
+        // loaded yet, so its commands aren't known. With allowUnknownOption it passes
+        // through into `program.args` and is handled in the second pass (initProjects),
+        // exactly like the `help` command — so `whet --help` shows project commands too.
+        .helpOption(false)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
         .option('-l, --log-level <level>', 'log level, a string/number', 'info')
         .option('--no-pretty', 'disable pretty logging')
@@ -30,9 +41,17 @@ function main() {
     try {
         program.parse();
     } catch (err) {
-        if (err.native is commander.CommanderError && ((err.native:Dynamic).code == 'commander.version' || (err.native:Dynamic).code == 'commander.helpDisplayed')) js.Node.process.exit();
+        if (err.native is commander.CommanderError
+            && ((err.native:Dynamic).code == 'commander.version'
+                || (err.native:Dynamic).code == 'commander.helpDisplayed')) js.Node.process.exit();
         else throw err;
     }
+    // `--help`/`-h` now passes through (helpOption disabled above). Detect whether it
+    // was a top-level request (first command segment leads with a help flag) vs a
+    // subcommand one (`whet greet --help`), which is handled by the subcommand itself.
+    final firstSegment = getCommands(program.args)[0];
+    topLevelHelp = firstSegment.length > 0 && (firstSegment[0] == '--help' || firstSegment[0] == '-h');
+
     final options = program.opts();
     if (options.logLevel != null) { // Handle logLevel immediately.
         var n = Std.parseInt(options.logLevel);
@@ -58,8 +77,12 @@ private function init(options:Dynamic) {
             Log.trace('Project module imported.');
             initProjects();
         }).catchError(e -> {
-            Log.error("Error loading project.", { error: e });
-            if (e is js.lib.Error) Log.error((e:js.lib.Error).stack);
+            // If all the user asked for was top-level help, the project failing to load
+            // shouldn't bury it under an error — just print the (global) help cleanly.
+            if (!topLevelHelp) {
+                Log.error("Error loading project.", { error: e });
+                if (e is js.lib.Error) Log.error((e:js.lib.Error).stack);
+            }
             try {
                 program.help();
             } catch (e) { }
@@ -73,6 +96,9 @@ private function initProjects() {
         for (opt in project.options) program.addOption(opt);
     }
     program.allowUnknownOption(false);
+    // Re-enable the help option now that the project (and its commands) is loaded, so a
+    // passed-through top-level `--help`/`-h` renders the full help in the command loop below.
+    program.helpOption('-h, --help', 'display help for command');
 
     var schemaCmd = new commander.Command('schema');
     schemaCmd.description('Export project schema as JSON.');
@@ -116,7 +142,10 @@ private function initProjects() {
         Log.trace('Executing command.', { commandArgs: c });
         program.parseAsync(c, { from: 'user' }).then(_ -> nextCommand())
             .catchError(err -> {
-                if (err is commander.CommanderError && err.code == 'commander.help')
+                // 'commander.help' = the `help` command; 'commander.helpDisplayed' = the
+                // `--help`/`-h` option. Both just printed help — not errors.
+                if (err is commander.CommanderError
+                    && (err.code == 'commander.help' || err.code == 'commander.helpDisplayed'))
                     return;
                 Log.error("Error while executing command.", { error: err });
             });

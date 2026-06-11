@@ -39,6 +39,31 @@ test("invalid log level exits non-zero with error message", async () => {
   assert.ok(stderr.includes("--log-level"), `expected error about --log-level in stderr: ${stderr}`);
 });
 
+test("top-level --help lists project commands (after loading project)", async (t) => {
+  const tmpDir = resolve("test/.tmp/cli-help-" + Date.now());
+  await mkdir(tmpDir, { recursive: true });
+  t.after(() => rm(tmpDir, { recursive: true, force: true }));
+
+  const whetUrl = pathToFileURL(resolve("bin/whet.js")).href;
+  const projectFile = resolve(tmpDir, "Project.mjs");
+  await writeFile(
+    projectFile,
+    `import { Project } from "${whetUrl}";
+const project = new Project({ name: "test", rootDir: "./" });
+project.addCommand("my-command").description("a custom command").action(() => {});
+`
+  );
+
+  // The `--help` option must defer until the project is loaded, just like the `help`
+  // command, so it surfaces project-registered commands (not only global options).
+  for (const helpArg of ["--help", "-h"]) {
+    const { stdout, exitCode } = await whet("-p", projectFile, helpArg);
+    assert.equal(exitCode, 0, `${helpArg} should exit 0`);
+    assert.ok(stdout.includes("my-command"), `expected "my-command" in ${helpArg} output: ${stdout}`);
+    assert.ok(stdout.includes("Commands:"), `expected "Commands:" section in ${helpArg} output: ${stdout}`);
+  }
+});
+
 test("registered command runs when invoked via CLI", async (t) => {
   const tmpDir = resolve("test/.tmp/cli-subprocess-" + Date.now());
   await mkdir(tmpDir, { recursive: true });
