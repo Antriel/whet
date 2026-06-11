@@ -20,7 +20,11 @@ import js.node.stream.Writable.IWritable;
 
     public static var logLevel:LogLevel = Info;
 
-    public static var stream:IWritable = js.Node.process.stdout;
+    // Logs go to stderr so command *results* (written to stdout by `schema`,
+    // ScryStone's introspection verbs, etc.) are never contaminated by log lines —
+    // machine consumers can parse stdout cleanly at any log level. For a human in a
+    // terminal stdout+stderr render together, so this is visually unchanged.
+    public static var stream:IWritable = js.Node.process.stderr;
 
     static function log(level:Int, ...args:Dynamic):Void {
         if (level >= (logLevel:Int)) {

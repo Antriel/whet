@@ -33,8 +33,9 @@ function main() {
         // exactly like the `help` command — so `whet --help` shows project commands too.
         .helpOption(false)
         .option('-p, --project <file>', 'project to run', 'Project.mjs')
-        .option('-l, --log-level <level>', 'log level, a string/number', 'info')
+        .addOption(new commander.Option('-l, --log-level <level>', 'log level, a string/number').default_('info').env('WHET_LOG_LEVEL'))
         .option('--no-pretty', 'disable pretty logging')
+        .option('-q, --quiet', 'quiet output: warn level + no color (the default when stdout is not a TTY)')
         .option('--profile <format>', 'enable profiling, export to whet-profile.json on exit (format: json or trace, default: json)')
         .exitOverride();
 
@@ -53,13 +54,25 @@ function main() {
     topLevelHelp = firstSegment.length > 0 && (firstSegment[0] == '--help' || firstSegment[0] == '-h');
 
     final options = program.opts();
-    if (options.logLevel != null) { // Handle logLevel immediately.
+    if (options.logLevel != null) { // Validate & apply --log-level / WHET_LOG_LEVEL.
         var n = Std.parseInt(options.logLevel);
         if (n == null) n = LogLevel.fromString(options.logLevel);
         if (n == null) program.error('Invalid value for --log-level');
         else Log.logLevel = n;
     }
-    if (options.pretty) Log.stream = PinoPretty.call();
+    // Auto-quiet when stdout is not a TTY (piped/scripted/agent use): default to warn +
+    // no color so machine consumers get cheap, clean output. Explicit choices always win —
+    // -l/--log-level (incl. WHET_LOG_LEVEL) sets the level, --no-pretty disables color; and
+    // -q/--quiet forces quiet regardless. Logs go to stderr (see Log.hx) so stdout results
+    // stay clean either way; pretty output is routed to stderr too (destination: 2).
+    final nonTty = (cast js.Node.process.stdout).isTTY != true;
+    final levelSource:String = cast program.getOptionValueSource('logLevel');
+    final prettySource:String = cast program.getOptionValueSource('pretty');
+    if (options.quiet || (nonTty && levelSource == 'default')) Log.logLevel = Warn;
+    final usePretty = if (options.quiet) false
+        else if (prettySource != 'default') options.pretty // --no-pretty explicitly set
+        else !nonTty; // default: color in a terminal, plain when piped
+    if (usePretty) Log.stream = PinoPretty.call({ destination: 2 });
 
     js.Node.setImmediate(init, options); // Init next tick, in case the project file was executed directly.
 }
