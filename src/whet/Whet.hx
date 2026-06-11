@@ -188,12 +188,24 @@ private function serializeOption(opt:commander.Option):Dynamic {
     };
 }
 
+private function serializeArgument(arg:commander.Argument):Dynamic {
+    return {
+        name: arg.name(),
+        description: arg.description,
+        choices: arg.argChoices,
+        defaultValue: arg.defaultValue,
+        required: arg.required,
+        variadic: arg.variadic,
+    };
+}
+
 private function serializeCommand(cmd:commander.Command):Dynamic {
     return {
         name: cmd.name(),
         description: cmd.description(),
         aliases: cmd.aliases(),
         options: [for (opt in (cast cmd.options:Array<commander.Option>)) serializeOption(opt)],
+        arguments: [for (arg in (cast cmd.registeredArguments:Array<commander.Argument>)) serializeArgument(arg)],
     };
 }
 
