@@ -103,14 +103,8 @@ abstract class BaseCache<Key,
                 value = Lambda.find(values, v -> v.hash.equals(hash));
                 if (value != null) setRecentUseOrder(values, value);
             }
-            if (value != null && hasSourceId(value, sourceId)) {
-                // Cache hit — entry has the requested sourceId.
-                return source(stone, value).then(src -> src != null ? src.filterTo(sourceId) : null);
-            } else if (value != null && value.complete) {
-                // Entry is complete but doesn't have sourceId — it doesn't exist.
-                return Promise.resolve(null);
-            } else {
-                // Need to generate: either no entry, or incomplete entry missing this sourceId.
+            // Generate (or regenerate) just this sourceId, storing it in the entry.
+            function regenerate():Promise<Null<Source>> {
                 return stone.profilerWithSpan(SpanOp.GeneratePartial,
                     () -> stone.generatePartialSource(sourceId, hash),
                     { sourceId: (sourceId:String) }
@@ -133,7 +127,46 @@ abstract class BaseCache<Key,
                     }
                 });
             }
+
+            if (value != null && hasSourceId(value, sourceId)) {
+                // Cache hit — read & validate ONLY the requested file, not the whole entry. The
+                // other files of the entry are validated when they're themselves requested.
+                return sourcePartial(stone, value, sourceId).then(src -> {
+                    if (src != null) return src;
+                    // The requested file is stale/missing on disk — regenerate just it.
+                    return cast regenerate();
+                });
+            } else if (value != null && value.complete) {
+                // Entry is complete but doesn't have sourceId — it doesn't exist.
+                return Promise.resolve(null);
+            } else {
+                // Need to generate: either no entry, or incomplete entry missing this sourceId.
+                return regenerate();
+            }
         }));
+    }
+
+    /**
+     * Enumerate a stone's output ids from cache metadata alone — no file reads, no generation.
+     * Used by `Stone.listIds()` as a fast path before falling back to a full `getSource()`.
+     *
+     * Returns null (caller falls back) unless there is a *complete* entry whose hash matches the
+     * stone's current `finalMaybeHash()`. Sound because the output id-set is a pure function of that
+     * hash, so a complete matching entry's files are the authoritative id list. Stale/missing files
+     * on disk are irrelevant here — they're stat-validated (and regenerated) when actually fetched.
+     *
+     * Intentionally takes no lock and does not touch use-order/durability: listing is a read-only
+     * "what does this produce" query, not a use of the cached bytes.
+     */
+    public function tryListIds(stone:AnyStone):Promise<Null<Array<SourceId>>> {
+        return stone.finalMaybeHash().then(hash -> {
+            if (hash == null) return null;
+            var values = cache.get(key(stone));
+            if (values == null) return null;
+            var value = Lambda.find(values, v -> v.hash.equals(hash) && v.complete);
+            if (value == null) return null;
+            return getValueIds(value);
+        });
     }
 
     function set(source:Source):Promise<Value> {
@@ -249,12 +282,22 @@ abstract class BaseCache<Key,
 
     abstract function source(stone:AnyStone, value:Value):Promise<Source>;
 
+    /**
+     * Read & validate just the requested file from an entry, without touching the rest. Resolves
+     * the single-output Source when valid, or null when that file is invalid/missing (the caller
+     * then regenerates it).
+     */
+    abstract function sourcePartial(stone:AnyStone, value:Value, sourceId:SourceId):Promise<Null<Source>>;
+
     abstract function getExistingDirs(stone:AnyStone):Array<SourceId>;
 
     abstract function getDirFor(value:Value):SourceId;
 
     /** Check if entry contains a specific sourceId. */
     abstract function hasSourceId(value:Value, sourceId:SourceId):Bool;
+
+    /** All output ids held by an entry, read from metadata without touching files. */
+    abstract function getValueIds(value:Value):Array<SourceId>;
 
     /** Merge partial source data into an existing entry, returns the updated value. */
     abstract function mergePartial(stone:AnyStone, existing:Value, addition:Source,

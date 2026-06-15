@@ -64,6 +64,19 @@ class CacheManager {
     }
 
     /**
+     * Fast path for `Stone.listIds()`: enumerate output ids from cache metadata, without reading
+     * files or generating. Returns null when no usable entry exists (caller falls back to
+     * `getSource()`). `None` is never cached, so there's nothing to answer from.
+     */
+    public function tryListIds(stone:AnyStone):Promise<Null<Array<SourceId>>> {
+        return switch stone.cacheStrategy {
+            case None: Promise.resolve(null);
+            case InMemory(_): memCache.tryListIds(stone);
+            case InFile(_) | AbsolutePath(_): fileCache.tryListIds(stone);
+        }
+    }
+
+    /**
      * Re-generates source even if the currently cached value is valid.
      */
     @:keep public function refreshSource(stone:AnyStone):Promise<Source> {

@@ -12,6 +12,9 @@ class MemoryCache extends BaseCache<AnyStone, Source> {
 
     function source(stone:AnyStone, value:Source):Promise<Source> return Promise.resolve(value);
 
+    function sourcePartial(stone:AnyStone, value:Source, sourceId:SourceId):Promise<Null<Source>>
+        return Promise.resolve(value.filterTo(sourceId));
+
     function getExistingDirs(stone:AnyStone):Array<SourceId> {
         var list = cache.get(stone);
         if (list != null) return list.map(s -> s.tryDirPath()).filter(p -> p != null);
@@ -22,6 +25,10 @@ class MemoryCache extends BaseCache<AnyStone, Source> {
 
     function hasSourceId(value:Source, sourceId:SourceId):Bool {
         return Lambda.exists(value.data, d -> d.id == sourceId);
+    }
+
+    function getValueIds(value:Source):Array<SourceId> {
+        return [for (d in value.data) d.id];
     }
 
     function mergePartial(stone:AnyStone, existing:Source, addition:Source,

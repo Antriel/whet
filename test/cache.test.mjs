@@ -6,6 +6,7 @@ import {
   CacheDurability,
   DurabilityCheck,
 } from "../bin/whet/cache/Cache.js";
+import { SourceData } from "../bin/whet/Source.js";
 import { MockStone } from "./helpers/mock-stone.mjs";
 import { createTestProject } from "./helpers/test-env.mjs";
 
@@ -115,6 +116,38 @@ test("Files stone cache updates after source file content changes", async () => 
   assert.equal(t1, "A1");
   assert.equal(t2, "A2");
   assert.notEqual(s1.hash.toString(), s2.hash.toString());
+  await env.cleanup();
+});
+
+// PERFORMANCE_REVIEW §2.3: serving one static file from a Files directory must read only that
+// file, not the whole directory.
+test("Files.generatePartial reads only the requested file, not the whole directory", async () => {
+  const env = await createTestProject("files-partial-read");
+  await env.write("assets/a.txt", "A");
+  await env.write("assets/b.txt", "B");
+  await env.write("assets/c.txt", "C");
+  // Default project strategy is None — the case plain file routes hit.
+  const files = new Files({
+    project: env.project,
+    id: "files-partial",
+    paths: "assets/",
+  });
+
+  // Spy on content reads. generateHash() hashes via HashCache (not SourceData.fromFile), so this
+  // counts only the bytes generatePartial/generate actually read.
+  const origFrom = SourceData.fromFile;
+  let reads = 0;
+  SourceData.fromFile = function (...a) {
+    reads += 1;
+    return origFrom.apply(this, a);
+  };
+  try {
+    const src = await files.getPartialSource("b.txt");
+    assert.equal(src.get().data.toString("utf-8"), "B");
+    assert.equal(reads, 1); // only b.txt, not all three
+  } finally {
+    SourceData.fromFile = origFrom;
+  }
   await env.cleanup();
 });
 

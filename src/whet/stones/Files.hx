@@ -47,6 +47,22 @@ class Files extends Stone<FilesConfig> {
         ).then(fileProms -> cast Promise.all(fileProms));
     }
 
+    override function generatePartial(sourceId:SourceId, hash:SourceHash):Promise<Null<Array<SourceData>>> {
+        // Resolve the requested id back to its file via the same listing walk() uses, then read
+        // ONLY that file — instead of falling back to generate(), which reads the whole directory.
+        return walk(
+            (path) -> { id: (path.withExt:SourceId), cwd: (cwdPath(path):String), pathId: (path:SourceId) },
+            (dir, dirFile) -> {
+                var p = fromCwd(dirFile, dir);
+                { id: p.id, cwd: (dirFile:String), pathId: p.pathId };
+            }
+        ).then(entries -> {
+            var match = Lambda.find(entries, e -> e.id == sourceId);
+            if (match == null) return cast Promise.resolve(null);
+            return cast SourceData.fromFile(match.id, match.cwd, match.pathId).then(sd -> [sd]);
+        });
+    }
+
     inline function walk<T>(onFile:SourceId->T, onDirFile:SourceId->SourceId->T):Promise<Array<T>> {
         var files:Array<T> = [];
         var dirs = [];

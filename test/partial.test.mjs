@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { rm } from "node:fs/promises";
 
 import { Stone } from "../bin/whet.js";
 import {
@@ -557,6 +558,178 @@ test("listIds() falls back to full generation when list() returns null", async (
   const ids = await stone.listIds();
   assert.deepEqual(ids, ["x.txt", "y.txt"]);
   assert.equal(stone.generateCount, 1); // had to generate to get IDs
+  await env.cleanup();
+});
+
+// ---------------------------------------------------------------------------
+// listIds() cache-metadata fast path (PERFORMANCE_REVIEW §2.1)
+// ---------------------------------------------------------------------------
+
+// A warm FileCache entry can answer listIds() from its stored file ids — without reading the
+// files or regenerating. The sharpest observable: delete the data files on disk, leaving the
+// in-memory metadata intact. The old path (getSource -> source() -> ENOENT -> regenerate) would
+// bump generateCount; the metadata fast path returns the ids untouched.
+test("listIds() answers from cache metadata without regenerating (files deleted)", async () => {
+  const env = await createTestProject("list-ids-meta-del");
+  const stone = new MockStone({
+    project: env.project,
+    id: "list-meta-del",
+    hashKey: "stable",
+    outputs: [
+      { id: "a.txt", content: "A" },
+      { id: "b.txt", content: "B" },
+    ],
+    cacheStrategy: CacheStrategy.InFile(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  // Populate the cache + write files to disk.
+  await stone.getSource();
+  assert.equal(stone.generateCount, 1);
+
+  // Drop the on-disk data (and db), keeping the FileCache's in-memory metadata.
+  await rm(env.rootDir + ".whet", { recursive: true, force: true });
+
+  const ids = await stone.listIds();
+  assert.deepEqual(ids, ["a.txt", "b.txt"]);
+  assert.equal(stone.generateCount, 1); // metadata fast path — no regeneration
+  await env.cleanup();
+});
+
+// Same idea for InMemory: a warm complete entry answers listIds() without regenerating. (InMemory
+// already wouldn't read files, but this locks in that the metadata path — not a getSource() round
+// trip — is what serves the ids.)
+test("listIds() answers from InMemory cache metadata without regenerating", async () => {
+  const env = await createTestProject("list-ids-meta-mem");
+  const stone = new MockStone({
+    project: env.project,
+    id: "list-meta-mem",
+    hashKey: "stable",
+    outputs: [
+      { id: "x.txt", content: "X" },
+      { id: "y.txt", content: "Y" },
+    ],
+    cacheStrategy: CacheStrategy.InMemory(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  await stone.getSource();
+  assert.equal(stone.generateCount, 1);
+
+  const ids = await stone.listIds();
+  assert.deepEqual(ids, ["x.txt", "y.txt"]);
+  assert.equal(stone.generateCount, 1);
+  await env.cleanup();
+});
+
+// Cold cache (nothing stored yet) still falls back to full generation to enumerate ids.
+test("listIds() falls back to generation when cache is cold", async () => {
+  const env = await createTestProject("list-ids-meta-cold");
+  const stone = new MockStone({
+    project: env.project,
+    id: "list-meta-cold",
+    hashKey: "stable",
+    outputs: [{ id: "z.txt", content: "Z" }],
+    cacheStrategy: CacheStrategy.InFile(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  const ids = await stone.listIds();
+  assert.deepEqual(ids, ["z.txt"]);
+  assert.equal(stone.generateCount, 1); // nothing cached -> had to generate
+  await env.cleanup();
+});
+
+// ---------------------------------------------------------------------------
+// Single-file partial reads from a warm FileCache entry (PERFORMANCE_REVIEW §2.2)
+// ---------------------------------------------------------------------------
+
+// Spy on the two file-read entry points. Static methods on the SourceData class are writable
+// (unlike the read-only `import * as Fs from "fs"` namespace), so we can count reads directly.
+function spyFileReads(fn) {
+  const origFrom = SourceData.fromFile;
+  const origSkip = SourceData.fromFileSkipHash;
+  const counter = { reads: 0 };
+  SourceData.fromFile = function (...a) {
+    counter.reads += 1;
+    return origFrom.apply(this, a);
+  };
+  SourceData.fromFileSkipHash = function (...a) {
+    counter.reads += 1;
+    return origSkip.apply(this, a);
+  };
+  return Promise.resolve(fn(counter)).finally(() => {
+    SourceData.fromFile = origFrom;
+    SourceData.fromFileSkipHash = origSkip;
+  });
+}
+
+test("getPartialSource reads only the requested file from a warm FileCache entry", async () => {
+  const env = await createTestProject("partial-single-read");
+  const stone = new MockStone({
+    project: env.project,
+    id: "single-read",
+    hashKey: "stable",
+    outputs: [
+      { id: "a.txt", content: "A" },
+      { id: "b.txt", content: "B" },
+      { id: "c.txt", content: "C" },
+    ],
+    cacheStrategy: CacheStrategy.InFile(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  await stone.getSource(); // populate cache + write all three files
+
+  await spyFileReads(async (counter) => {
+    const src = await stone.getPartialSource("b.txt");
+    assert.equal(src.get().data.toString("utf-8"), "B");
+    assert.equal(counter.reads, 1); // only b.txt, not all three
+  });
+  assert.equal(stone.generateCount, 1); // served from cache, no regeneration
+  await env.cleanup();
+});
+
+// A stale/missing sibling file must not block serving a valid one — the whole point of validating
+// per-file. (Before §2.2, source() read & validated the entire entry, so a missing b.txt made
+// even a.txt unservable.)
+test("a valid file is served even when a sibling cache file is missing", async () => {
+  const env = await createTestProject("partial-sibling-missing");
+  const stone = new MockStone({
+    project: env.project,
+    id: "sibling-missing",
+    hashKey: "stable",
+    outputs: [
+      { id: "a.txt", content: "A" },
+      { id: "b.txt", content: "B" },
+    ],
+    cacheStrategy: CacheStrategy.InFile(
+      CacheDurability.KeepForever,
+      DurabilityCheck.AllOnUse,
+    ),
+  });
+
+  const full = await stone.getSource();
+  // Delete only b.txt on disk, keeping a.txt and the metadata.
+  const bPath = full.data.find((d) => d.id === "b.txt").getFilePath();
+  await rm(await bPath, { force: true });
+
+  const a = await stone.getPartialSource("a.txt");
+  assert.equal(a.get().data.toString("utf-8"), "A");
+  assert.equal(stone.generateCount, 1); // a.txt served from cache, untouched by b's absence
+
+  // Requesting the missing file regenerates (MockStone has no generatePartial → full generate).
+  const b = await stone.getPartialSource("b.txt");
+  assert.equal(b.get().data.toString("utf-8"), "B");
+  assert.equal(stone.generateCount, 2);
   await env.cleanup();
 });
 

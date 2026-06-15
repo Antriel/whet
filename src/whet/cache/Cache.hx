@@ -7,6 +7,13 @@ interface Cache {
         check:DurabilityCheck):Promise<Null<Source>>;
     public function getUniqueDir(stone:AnyStone, baseDir:SourceId, ?hash:SourceHash):SourceId;
 
+    /**
+     * Attempt to enumerate a stone's output ids from cache metadata alone — no file reads, no
+     * generation. Returns null when no usable entry exists (so the caller falls back). See
+     * `BaseCache.tryListIds`.
+     */
+    public function tryListIds(stone:AnyStone):Promise<Null<Array<SourceId>>>;
+
 }
 
 enum CacheStrategy {

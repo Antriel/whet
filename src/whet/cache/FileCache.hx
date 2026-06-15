@@ -69,23 +69,28 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
         });
     }
 
-    function source(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Source> {
-        switch stone.cacheStrategy {
+    /** True if an AbsolutePath entry no longer matches its configured path (so it's invalid). */
+    inline function absolutePathInvalid(stone:AnyStone, value:RuntimeFileCacheValue):Bool {
+        return switch stone.cacheStrategy {
             case AbsolutePath(path, _):
-                var invalidPath = if (value.files.length == 1 && !path.isDir()) {
-                    value.files[0].filePath != path;
-                } else {
-                    value.baseDir != path.dir;
-                }
-                if (invalidPath) return Promise.resolve(null);
-            case _:
+                if (value.files.length == 1 && !path.isDir()) value.files[0].filePath != path;
+                else value.baseDir != path.dir;
+            case _: false;
         }
-        return Promise.all([for (file in value.files) new Promise(function(res, rej) {
+    }
+
+    /**
+     * Read & validate a single cached file. Resolves with its `SourceData` when valid, or `null`
+     * when the file is missing or fails mtime+hash validation (a cache miss for that file). Rejects
+     * only on unexpected IO errors.
+     */
+    function readCachedFile(stone:AnyStone, file:RuntimeFileEntry):Promise<Null<SourceData>> {
+        return new Promise((res:Null<SourceData>->Void, rej) -> {
             var path = file.filePath.toCwdPath(rootDir);
             // First check mtime+size (fast stat-based validation)
             Fs.stat(path, (statErr, stats) -> {
                 if (statErr != null) {
-                    if (statErr is js.lib.Error && (statErr:Dynamic).code == 'ENOENT') rej('Invalid.');
+                    if (statErr is js.lib.Error && (statErr:Dynamic).code == 'ENOENT') res(null);
                     else rej(statErr);
                     return;
                 }
@@ -103,18 +108,34 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                     SourceData.fromFile(file.id, path, file.filePath).then(sourceData -> {
                         if (sourceData == null
                             || (!stone.ignoreFileHash && !sourceData.hash.equals(file.fileHash))) {
-                            rej('Invalid.');
+                            res(null);
                         } else res(sourceData);
-                    }, err -> if (err is js.lib.Error && (err:Dynamic).code == 'ENOENT') rej('Invalid.');
+                    }, err -> if (err is js.lib.Error && (err:Dynamic).code == 'ENOENT') res(null);
                         else rej(err)
                     );
                 }
             });
-        })]).then(
-            data ->
-                new Source(cast data, value.hash, stone, value.ctime, value.complete != null ? value.complete : true),
-            rejected -> rejected == 'Invalid.' ? null : { js.Syntax.code('throw {0}', rejected); null; }
-        );
+        });
+    }
+
+    function source(stone:AnyStone, value:RuntimeFileCacheValue):Promise<Source> {
+        if (absolutePathInvalid(stone, value)) return Promise.resolve(null);
+        return Promise.all([for (file in value.files) readCachedFile(stone, file)])
+            .then((data:Array<Null<SourceData>>) -> {
+                // Any invalid file invalidates the whole entry (forces regeneration upstream).
+                for (d in data) if (d == null) return null;
+                return new Source(cast data, value.hash, stone, value.ctime,
+                    value.complete != null ? value.complete : true);
+            });
+    }
+
+    function sourcePartial(stone:AnyStone, value:RuntimeFileCacheValue,
+            sourceId:SourceId):Promise<Null<Source>> {
+        if (absolutePathInvalid(stone, value)) return Promise.resolve(null);
+        var file = Lambda.find(value.files, f -> f.id == sourceId);
+        if (file == null) return Promise.resolve(null);
+        return readCachedFile(stone, file).then(sd -> sd != null
+            ? new Source([sd], value.hash, stone, value.ctime, false) : null);
     }
 
     override function set(source:Source):Promise<RuntimeFileCacheValue> {
@@ -175,6 +196,10 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
 
     function hasSourceId(value:RuntimeFileCacheValue, sourceId:SourceId):Bool {
         return Lambda.exists(value.files, f -> f.id == sourceId);
+    }
+
+    function getValueIds(value:RuntimeFileCacheValue):Array<SourceId> {
+        return [for (f in value.files) f.id];
     }
 
     function mergePartial(stone:AnyStone, existing:RuntimeFileCacheValue, addition:Source,
@@ -309,3 +334,10 @@ typedef FileCacheValue<H, S> = {
 
 typedef DbJson = DynamicAccess<Array<FileCacheValue<String, String>>>;
 typedef RuntimeFileCacheValue = FileCacheValue<SourceHash, SourceId>;
+typedef RuntimeFileEntry = {
+    final id:SourceId;
+    final fileHash:SourceHash;
+    final filePath:SourceId;
+    final ?mtime:Float;
+    final ?size:Int;
+};

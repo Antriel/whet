@@ -346,13 +346,17 @@ abstract class Stone<T:StoneConfig> {
     }
 
     /**
-     * Public API for getting output IDs. Calls list(), falls back to
-     * full generation if list() returns null.
+     * Public API for getting output IDs. Calls list(); if that returns null, tries the cache
+     * metadata fast path (`cache.tryListIds`, zero file reads / zero generation); only if the cache
+     * can't answer does it fall back to a full `getSource()`.
      */
     public final function listIds():Promise<Array<SourceId>> {
         return list().then(ids -> {
-            if (ids != null) return ids;
-            return cast getSource().then(source -> source.data.map(sd -> sd.id));
+            if (ids != null) return cast ids;
+            return cast cache.tryListIds(this).then(cachedIds -> {
+                if (cachedIds != null) return cast cachedIds;
+                return cast getSource().then(source -> source.data.map(sd -> sd.id));
+            });
         });
     }
 
