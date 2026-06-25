@@ -105,7 +105,10 @@ class CacheManager {
      * The path is not reserved. Caching depends on stone's `cacheStrategy` and success of source generation.
      */
     public function getDir(stone:AnyStone, ?hash:SourceHash):SourceId {
-        var safeId = ~/[^a-zA-Z0-9_\-.]/g.replace(stone.id, '_');
+        // Preserve `/` so a stone with id like `audio/bang:wav` nests under `.whet/audio/`.
+        var safeId = ~/[^a-zA-Z0-9_\-.\/]/g.replace(stone.id, '_');
+        safeId = ~/\/+/g.replace(safeId, '/'); // Collapse `//` from adjacent separators.
+        safeId = ~/^\/|\/$/g.replace(safeId, ''); // Trim leading/trailing `/`.
         var baseDir:SourceId = safeId + '/';
         if (stone.cacheStrategy.match(None | InMemory(_))) baseDir = baseDir.getPutInDir('.temp/');
         baseDir = baseDir.getPutInDir('.whet/');
