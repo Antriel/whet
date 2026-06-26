@@ -95,6 +95,9 @@ private function init(options:Dynamic) {
             if (!topLevelHelp) {
                 Log.error("Error loading project.", { error: e });
                 if (e is js.lib.Error) Log.error((e:js.lib.Error).stack);
+                // A project that throws on import is a hard failure — signal it. (Top-level
+                // help requests still exit 0: there the load error is intentionally ignored.)
+                (cast js.Node.process).exitCode = 1;
             }
             try {
                 program.help();
@@ -161,6 +164,10 @@ private function initProjects() {
                     && (err.code == 'commander.help' || err.code == 'commander.helpDisplayed'))
                     return;
                 Log.error("Error while executing command.", { error: err });
+                // Reflect the failure in the process exit code so shells (`&&`), CI, and
+                // other tooling don't read a swallowed rejection as success. Use exitCode
+                // (not process.exit) so pending logs flush and the chain unwinds cleanly.
+                (cast js.Node.process).exitCode = 1;
             });
     }
     initProm.then(_ -> nextCommand());
