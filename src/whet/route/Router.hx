@@ -249,18 +249,18 @@ class Router {
                 break;  // Can't filter if any child is unfiltered
             }
 
-            if (childFilter.extensions != null)
+            if (childFilter.extensions != null) {
                 for (ext in childFilter.extensions)
                     if (allExtensions.indexOf(ext) == -1) allExtensions.push(ext);
-                    else hasExtensionlessChild = true;
+            } else hasExtensionlessChild = true;
 
-            if (childFilter.patterns != null)
+            if (childFilter.patterns != null) {
                 for (p in childFilter.patterns) {
                     // Prepend route prefix to pattern
                     var prefixed = Path.posix.join(route.routeUnder, p);
                     allPatterns.push(prefixed);
                 }
-            else hasPatternlessChild = true;
+            } else hasPatternlessChild = true;
         }
 
         if (hasUnfiltered) return null;

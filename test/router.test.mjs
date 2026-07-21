@@ -272,3 +272,35 @@ test("Router.getOutputFilter: file-mount routes advertise their renamed serve pa
   assert.equal(resB.length, 1, "beta.json should resolve through the file-mount");
   await env.cleanup();
 });
+
+// Two sibling stones sharing an extension (e.g. two PNG stones) must not null out the
+// combined extensions. Regression for a dangling-else that set hasExtensionlessChild on a
+// duplicate extension, which — once file-mount children stopped forcing the router
+// unfiltered — dropped the whole subtree's extensions and made couldMatch skip it. whet-mine.
+test("Router.getOutputFilter: duplicate extension across siblings keeps extensions", async () => {
+  const env = await createTestProject("router-outputfilter-dup-ext");
+
+  const pngA = new MockStone({ project: env.project, id: "pngA",
+    outputs: [{ id: "a.png", content: "A" }],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null) });
+  pngA.getOutputFilter = () => ({ extensions: ["png"] });
+  const pngB = new MockStone({ project: env.project, id: "pngB",
+    outputs: [{ id: "b.png", content: "B" }],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null) });
+  pngB.getOutputFilter = () => ({ extensions: ["png"] });
+  const avif = new MockStone({ project: env.project, id: "avif",
+    outputs: [{ id: "logo.avif", content: "AV" }],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null) });
+  avif.getOutputFilter = () => ({ extensions: ["avif"] });
+
+  const child = new Router([pngA, pngB, avif]);
+  const of = child.getOutputFilter();
+  assert.ok(of.extensions.includes("png"), "png must survive duplicate merge");
+  assert.ok(of.extensions.includes("avif"), "avif must survive alongside duplicate png");
+
+  // Nested under a mounted parent so the combined filter gates a couldMatch prune.
+  const parent = new Router([["assets/", child]]);
+  const res = await parent.get("assets/logo.avif");
+  assert.equal(res.length, 1, "logo.avif must resolve despite sibling duplicate png extension");
+  await env.cleanup();
+});
