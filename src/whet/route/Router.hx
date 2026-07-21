@@ -56,25 +56,34 @@ class Router {
 
             for (route in routes) {
                 var routeFilters = mainFilters.clone(); // Clone filters so other routes aren't affected.
-                var possible = if (route.routeUnder.isDir()) routeFilters.step(route.routeUnder);
+                var isDirMount = route.routeUnder.isDir();
+                var possible = if (isDirMount) routeFilters.step(route.routeUnder);
                 else routeFilters.finalize(route.routeUnder);
 
                 if (!possible) continue;
                 if (route.filter != null || route.extractDirs != null) routeFilters.add(route.filter, route.extractDirs);
 
-                // Output filter check - skip sources that can't possibly match the query
-                var outputFilter:Null<OutputFilter> = null;
-                if (route.source is AnyStone) {
-                    outputFilter = (cast route.source:AnyStone).getOutputFilter();
-                } else if (route.source is Router) {
-                    outputFilter = (cast route.source:Router).getOutputFilter();
-                }
+                // Output-filter pruning applies only to dir mounts: the source enumerates many ids
+                // under the mount, so couldMatch (which matches the query against the source's
+                // declared output patterns/extensions with a '**/' prefix) can quickly reject it.
+                // A file (rename) mount serves exactly `routeUnder` regardless of the source's own
+                // ids — already matched authoritatively by finalize() above — so the source's
+                // id-space patterns don't describe the served path; pruning here would falsely
+                // reject any rename whose target basename differs from the source id.
+                if (isDirMount) {
+                    var outputFilter:Null<OutputFilter> = null;
+                    if (route.source is AnyStone) {
+                        outputFilter = (cast route.source:AnyStone).getOutputFilter();
+                    } else if (route.source is Router) {
+                        outputFilter = (cast route.source:Router).getOutputFilter();
+                    }
 
-                if (outputFilter != null) {
-                    var queryPattern = routeFilters.getQueryPattern();
-                    if (queryPattern != null &&
-                        !OutputFilterMatcher.couldMatch(queryPattern, outputFilter, queryIsPattern)) {
-                        continue;  // Skip this source entirely
+                    if (outputFilter != null) {
+                        var queryPattern = routeFilters.getQueryPattern();
+                        if (queryPattern != null
+                            && !OutputFilterMatcher.couldMatch(queryPattern, outputFilter, queryIsPattern)) {
+                            continue; // Skip this source entirely
+                        }
                     }
                 }
 
@@ -200,8 +209,33 @@ class Router {
         var allExtensions = new Array<String>();
         var allPatterns = new Array<String>();
         var hasUnfiltered = false;
+        // A child that constrains extensions but not names (patterns == null) can emit any
+        // filename within those extensions, so the merged `patterns` list cannot act as a
+        // mandatory gate — doing so would let one pattern-declaring sibling
+        // suppress extension-only siblings via couldMatch. Symmetric for extensions.
+        // Union stays sound (necessary condition per source); the mixed case must
+        // drop the constraint that not every child shares. See OutputFilterMatcher.couldMatch.
+        var hasExtensionlessChild = false;
+        var hasPatternlessChild = false;
 
         for (route in routes) {
+            // A file (non-dir) routeUnder renames the source's output to exactly that served
+            // path, regardless of the child's own ids or declared filter. So the served name is
+            // known precisely: contribute `routeUnder` as the pattern and its extension. Folding
+            // in the child's declared patterns here is wrong — they describe the child's ids, not
+            // the renamed serve path, and produced bogus `routeUnder/childPattern` patterns that
+            // could never match the file actually served.
+            if (!route.routeUnder.isDir()) {
+                allPatterns.push(route.routeUnder);
+                var ext = OutputFilterMatcher.getExtension(route.routeUnder);
+                if (ext != null) {
+                    if (allExtensions.indexOf(ext) == -1) allExtensions.push(ext);
+                }
+                // A served name without an extension is still fully pinned by its pattern, so it
+                // must not force extension gating off for the other siblings.
+                continue;
+            }
+
             var childFilter:Null<OutputFilter> = null;
 
             if (route.source is AnyStone) {
@@ -218,6 +252,7 @@ class Router {
             if (childFilter.extensions != null)
                 for (ext in childFilter.extensions)
                     if (allExtensions.indexOf(ext) == -1) allExtensions.push(ext);
+                    else hasExtensionlessChild = true;
 
             if (childFilter.patterns != null)
                 for (p in childFilter.patterns) {
@@ -225,12 +260,13 @@ class Router {
                     var prefixed = Path.posix.join(route.routeUnder, p);
                     allPatterns.push(prefixed);
                 }
+            else hasPatternlessChild = true;
         }
 
         if (hasUnfiltered) return null;
         return {
-            extensions: allExtensions.length > 0 ? allExtensions : null,
-            patterns: allPatterns.length > 0 ? allPatterns : null
+            extensions: (!hasExtensionlessChild && allExtensions.length > 0) ? allExtensions : null,
+            patterns: (!hasPatternlessChild && allPatterns.length > 0) ? allPatterns : null
         };
     }
 

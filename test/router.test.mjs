@@ -182,3 +182,93 @@ test("Router saveInto clears destination when clearFirst=true", async () => {
   assert.equal(await env.read("out/public/a.txt"), "A");
   await env.cleanup();
 });
+
+// A sibling route that declares `patterns` in its output filter (like SoundBankStone)
+// must not suppress sibling routes that only declare `extensions` (like the atlas/oxipng
+// stones). Regression for the unsound flat merge in Router.getOutputFilter that combined
+// with the mandatory-pattern-gate in OutputFilterMatcher.couldMatch to drop the whole
+// source. See bean whet-gyqz.
+test("Router.getOutputFilter: pattern-declaring sibling does not hide extension-only sibling", async () => {
+  const env = await createTestProject("router-outputfilter-mixed");
+
+  // Extension-only sibling — mirrors SharpStone/OxiPng (`{ extensions }`, no patterns).
+  const atlas = new MockStone({
+    project: env.project,
+    id: "atlas",
+    outputs: [{ id: "logo.avif", content: "AVIF" }],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  atlas.getOutputFilter = () => ({ extensions: ["avif"] });
+
+  // Pattern-declaring sibling — mirrors SoundBankStone (`{ extensions, patterns }`).
+  const soundBank = new MockStone({
+    project: env.project,
+    id: "soundbank",
+    outputs: [{ id: "soundbank.json", content: "{}" }],
+    cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+  });
+  soundBank.getOutputFilter = () => ({
+    extensions: ["json"],
+    patterns: ["soundbank.json", "soundbank.json.meta.json"],
+  });
+
+  // Nested under a mounted parent route so the parent's couldMatch check consults the
+  // child router's combined output filter (this is where the source gets skipped).
+  const child = new Router([atlas]);
+  const parent = new Router([["assets/", child]]);
+
+  // Baseline: the extension-only output is reachable.
+  assert.equal((await parent.get("assets/logo.avif")).length, 1);
+
+  // Adding the pattern-declaring sibling must NOT hide the unrelated .avif query.
+  child.route([["soundbank.json", soundBank, "soundbank.json"]]);
+  const results = await parent.get("assets/logo.avif");
+  assert.equal(results.length, 1, "logo.avif should still resolve after adding soundbank route");
+  assert.equal(results[0].serveId, "assets/logo.avif");
+
+  // And the pattern-declaring sibling itself is still reachable.
+  assert.equal((await parent.get("assets/soundbank.json")).length, 1);
+  await env.cleanup();
+});
+
+// A file (non-dir) routeUnder renames the source output to exactly that path. When every
+// sibling is such a pattern-declaring file-mount (so patterns survive the merge), the
+// combined filter must advertise the actual served names, not `routeUnder/childPattern`.
+// Regression for the bogus join in Router.getOutputFilter. See bean whet-gyqz.
+test("Router.getOutputFilter: file-mount routes advertise their renamed serve path", async () => {
+  const env = await createTestProject("router-outputfilter-file-mount");
+
+  const mk = (id, srcName) => {
+    const s = new MockStone({
+      project: env.project,
+      id,
+      outputs: [{ id: srcName, content: id }],
+      cacheStrategy: CacheStrategy.InMemory(CacheDurability.KeepForever, null),
+    });
+    // Declares patterns for its own source id (like SoundBankStone).
+    s.getOutputFilter = () => ({ extensions: ["json"], patterns: [srcName] });
+    return s;
+  };
+
+  const a = mk("a", "internal-a.json");
+  const b = mk("b", "internal-b.json");
+
+  // Both renamed to explicit output names — all siblings pattern-declaring, so the merge
+  // keeps `patterns` and couldMatch enforces them.
+  const child = new Router([
+    ["alpha.json", a, "internal-a.json"],
+    ["beta.json", b, "internal-b.json"],
+  ]);
+  const parent = new Router([["assets/", child]]);
+
+  // The combined filter must reference the served names, not `alpha.json/internal-a.json`.
+  const of = child.getOutputFilter();
+  assert.ok(of.patterns.includes("alpha.json"), `patterns should include served name, got ${JSON.stringify(of.patterns)}`);
+
+  const resA = await parent.get("assets/alpha.json");
+  assert.equal(resA.length, 1, "alpha.json should resolve through the file-mount");
+  assert.equal(resA[0].serveId, "assets/alpha.json");
+  const resB = await parent.get("assets/beta.json");
+  assert.equal(resB.length, 1, "beta.json should resolve through the file-mount");
+  await env.cleanup();
+});

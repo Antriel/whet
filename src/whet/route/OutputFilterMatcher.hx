@@ -51,7 +51,7 @@ class OutputFilterMatcher {
      * "title.png.meta.json" → "png.meta.json"
      * Returns null if no extension or contains wildcard.
      */
-    static function getExtension(path:SourceId):Null<String> {
+    public static function getExtension(path:SourceId):Null<String> {
         var name = path.withExt;  // filename with extension
         var firstDot = name.indexOf('.');
         if (firstDot == -1 || firstDot == name.length - 1) return null;
