@@ -1,11 +1,11 @@
 ---
 # whet-rg6l
 title: 'StoneFactory: canonical dataMap + previewEntry/revertEntry (generic live preview)'
-status: todo
+status: completed
 type: feature
 priority: high
 created_at: 2026-07-23T07:06:03Z
-updated_at: 2026-07-23T07:06:03Z
+updated_at: 2026-07-23T07:24:34Z
 parent: whet-1vzf
 ---
 
@@ -42,12 +42,23 @@ State added to `StoneFactory<D, E>`:
 
 ## Todos
 
-- [ ] Implement dataMap/previewedKeys + sync changes + shouldUpdateEntry hook
-- [ ] Implement previewEntry/revertEntry/revertAllPreviews/isPreviewDirty/rebuildRoutes
-- [ ] Tests in `test/stone-factory-preview.test.mjs` (JS subclass of StoneFactory wrapping MockStone; track createEntry/updateEntry call counts):
+- [x] Implement dataMap/previewedKeys + sync changes + shouldUpdateEntry hook
+- [x] Implement previewEntry/revertEntry/revertAllPreviews/isPreviewDirty/rebuildRoutes
+- [x] Tests in `test/stone-factory-preview.test.mjs` (JS subclass of StoneFactory wrapping MockStone; track createEntry/updateEntry call counts):
   - preview changes a sub-stone's served output (getSource reflects new config); revert restores canonical output
   - preview of unknown key creates entry + routes; revert removes it and its routes
   - sync() after preview reasserts canonical even when incoming data JSON-equals dataMap (previewedKeys forces update)
   - skip-unchanged: updateEntry NOT called for JSON-equal non-previewed key; called when data changed
   - removed keys are dropped from dataMap/previewedKeys; sync return value unchanged
-- [ ] Rebuild (`haxe build.hxml`) + full test run green
+- [x] Rebuild (`haxe build.hxml`) + full test run green
+
+## Summary of Changes
+
+Implemented canonical dataMap + generic live preview on `StoneFactory<D,E>` (`src/whet/stones/StoneFactory.hx`):
+
+- Added `dataMap:Map<String,D>` (last-synced canonical data) and `previewedKeys:Set<String>` state.
+- `sync()` now: gates existing-key updates through new protected `shouldUpdateEntry(key,newData)` hook (default: previewed OR JSON differs from dataMap); records `dataMap.set(key,item)` after create/update/skip; still routes every key; drops removed keys from dataMap+previewedKeys; clears previewedKeys at the end. Signature and return value (removed keys) unchanged.
+- New `@:keep` public methods: `previewEntry(key,data)` (in-place update or create+route, never touches dataMap, marks previewed), `revertEntry(key):Bool` (re-apply canonical, or remove+rebuildRoutes if preview-created), `revertAllPreviews()`, `isPreviewDirty(?key):Bool`, `rebuildRoutes()`.
+- 7 tests in `test/stone-factory-preview.test.mjs`, all green; full suite 191/191 passing after `haxe build.hxml`.
+
+**Behavior change:** skip-unchanged means `updateEntry` no longer runs for JSON-identical non-previewed data (the intended y4be friction-#1 fix). Verified existing StoneFactory tests (all use changed data) still pass. Zero AudioDb changes required — it overrides only createEntry/updateEntry/addBaseRoutes.
