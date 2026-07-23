@@ -1,11 +1,11 @@
 ---
 # whet-31lx
 title: 'StoneStore: JSON-entry-driven stone graphs over StoneFactory'
-status: todo
+status: completed
 type: feature
 priority: normal
 created_at: 2026-07-23T07:07:21Z
-updated_at: 2026-07-23T07:08:28Z
+updated_at: 2026-07-23T08:47:45Z
 parent: whet-1vzf
 blocked_by:
     - whet-hnde
@@ -90,8 +90,8 @@ Script must reference the store (or entry outputs via routes), never capture inn
 
 ## Todos
 
-- [ ] Implement StoneStore per spec (validation, expansion hook, topo sort, create/update, cascade, mounts, warnings, cache flag)
-- [ ] Tests `test/stone-store.test.mjs` (register MockStone as a type; createTestProject):
+- [x] Implement StoneStore per spec (validation, expansion hook, topo sort, create/update, cascade, mounts, warnings, cache flag)
+- [x] Tests `test/stone-store.test.mjs` (register MockStone as a type; createTestProject):
   - two entries, B's `$router` config references A via `{"$stone": "a"}` → B's output flows from A's
   - edit db.data for A only + syncEntries → A updated AND B force-updated (cascade); untouched entry C's updateEntry skipped
   - entry referencing a script-defined project stone resolves
@@ -100,4 +100,24 @@ Script must reference the store (or entry outputs via routes), never capture inn
   - mount string + array forms serve outputs under prefixes; db.json served via base route
   - previewEntry on A → B serves preview-derived output (cascade); revertEntry restores; flushDb persists only canonical data
   - ConfigStore-overlap warning fires
-- [ ] Rebuild + full test run green
+- [x] Rebuild + full test run green
+
+## Summary of Changes
+
+Implemented `src/whet/stones/StoneStore.hx` (auto-exposed via `whet.stones` metadata) and `test/stone-store.test.mjs` (11 cases, all green; full suite 220/220).
+
+**StoneStore** (`extends StoneFactory<FlatEntryData, BuiltEntry>`):
+- Constructor takes `{id?, dbId?, clearCacheOnRemove?, project?}`; creates its `JsonDb` (`dbId ?? 'stone-store.json'`).
+- `load(path)` → `db.load` + `syncEntries` + resolve `this`; `flushDb()` → `db.flush()`; `addBaseRoutes()` serves the db under its id.
+- `syncEntries()`: structural `validateData` (all-or-nothing, aggregated errors) → drop `disabled` → `expandEntries` (v1 identity; passes config by reference — `db.data` is the owned canonical baseline, `dataMap` a live view, per the y4be design. Callers update by *replacing* entries, not editing fields in place) → `topoSort` (cycle → error naming the path) → `sync` wrapped in `withRollback`.
+- `createEntry`: `ConfigReviver.revive` with a resolver (sibling entries' `mainStone` first, then `project.getStone`, else throw naming referrer+id) → registry builder → append mount routes (string/array form; throws when the type has no `mainStone`) → ConfigStore-overlap warning per created stone.
+- `updateEntry`: id-stable destroy+recreate by default, or the registry type's in-place `update` hook.
+- `shouldUpdateEntry`: super OR any config ref is in `touchedKeys` (the reference-consistency cascade; single forward pass thanks to topo order).
+- `previewEntry`/`revertEntry`: call super, then `cascadeDependents` (re-updates transitive dependents in topo order so they re-revive recreated instances) + `rebuildRoutes`.
+
+**Key design decision:** since the default update path recreates stone instances, an error mid-`sync` would leave routes/stones inconsistent. Rather than a build-time probe, `withRollback` snapshots `entryMap`/`dataMap`/`project.stones` and restores + `rebuildRoutes` on any throw — giving the "stones stay untouched" guarantee for build-time errors (mount-without-mainStone) too, generically.
+
+## Follow-ups available
+- whet-qwye (`each` expansion) replaces `expandEntries`.
+- whet-uzjf (configSchema + stone-schema CLI) integrates with validation.
+- whet-onc4 (docs).
