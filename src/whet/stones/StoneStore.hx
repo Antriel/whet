@@ -1,6 +1,9 @@
 package whet.stones;
 
+import haxe.DynamicAccess;
 import whet.Log;
+import whet.Utils;
+import whet.ConfigStore;
 import whet.Stone.AnyStone;
 import whet.stones.StoneFactory;
 import whet.stones.StoneRegistry.BuiltEntry;
@@ -46,6 +49,13 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
 
     /** Keys created/updated during the current sync pass — drives the dependent-update cascade. */
     final touchedKeys:js.lib.Set<String> = new js.lib.Set();
+
+    /**
+     * Per-group scan results (files + derived names) from the last `syncEntries()` expansion, keyed by
+     * group entry id. Mirror of AudioDb.groupMatches; read via `getExpansion` by the future editor
+     * plugin. NOT refreshed by `previewEntry` (previews never rescan — see the perf invariant).
+     */
+    final groupMatches:js.lib.Map<String, {files:Array<String>, names:Array<String>}> = new js.lib.Map();
 
     public function new(?config:StoneStoreConfig) {
         super();
@@ -102,21 +112,115 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
     }
 
     /**
-     * Expand raw entries into the flat list `sync` consumes. v1 is 1:1 identity; the `each` bean
-     * replaces this with directory-scan expansion.
+     * Expand raw entries into the flat list `sync` consumes. Entries without an `each` clause pass
+     * through 1:1. An `each` clause scans `each.dir` for files matching `each.pattern`, spawning one
+     * sub-entry per match keyed `groupId/name`, with sparse per-file `overrides` deep-merged over
+     * `config` and `$file`/`$name` tokens substituted throughout (config, `$router` route arrays, and
+     * mount). Scans run only here — never during `previewEntry` (the perf invariant).
      *
-     * `config` is passed by reference: `db.data` is the owned canonical baseline, and `dataMap` is a
-     * live view of it (revert re-applies `db.data`, so no snapshot is kept — see y4be design). Callers
-     * update by *replacing* entries/the array (as the WS client does), not by editing fields in place;
-     * an in-place field edit aliases the change-detection baseline and would be missed.
+     * `config` for non-each entries is passed by reference: `db.data` is the owned canonical baseline,
+     * and `dataMap` is a live view of it (revert re-applies `db.data`, so no snapshot is kept — see the
+     * y4be design). Callers update by *replacing* entries/the array (as the WS client does), not by
+     * editing fields in place; an in-place field edit aliases the change-detection baseline. Expanded
+     * entries always get a fresh (token-substituted) config, so they never alias `db.data`.
      */
     function expandEntries(entries:Array<Dynamic>):Promise<Array<FlatEntryData>> {
-        return Promise.resolve([for (e in entries) {
-            key: (e.id:String),
-            type: (e.type:String),
-            config: e.config != null ? e.config : {},
-            mount: e.mount,
-        }]);
+        groupMatches.clear();
+        var root:String = cast project.rootDir;
+        var out:Array<FlatEntryData> = [];
+        var keyFiles = new Map<String, Array<String>>(); // for collision reporting
+        function record(key:String, file:String, fe:FlatEntryData):Void {
+            out.push(fe);
+            if (!keyFiles.exists(key)) keyFiles.set(key, []);
+            keyFiles.get(key).push(file);
+        }
+
+        // Chain scans so groupMatches / output order stay deterministic (entries in db order).
+        var chain:Promise<Nothing> = Promise.resolve(Nil);
+        for (e in entries) {
+            var entry = e;
+            chain = chain.then(_ -> {
+                if (entry.each == null) {
+                    record((entry.id:String), '(single entry)', {
+                        key: (entry.id:String),
+                        type: (entry.type:String),
+                        config: entry.config != null ? entry.config : {},
+                        mount: entry.mount,
+                    });
+                    return Promise.resolve(Nil);
+                }
+                var each = entry.each;
+                return Utils.scanFiles(root, each.dir, each.pattern, each.nameTemplate).then(matches -> {
+                    groupMatches.set((entry.id:String), matches);
+                    // Typo guard: an override keyed by a name no file produced is almost always a typo.
+                    if (entry.overrides != null) {
+                        var ov:DynamicAccess<Dynamic> = entry.overrides;
+                        for (ovKey in ov.keys())
+                            if (matches.names.indexOf(ovKey) == -1)
+                                Log.warn('StoneStore group "${entry.id}" has an override for "$ovKey", which '
+                                    + 'matches no scanned file (typo?).', { group: (entry.id:String) });
+                    }
+                    for (i in 0...matches.files.length) {
+                        var name = matches.names[i];
+                        var file = matches.files[i];
+                        var base:Dynamic = entry.config != null ? entry.config : {};
+                        var ovr:Dynamic = entry.overrides != null ? Reflect.field(entry.overrides, name) : null;
+                        var raw = ovr != null ? ConfigStore.deepMerge(base, ovr) : base;
+                        var key = (entry.id:String) + '/' + name;
+                        record(key, file, {
+                            key: key,
+                            type: (entry.type:String),
+                            config: substituteTokens(raw, file, name),
+                            mount: substituteTokens(entry.mount, file, name),
+                        });
+                    }
+                    return Nil;
+                });
+            });
+        }
+
+        return chain.then(_ -> {
+            // Collision: any key produced by more than one (group/single) source.
+            var errors:Array<String> = [];
+            for (key => fs in keyFiles)
+                if (fs.length > 1)
+                    errors.push('expanded key "$key" produced ${fs.length}× (from: ' + fs.join(', ') + ')');
+            if (errors.length > 0)
+                throw new js.lib.Error('StoneStore expansion failed:\n - ' + errors.join('\n - '));
+            return out;
+        });
+    }
+
+    /**
+     * Recursively copy `value`, replacing the substrings `$file`→`file` and `$name`→`name` in every
+     * string (plain substring replacement — literal `$file`/`$name` text is unsupported; there is no
+     * escape). Always returns fresh structures, so an expanded entry's config never aliases `db.data`.
+     */
+    static function substituteTokens(value:Dynamic, file:String, name:String):Dynamic {
+        if (value == null) return null;
+        if (value is String) {
+            var s:String = value;
+            // NB: double quotes — single-quoted Haxe strings would $-interpolate the token names.
+            s = StringTools.replace(s, "$file", file);
+            s = StringTools.replace(s, "$name", name);
+            return s;
+        }
+        if (value is Array) return [for (item in (value:Array<Dynamic>)) substituteTokens(item, file, name)];
+        if (isPlainObject(value)) {
+            var obj:DynamicAccess<Dynamic> = value;
+            var result = new DynamicAccess<Dynamic>();
+            for (key => v in obj) result.set(key, substituteTokens(v, file, name));
+            return result;
+        }
+        return value; // numbers / bools
+    }
+
+    /**
+     * Scan results (files + derived names) for a group entry from the last `syncEntries()`, or null if
+     * the id names no group (or was never expanded). For the future editor plugin's introspection.
+     */
+    @:keep public function getExpansion(entryId:String):Null<{files:Array<String>, names:Array<String>}> {
+        return groupMatches.has(entryId) ? groupMatches.get(entryId) : null;
     }
 
     override public function sync(data:Array<FlatEntryData>, keyFn:FlatEntryData->String):Array<String> {
@@ -290,6 +394,26 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
                     } else errors.push('$where "mount" must be a string or an array');
                 }
             }
+
+            if (e.each != null) {
+                var each:Dynamic = e.each;
+                if (!isPlainObject(each)) errors.push('$where "each" must be an object');
+                else {
+                    var dir:Dynamic = each.dir;
+                    if (!(dir is String) || (dir:String).length == 0)
+                        errors.push('$where "each.dir" must be a non-empty string');
+                    var pat:Dynamic = each.pattern;
+                    if (!(pat is String) || (pat:String).length == 0)
+                        errors.push('$where "each.pattern" must be a non-empty string');
+                    else
+                        try js.Syntax.code('new RegExp({0})', pat)
+                        catch (err:Dynamic) errors.push('$where "each.pattern" is not a valid RegExp: ' + Std.string(err));
+                    if (each.nameTemplate != null && !(each.nameTemplate is String))
+                        errors.push('$where "each.nameTemplate" must be a string');
+                }
+            }
+            if (e.overrides != null && e.each == null)
+                errors.push('$where has "overrides" without "each" (overrides are only valid with an "each" clause)');
         }
         for (id => count in idCounts) if (count > 1) errors.push('Duplicate entry id "$id" ($count occurrences)');
 

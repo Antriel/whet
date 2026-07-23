@@ -1,10 +1,11 @@
 ---
 # whet-qwye
 title: 'StoneStore `each` expansion: directory scans with per-file overrides'
-status: todo
+status: completed
 type: feature
+priority: normal
 created_at: 2026-07-23T07:07:45Z
-updated_at: 2026-07-23T07:07:45Z
+updated_at: 2026-07-23T10:04:35Z
 parent: whet-1vzf
 blocked_by:
     - whet-31lx
@@ -47,7 +48,17 @@ Reference: `gooye-2/scry/whetstones/assets/AudioDb.mjs` — `scanFiles`, `_expan
 
 ## Todos
 
-- [ ] Utils.scanFiles port + unit tests (nested dirs, dot-dir/node_modules skip, capture templates, stem fallback, sort order)
-- [ ] expandEntries implementation + token substitution + collision/typo validation + getExpansion
-- [ ] Tests in `test/stone-store.test.mjs` (extend): temp tree of files → expected keys/configs; override deep-merge (nested object merge, array replace); tokens substituted inside $router and mount; re-sync after adding a file picks it up, after deleting removes the sub-entry (and its dataMap key); collision error; overrides-typo warning; previewEntry on an expanded key works without rescan (assert scanFiles call count via a spy or counter)
-- [ ] Rebuild + full test run green
+- [x] Utils.scanFiles port + unit tests (nested dirs, dot-dir/node_modules skip, capture templates, stem fallback, sort order)
+- [x] expandEntries implementation + token substitution + collision/typo validation + getExpansion
+- [x] Tests in `test/stone-store.test.mjs` (extend): temp tree of files → expected keys/configs; override deep-merge (nested object merge, array replace); tokens substituted inside $router and mount; re-sync after adding a file picks it up, after deleting removes the sub-entry (and its dataMap key); collision error; overrides-typo warning; previewEntry on an expanded key works without rescan (assert scanFiles call count via a spy or counter)
+- [x] Rebuild + full test run green
+
+## Summary of Changes
+
+- **`Utils.scanFiles(projectRoot, dir, pattern, ?nameTemplate)`** (`src/whet/Utils.hx`): recursive directory scan ported near-verbatim from `AudioDb.scanFiles` — skips dot-dirs and `node_modules`, returns project-root-relative posix paths + derived names (`$n` capture substitution with file-stem fallback), sorted by file path. Unit tests in `test/utils-scan.test.mjs`.
+- **`StoneStore.expandEntries`** (`src/whet/stones/StoneStore.hx`) now does real `each` expansion: scans the group dir, spawns one `groupId/name` sub-entry per file, deep-merges sparse per-file `overrides` over `config` (via `ConfigStore.deepMerge`, only when an override exists — deepMerge returns null on a null patch), and substitutes `$file`/`$name` tokens throughout config (incl. `$router` arrays) and mount via new `substituteTokens`. Non-`each` entries pass through 1:1. Scans are chained in db order for deterministic output.
+- **`getExpansion(entryId)`** + `groupMatches` cache for editor-plugin introspection; cleared/rebuilt only inside `syncEntries()` — `previewEntry` never rescans (perf invariant verified by a scan-count spy test).
+- **Validation** (`validateData`): `each` must be an object with non-empty `dir`/`pattern` (pattern compiled in a try/catch), optional string `nameTemplate`; `overrides` only valid alongside `each`. Post-expansion: duplicate-expanded-key collisions throw an aggregated error (all-or-nothing, before any stone mutates); override keys matching no scanned file emit a typo warning.
+- 9 new `each` tests in `test/stone-store.test.mjs` + 4 `scanFiles` tests. Full suite green (232 tests).
+
+**Gotcha for future work:** Haxe single-quoted strings `$`-interpolate — the literal tokens must be double-quoted (`"$file"`, `"$name"`), else `'$file'` compiles to the value of a local `file` var.

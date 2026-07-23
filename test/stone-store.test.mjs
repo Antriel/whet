@@ -1,5 +1,7 @@
 import { it, afterEach } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
+import { rm, readFile } from "node:fs/promises";
 import {
   StoneStore,
   StoneRegistry,
@@ -8,6 +10,7 @@ import {
   Project,
   ConfigStore,
   Log,
+  Utils,
 } from "../bin/whet.js";
 import { SourceData } from "../bin/whet/Source.js";
 import { createTestProject } from "./helpers/test-env.mjs";
@@ -37,8 +40,29 @@ class EchoStone extends Stone {
   }
 }
 
+// Reads the file at `config.file` (project-relative) and emits its content. Used to prove `$file`
+// token substitution reaches a real on-disk path end-to-end.
+class FileEchoStone extends Stone {
+  async generate() {
+    const content = await readFile(path.join(this.project.rootDir, this.config.file), "utf-8");
+    return [SourceData.fromString(this.id, content)];
+  }
+  async list() {
+    return [this.id];
+  }
+}
+
 StoneRegistry.register("Echo", EchoStone);
 StoneRegistry.register("Mock", MockStone);
+StoneRegistry.register("FileEcho", FileEchoStone);
+// Records the (revived) config each entry is built with, so tests can inspect the merged /
+// token-substituted config directly (MockStone drops unknown config keys).
+const capturedConfigs = new Map();
+StoneRegistry.registerBuilder("Capture", (key, config) => {
+  capturedConfigs.set(key, config);
+  const s = new MockStone({ id: `${key}:inner`, outputs: [{ id: `${key}.txt`, content: "x" }] });
+  return { stones: [s], mainStone: s };
+});
 // A composite type that returns stones+routes but NO mainStone — used to prove a mount on such a
 // type is rejected.
 StoneRegistry.registerBuilder("Composite", (key, config) => {
@@ -315,4 +339,209 @@ it("warns when a store-created stone also has a ConfigStore patch", async () => 
     warnings.some((w) => /ConfigStore patch/.test(w)),
     `expected a ConfigStore-overlap warning, got: ${JSON.stringify(warnings)}`,
   );
+});
+
+// --- `each` expansion ---------------------------------------------------
+
+it("each: scans a directory into one sub-entry per file with $file/$name tokens", async () => {
+  env = await createTestProject("store-each");
+  await env.write("sfx/punch.txt", "PUNCH");
+  await env.write("sfx/kick.txt", "KICK");
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "sfx",
+      type: "FileEcho",
+      each: { dir: "sfx/", pattern: "(.*)\\.txt$" },
+      config: { file: "$file" },
+      mount: "$name.out",
+    },
+  ];
+  await store.syncEntries();
+
+  // Expanded keys are `groupId/name`.
+  assert.ok(env.project.getStone("sfx/kick"));
+  assert.ok(env.project.getStone("sfx/punch"));
+  // `$file` reached the real path (FileEcho read it); the per-file mount used `$name`.
+  assert.equal(await store.getString("kick.out"), "KICK");
+  assert.equal(await store.getString("punch.out"), "PUNCH");
+  // Introspection for the future editor plugin (sorted by file path).
+  assert.deepEqual(store.getExpansion("sfx").names, ["kick", "punch"]);
+  assert.deepEqual(store.getExpansion("sfx").files, ["sfx/kick.txt", "sfx/punch.txt"]);
+  assert.equal(store.getExpansion("nope"), null);
+});
+
+it("each: per-file overrides deep-merge over config (nested merge, array replace)", async () => {
+  env = await createTestProject("store-each-ovr");
+  await env.write("data/a.txt", "A");
+  await env.write("data/b.txt", "B");
+  capturedConfigs.clear();
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "g",
+      type: "Capture",
+      each: { dir: "data/", pattern: "(.*)\\.txt$" },
+      config: { nested: { keep: 1, val: "x" }, arr: [1, 2] },
+      overrides: { b: { nested: { val: "y" }, arr: [9] } },
+    },
+  ];
+  await store.syncEntries();
+
+  // `a`: no override → base config, untouched.
+  assert.deepEqual(capturedConfigs.get("g/a").nested, { keep: 1, val: "x" });
+  assert.deepEqual(capturedConfigs.get("g/a").arr, [1, 2]);
+  // `b`: nested object deep-merged (keep retained, val overridden); array replaced wholesale.
+  assert.deepEqual(capturedConfigs.get("g/b").nested, { keep: 1, val: "y" });
+  assert.deepEqual(capturedConfigs.get("g/b").arr, [9]);
+  // The base config object is not mutated by expansion (no aliasing into db.data).
+  assert.deepEqual(store.db.data[0].config.nested, { keep: 1, val: "x" });
+});
+
+it("each: $file/$name tokens are substituted inside $router route arrays and mount", async () => {
+  env = await createTestProject("store-each-router");
+  await env.write("imgs/hero.txt", "HERO");
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "img",
+      type: "Echo",
+      each: { dir: "imgs/", pattern: "(.*)\\.txt$" },
+      config: { source: { $router: [["$name.slot", "$file"]] } },
+      mount: "$name.final",
+    },
+  ];
+  await store.syncEntries();
+
+  // Echo joins its source router's output; the router serves `$file`'s content, mounted via `$name`.
+  assert.equal(await store.getString("hero.final"), "HERO");
+});
+
+it("each: re-sync picks up an added file and drops a removed one (with its dataMap key)", async () => {
+  env = await createTestProject("store-each-resync");
+  await env.write("d/a.txt", "A");
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    { id: "g", type: "FileEcho", each: { dir: "d/", pattern: "(.*)\\.txt$" }, config: { file: "$file" }, mount: "$name.out" },
+  ];
+  await store.syncEntries();
+  assert.deepEqual([...store.dataMap.keys()], ["g/a"]);
+  assert.equal(await store.getString("a.out"), "A");
+
+  // Add a file → re-sync creates the new sub-entry.
+  await env.write("d/b.txt", "B");
+  await store.syncEntries();
+  assert.deepEqual([...store.dataMap.keys()].sort(), ["g/a", "g/b"]);
+  assert.equal(await store.getString("b.out"), "B");
+
+  // Delete a file → re-sync removes the sub-entry, its stone, and its dataMap key.
+  await rm(path.join(env.rootDir, "d/a.txt"));
+  await store.syncEntries();
+  assert.deepEqual([...store.dataMap.keys()], ["g/b"]);
+  assert.equal(env.project.getStone("g/a"), null);
+  assert.equal((await store.get("a.out")).length, 0);
+});
+
+it("each: previewEntry on an expanded key applies without rescanning", async () => {
+  env = await createTestProject("store-each-preview");
+  await env.write("d/a.txt", "CANON");
+  await env.write("other.txt", "PREVIEW");
+
+  let scanCount = 0;
+  const origScan = Utils.scanFiles;
+  Utils.scanFiles = (...a) => {
+    scanCount++;
+    return origScan.apply(Utils, a);
+  };
+  try {
+    const store = new StoneStore({ project: env.project });
+    store.db.data = [
+      { id: "g", type: "FileEcho", each: { dir: "d/", pattern: "(.*)\\.txt$" }, config: { file: "$file" }, mount: "$name.out" },
+    ];
+    await store.syncEntries();
+    assert.equal(scanCount, 1);
+    assert.equal(await store.getString("a.out"), "CANON");
+
+    // Client convention: preview a sub-entry with a fully-resolved single-file config/mount (no tokens).
+    store.previewEntry("g/a", { key: "g/a", type: "FileEcho", config: { file: "other.txt" }, mount: "a.out" });
+    assert.equal(scanCount, 1, "previewEntry must not rescan");
+    assert.equal(store.isPreviewDirty("g/a"), true);
+    assert.equal(await store.getString("a.out"), "PREVIEW");
+
+    // Revert restores canonical without a rescan.
+    assert.equal(store.revertEntry("g/a"), true);
+    assert.equal(scanCount, 1);
+    assert.equal(await store.getString("a.out"), "CANON");
+  } finally {
+    Utils.scanFiles = origScan;
+  }
+});
+
+it("each: an expanded key colliding with another entry errors and leaves stones untouched", async () => {
+  env = await createTestProject("store-each-collision");
+  await env.write("d/x.txt", "X");
+  new MockStone({ project: env.project, id: "src", outputs: [{ id: "s.txt", content: "V" }] });
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [{ id: "keep", type: "Echo", config: { source: { $stone: "src" } } }];
+  await store.syncEntries();
+  const snapshot = env.project.stones.slice();
+
+  // A literal entry id equals a would-be expanded key `g/x`.
+  store.db.data = [
+    { id: "keep", type: "Echo", config: { source: { $stone: "src" } } },
+    { id: "g", type: "FileEcho", each: { dir: "d/", pattern: "(.*)\\.txt$" }, config: { file: "$file" } },
+    { id: "g/x", type: "Echo", config: { source: { $stone: "src" } } },
+  ];
+  await assert.rejects(async () => await store.syncEntries(), /expanded key "g\/x"/);
+  assert.deepEqual(env.project.stones, snapshot);
+});
+
+it("each: an override keyed by a non-existent name warns (typo guard)", async () => {
+  env = await createTestProject("store-each-typo");
+  await env.write("d/real.txt", "R");
+
+  const warnings = [];
+  const orig = Log.log;
+  Log.log = (level, ...args) => {
+    if (level === 40) warnings.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+    return orig(level, ...args);
+  };
+  try {
+    const store = new StoneStore({ project: env.project });
+    store.db.data = [
+      {
+        id: "g",
+        type: "Mock",
+        each: { dir: "d/", pattern: "(.*)\\.txt$" },
+        config: { outputs: [{ id: "o.txt", content: "c" }] },
+        overrides: { typo: { outputs: [{ id: "o.txt", content: "c2" }] } },
+      },
+    ];
+    await store.syncEntries();
+  } finally {
+    Log.log = orig;
+  }
+  assert.ok(
+    warnings.some((w) => /override for "typo"/.test(w)),
+    `expected a typo warning, got: ${JSON.stringify(warnings)}`,
+  );
+});
+
+it("each: validation rejects overrides-without-each and an uncompilable pattern", async () => {
+  env = await createTestProject("store-each-valid");
+  const store = new StoneStore({ project: env.project });
+
+  store.db.data = [{ id: "g", type: "Mock", config: {}, overrides: { a: {} } }];
+  await assert.rejects(async () => await store.syncEntries(), /"overrides" without "each"/);
+
+  store.db.data = [{ id: "g", type: "Mock", each: { dir: "d/", pattern: "(" } }];
+  await assert.rejects(async () => await store.syncEntries(), /not a valid RegExp/);
+
+  store.db.data = [{ id: "g", type: "Mock", each: { dir: "", pattern: ".*" } }];
+  await assert.rejects(async () => await store.syncEntries(), /"each\.dir" must be a non-empty string/);
 });
