@@ -355,3 +355,29 @@ test("getStoneConfig editable is a deep clone (not a reference to config)", asyn
   assert.equal(stone.config.nested.a, 1);
   await project.cache.close();
 });
+
+test("getStoneConfig exposes meta.uiHints from the class configSchema()", async () => {
+  const env = await createTestProject("cfg-api-uihints");
+  new MockStone({ project: env.project, id: "hinted" });
+  const view = await env.project.getStoneConfig("hinted");
+  // MockStone declares a static configSchema(); it is surfaced via meta.uiHints.
+  assert.ok(view.meta.uiHints, "expected uiHints to be populated");
+  assert.equal(view.meta.uiHints.type, "object");
+  assert.ok(view.meta.uiHints.properties.outputs, "expected the schema's outputs property");
+  await env.cleanup();
+});
+
+test("getStoneConfig meta.uiHints is null for a class without configSchema()", async () => {
+  const env = await createTestProject("cfg-api-nohints");
+  // A bare Stone subclass with no configSchema().
+  const { Stone } = await import("../bin/whet.js");
+  const { SourceData } = await import("../bin/whet/Source.js");
+  class Plain extends Stone {
+    async generate() { return [SourceData.fromString(this.id, "x")]; }
+    async list() { return [this.id]; }
+  }
+  new Plain({ project: env.project, id: "plain" });
+  const view = await env.project.getStoneConfig("plain");
+  assert.equal(view.meta.uiHints, null);
+  await env.cleanup();
+});

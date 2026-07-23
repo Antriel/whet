@@ -7,6 +7,29 @@ function sleep(ms) {
 }
 
 export class MockStone extends Stone {
+  // Reference configSchema() for the whet-uzjf convention: StoneRegistry.register picks this up,
+  // and StoneStore sync-validates entry configs against it. Shallow + permissive by design.
+  static configSchema() {
+    return {
+      type: "object",
+      properties: {
+        hashKey: { type: ["string", "number", "null"] },
+        outputs: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "string", minLength: 1 },
+              content: { type: "string" },
+            },
+            required: ["id"],
+          },
+        },
+        delayMs: { type: "number", minimum: 0 },
+      },
+    };
+  }
+
   constructor({
     project,
     id = "mock-stone",

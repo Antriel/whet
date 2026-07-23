@@ -93,6 +93,7 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
         var enabled:Array<Dynamic> = [];
         for (e in (db.data:Array<Dynamic>)) if (!isDisabled(e)) enabled.push(e);
         return expandEntries(enabled).then(flat -> {
+            validateSchemas(flat);
             var sorted = topoSort(flat);
             // Cache cleanup: capture the stones of keys that will be removed, before sync drops them.
             var removedStones:Array<AnyStone> = null;
@@ -358,6 +359,25 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
         }
         for (k in topoOrder(keys, refsOf))
             if (dependents.exists(k)) updateEntry(k, dataMap.get(k), entryMap.get(k));
+    }
+
+    /**
+     * Schema-validate each expanded entry's config against its registered type's `configSchema()`
+     * (when one exists), post-expansion and post-token-substitution but pre-revive. `$stone`/`$router`
+     * sentinels are skipped by the validator. All findings are aggregated into one thrown error
+     * (all-or-nothing), each prefixed with the entry key and JSON path, so an LLM/JSON-authored
+     * `stone-store.json` fails at sync with a path-specific message instead of a generate-time crash.
+     */
+    function validateSchemas(flat:Array<FlatEntryData>):Void {
+        var errors:Array<String> = [];
+        for (e in flat) {
+            var typeEntry = StoneRegistry.get(e.type);
+            if (typeEntry == null || typeEntry.schema == null) continue;
+            for (f in SchemaValidator.validate(e.config, typeEntry.schema))
+                errors.push('entry "${e.key}"' + (f.path != "" ? ' @ ${f.path}' : '') + ': ${f.message}');
+        }
+        if (errors.length > 0)
+            throw new js.lib.Error('StoneStore schema validation failed:\n - ' + errors.join('\n - '));
     }
 
     /** Structural validation of `data`; collects ALL problems into one thrown error (all-or-nothing). */

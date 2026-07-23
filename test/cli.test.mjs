@@ -82,3 +82,52 @@ project.addCommand("my-command").action(() => process.exit(42));
   const { exitCode } = await whet("-p", projectFile, "my-command");
   assert.equal(exitCode, 42, "expected sentinel exit code from command action");
 });
+
+// stone-schema is registered alongside the project (initProjects), so real invocations resolve a
+// project — which is also where project-registered types (e.g. SharpStone) become visible. These
+// smoke tests supply a minimal one and pass -p, mirroring the pattern above.
+async function withProject(t) {
+  const tmpDir = resolve("test/.tmp/cli-stoneschema-" + Date.now() + "-" + Math.random().toString(36).slice(2));
+  await mkdir(tmpDir, { recursive: true });
+  t.after(() => rm(tmpDir, { recursive: true, force: true }));
+  const whetUrl = pathToFileURL(resolve("bin/whet.js")).href;
+  const projectFile = resolve(tmpDir, "Project.mjs");
+  await writeFile(projectFile, `import { Project } from "${whetUrl}";\nnew Project({ name: "t", rootDir: "./" });\n`);
+  return ["-p", projectFile];
+}
+
+test("stone-schema with a known schema-carrying type prints the schema JSON", async (t) => {
+  const p = await withProject(t);
+  const { stdout, exitCode } = await whet(...p, "stone-schema", "JsonDb");
+  assert.equal(exitCode, 0);
+  const schema = JSON.parse(stdout);
+  assert.equal(schema.type, "object");
+  assert.ok(schema.properties, "expected a properties object in JsonDb's schema");
+});
+
+test("stone-schema with a schema-less known type reports it (exit 0)", async (t) => {
+  const p = await withProject(t);
+  const { stdout, exitCode } = await whet(...p, "stone-schema", "Files");
+  assert.equal(exitCode, 0);
+  assert.ok(/has no schema/.test(stdout), `expected 'has no schema' message: ${stdout}`);
+});
+
+test("stone-schema with an unknown type lists registered types and exits 1", async (t) => {
+  const p = await withProject(t);
+  const { stderr, exitCode } = await whet(...p, "stone-schema", "NopeStone");
+  assert.notEqual(exitCode, 0);
+  assert.ok(/Unknown stone type/.test(stderr), `expected error: ${stderr}`);
+  assert.ok(/JsonDb/.test(stderr), `expected registered-type listing: ${stderr}`);
+});
+
+test("stone-schema with no arg lists the registry", async (t) => {
+  const p = await withProject(t);
+  const { stdout, exitCode } = await whet(...p, "stone-schema");
+  assert.equal(exitCode, 0);
+  const list = JSON.parse(stdout);
+  assert.ok(Array.isArray(list), "expected an array");
+  const names = list.map((e) => e.name);
+  assert.ok(names.includes("JsonDb"), `expected JsonDb in ${JSON.stringify(names)}`);
+  // hasSchema flag is reported per-entry.
+  assert.equal(list.find((e) => e.name === "JsonDb").hasSchema, true);
+});

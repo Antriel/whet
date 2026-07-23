@@ -139,6 +139,11 @@ class Project {
                     dependencyIds: depIds,
                     hasStoneConfigStore: stone.config.configStore != null,
                     hasProjectConfigStore: configStore != null,
+                    // The stone class's `configSchema()` (whet-uzjf), read straight off the instance's
+                    // constructor so unregistered classes are covered too; null when none is declared.
+                    uiHints: js.Syntax.code(
+                        "(typeof {0}.constructor.configSchema === 'function') ? {0}.constructor.configSchema() : null",
+                        stone),
                 }
             };
             return view;

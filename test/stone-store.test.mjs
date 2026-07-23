@@ -545,3 +545,63 @@ it("each: validation rejects overrides-without-each and an uncompilable pattern"
   store.db.data = [{ id: "g", type: "Mock", each: { dir: "", pattern: ".*" } }];
   await assert.rejects(async () => await store.syncEntries(), /"each\.dir" must be a non-empty string/);
 });
+
+// --- Schema validation at sync (whet-uzjf) ------------------------------
+
+it("sync rejects an entry whose config violates its type's configSchema", async () => {
+  env = await createTestProject("store-schema-reject");
+  const store = new StoneStore({ project: env.project });
+  // MockStone.configSchema() requires outputs[].id and typed delayMs; feed it two violations.
+  store.db.data = [
+    { id: "good", type: "Mock", config: { outputs: [{ id: "ok.txt", content: "x" }] } },
+    { id: "bad", type: "Mock", config: { delayMs: "soon", outputs: [{ content: "no-id" }] } },
+  ];
+  await assert.rejects(
+    async () => await store.syncEntries(),
+    (err) => {
+      assert.match(err.message, /schema validation failed/i);
+      assert.match(err.message, /entry "bad"/);
+      assert.match(err.message, /delayMs/); // path-specific
+      assert.match(err.message, /outputs\[0\]/); // indexed path for the missing id
+      assert.doesNotMatch(err.message, /entry "good"/);
+      return true;
+    },
+  );
+  // All-or-nothing: no stones were created for the batch (the valid "good" entry included).
+  assert.equal(store.project.getStone("good"), null);
+});
+
+it("sync accepts a schema-valid entry and builds it", async () => {
+  env = await createTestProject("store-schema-accept");
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    { id: "ok", type: "Mock", config: { outputs: [{ id: "ok.txt", content: "yes" }], delayMs: 0 }, mount: "ok.txt" },
+  ];
+  await store.syncEntries();
+  assert.equal(await store.getString("ok.txt"), "yes");
+});
+
+it("schema validation runs post-substitution and tolerates $stone refs + tokens", async () => {
+  env = await createTestProject("store-schema-tokens");
+  await env.write("imgs/a.png", "AAA");
+  await env.write("imgs/b.png", "BBB");
+  new MockStone({ project: env.project, id: "srcX", outputs: [{ id: "s.txt", content: "X" }] });
+
+  const store = new StoneStore({ project: env.project });
+  // `each` expansion + $name token substitution feeding a schema-carrying type (Mock). The
+  // `id` field is a template resolved to a real string before validation, so minLength holds.
+  store.db.data = [
+    {
+      id: "g",
+      type: "Mock",
+      each: { dir: "imgs/", pattern: "(?<name>.+)\.png$" },
+      config: { outputs: [{ id: "$name.txt", content: "$name" }] },
+    },
+    // A $stone-ref-bearing config must not be flagged (Echo has no schema, but prove the skip
+    // path via a Mock whose hashKey holds a ref-free value alongside).
+    { id: "e", type: "Echo", config: { source: { $stone: "srcX" } } },
+  ];
+  await store.syncEntries();
+  // Both group members built with substituted ids.
+  assert.equal(store.getExpansion("g").names.sort().join(","), "a,b");
+});

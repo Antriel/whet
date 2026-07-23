@@ -82,11 +82,20 @@ it("duplicate registration warns and overwrites", () => {
 });
 
 it("list() reports hasSchema", () => {
+  // A ctor with no static configSchema() — MockStone now carries one (whet-uzjf).
+  class Schemaless {}
   StoneRegistry.register("WithSchema", MockStone, { type: "object" });
-  StoneRegistry.register("NoSchema", MockStone);
+  StoneRegistry.register("NoSchema", Schemaless);
   const map = new Map(StoneRegistry.list().map((e) => [e.name, e.hasSchema]));
   assert.equal(map.get("WithSchema"), true);
   assert.equal(map.get("NoSchema"), false);
+});
+
+it("register: picks up a static configSchema() off the ctor", () => {
+  StoneRegistry.register("MockAutoSchema", MockStone);
+  const entry = StoneRegistry.get("MockAutoSchema");
+  assert.ok(entry.schema, "expected MockStone.configSchema() to be picked up");
+  assert.equal(entry.schema.type, "object");
 });
 
 // --- ConfigReviver ---

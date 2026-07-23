@@ -5,7 +5,7 @@ status: todo
 type: epic
 priority: normal
 created_at: 2026-07-23T07:05:38Z
-updated_at: 2026-07-23T07:08:28Z
+updated_at: 2026-07-23T12:49:01Z
 ---
 
 Umbrella for landing the StoneStore design from `docs/ecosystem-review-2026-07/03-data-driven-stones.md`, plus the generic StoneFactory live-preview from scry-app-y4be §A (`scry-app/.beans/scry-app-y4be--audio-manager-live-preview-of-unsaved-audio-config.md`).
@@ -53,3 +53,14 @@ Reference implementation to mirror/generalize: `gooye-2/scry/whetstones/assets/A
 5. whet-qwye — `each` expansion (blocked by 4)
 6. whet-uzjf — configSchema + stone-schema CLI (blocked by 2)
 7. whet-onc4 — docs (blocked by 4, 5)
+
+## Note: configSchema re-ranking (2026-07-23 review)
+
+Design review folded into whet-uzjf. Key point for this epic: **configSchema's primary value is
+StoneStore sync validation + LLM/Monaco discovery, NOT generic editor forms.** The forms payoff
+(doc 03's headline) is the weakest and applies only to the simple long tail — the flagship
+stones (SharpStone, audio) keep custom editors. Validation is the load-bearing dependency for
+JSON-entry / LLM-authored `stone-store.json`, which is why uzjf belongs under this epic. See
+whet-uzjf "Design review" for the coexistence model, permissive-default guardrail, and the
+Haxe-vs-JS drift-escape-hatch split (JS stones would need TS configs + a types-to-schema tool —
+a future prerequisite, not in uzjf).

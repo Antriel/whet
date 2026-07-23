@@ -56,6 +56,21 @@ class JsonDb extends Stone<JsonDbConfig> {
         return getSource();
     }
 
+    /**
+     * Reference `configSchema()` (the convention `StoneRegistry` picks up): a shallow, permissive
+     * JSON-Schema fragment describing this stone's editable config. `defaultData` is free-form JSON,
+     * so it is described only as "present" without a shape. Intentionally omits
+     * `additionalProperties:false` (permissive-by-default convention).
+     */
+    @:keep public static function configSchema():Dynamic {
+        return {
+            type: "object",
+            properties: {
+                defaultData: { description: "Fallback contents when the loaded file is missing." }
+            }
+        };
+    }
+
 }
 
 typedef JsonDbConfig = StoneConfig & {

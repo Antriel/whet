@@ -2,6 +2,7 @@ package whet;
 
 import js.node.Fs;
 import whet.Log.LogLevel;
+import whet.stones.StoneRegistry;
 
 var program = new commander.Command('whet');
 
@@ -121,6 +122,12 @@ private function initProjects() {
     schemaCmd.action(cast outputSchema);
     program.addCommand(schemaCmd);
 
+    var stoneSchemaCmd = new commander.Command('stone-schema');
+    stoneSchemaCmd.description('Print the JSON Schema (config schema) for a registered stone type.');
+    stoneSchemaCmd.argument('[type]', 'Registered stone type name (omit to list all registered types).');
+    stoneSchemaCmd.action(cast outputStoneSchema);
+    program.addCommand(stoneSchemaCmd);
+
     var commands = getCommands(program.args);
     var initProm = if (commands.length > 0) {
         var res = program.parseOptions(commands[0]);
@@ -180,7 +187,7 @@ function executeCommand(cmd:Array<String>) {
 
 private function outputSchema():Void {
     Log.logLevel = 100;
-    var excludeCommands = ['help', 'schema'];
+    var excludeCommands = ['help', 'schema', 'stone-schema'];
     var schema:Dynamic = {
         projects: [for (p in Project.projects) ({
             name:p.name, id:p.id, description:p.description, options:[for (opt in p.options)
@@ -191,6 +198,31 @@ private function outputSchema():Void {
         ],
     };
     js.Node.process.stdout.write(haxe.Json.stringify(schema, null, '  ') + '\n');
+}
+
+/**
+ * `whet stone-schema [type]`: with a known type carrying a schema, print the schema JSON (exit 0);
+ * with a known type lacking one, print a clear message (exit 0); with an unknown type, list the
+ * registered type names on stderr and exit 1; with no type, print the registry listing (exit 0).
+ */
+private function outputStoneSchema(?type:String):Void {
+    Log.logLevel = 100;
+    if (type == null) {
+        js.Node.process.stdout.write(haxe.Json.stringify(StoneRegistry.list(), null, '  ') + '\n');
+        return;
+    }
+    var entry = StoneRegistry.get(type);
+    if (entry == null) {
+        var names = [for (t in StoneRegistry.list()) t.name];
+        js.Node.process.stderr.write('Unknown stone type "$type". Registered types: ' + names.join(', ') + '\n');
+        (cast js.Node.process).exitCode = 1;
+        return;
+    }
+    if (entry.schema == null) {
+        js.Node.process.stdout.write('Stone type "$type" has no schema.\n');
+        return;
+    }
+    js.Node.process.stdout.write(haxe.Json.stringify(entry.schema, null, '  ') + '\n');
 }
 
 private function serializeOption(opt:commander.Option):Dynamic {

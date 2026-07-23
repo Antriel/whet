@@ -22,6 +22,21 @@ class StoneRegistry {
     static final registry:js.lib.Map<String, StoneTypeEntry> = new js.lib.Map();
 
     /**
+     * Builtins are registered lazily on first access rather than at module-evaluation time. Doing it
+     * eagerly (in `__init__`) references the builtin class bindings while this module evaluates, which
+     * TDZ-crashes ("Cannot access 'Files' before initialization") whenever an import cycle pulls this
+     * module in ahead of those classes (e.g. the CLI's `stone-schema` command importing the registry
+     * from the entry module). Deferring to first access means the class bindings are only touched at
+     * runtime, once the whole module graph is initialized. Still synchronous, so "registered on import"
+     * holds: the first `get`/`list`/`register` call materializes them.
+     */
+    static var builtinsRegistered = false;
+
+    static inline function ensureBuiltins():Void {
+        if (!builtinsRegistered) registerBuiltins();
+    }
+
+    /**
      * Register a single-stone type. The builder instantiates `new ctor({...config, id: key})`
      * (config shallow-copied — the caller's object is never mutated). When `schema` is omitted and
      * `ctor.configSchema` is a function, it is called to obtain the schema (convention wired here;
@@ -43,6 +58,7 @@ class StoneRegistry {
      * stages). Builders return their own `routes`; `mainStone` is optional.
      */
     @:keep public static function registerBuilder(name:String, builder:StoneBuilder, ?schema:Dynamic):Void {
+        ensureBuiltins();
         if (registry.has(name))
             Log.warn('Stone type "$name" is already registered; overwriting.');
         registry.set(name, { name: name, builder: builder, schema: schema });
@@ -50,11 +66,13 @@ class StoneRegistry {
 
     /** Look up a registered type, or null if unknown. */
     @:keep public static function get(name:String):Null<StoneTypeEntry> {
+        ensureBuiltins();
         return registry.has(name) ? registry.get(name) : null;
     }
 
     /** List registered types with whether each carries a schema. */
     @:keep public static function list():Array<{name:String, hasSchema:Bool}> {
+        ensureBuiltins();
         var out = [];
         for (entry in registry.values()) out.push({ name: entry.name, hasSchema: entry.schema != null });
         return out;
@@ -62,15 +80,14 @@ class StoneRegistry {
 
     /** Register Whet's built-in stone types. Idempotent (re-registration just overwrites). */
     @:keep public static function registerBuiltins():Void {
+        // Set the flag *before* registering so the re-entrant `register` calls below (which each call
+        // `ensureBuiltins`) don't recurse.
+        builtinsRegistered = true;
         register("Files", Files);
         register("JsonStone", JsonStone);
         register("JsonDb", JsonDb);
         register("Zip", ZipStone);
         register("RemoteFile", RemoteFile);
-    }
-
-    static function __init__():Void {
-        registerBuiltins();
     }
 
 }
