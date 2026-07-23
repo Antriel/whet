@@ -64,6 +64,7 @@ class StoneRegistry {
     @:keep public static function registerBuiltins():Void {
         register("Files", Files);
         register("JsonStone", JsonStone);
+        register("JsonDb", JsonDb);
         register("Zip", ZipStone);
         register("RemoteFile", RemoteFile);
     }

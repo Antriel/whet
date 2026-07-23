@@ -14,7 +14,7 @@ afterEach(async () => {
 
 it("built-ins are registered on import", () => {
   const names = StoneRegistry.list().map((e) => e.name).sort();
-  assert.deepEqual(names, ["Files", "JsonStone", "RemoteFile", "Zip"]);
+  assert.deepEqual(names, ["Files", "JsonDb", "JsonStone", "RemoteFile", "Zip"]);
   assert.ok(StoneRegistry.get("Files"));
   assert.equal(StoneRegistry.get("Unknown"), null);
 });
