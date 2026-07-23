@@ -1,10 +1,11 @@
 ---
 # whet-hnde
 title: Stone-type registry + $stone/$router config reviver
-status: todo
+status: completed
 type: feature
+priority: normal
 created_at: 2026-07-23T07:06:27Z
-updated_at: 2026-07-23T07:06:27Z
+updated_at: 2026-07-23T07:37:17Z
 parent: whet-1vzf
 ---
 
@@ -38,8 +39,25 @@ API (all `@:keep`):
 
 ## Todos
 
-- [ ] StoneRegistry with register/registerBuilder/get/list + built-in registrations
-- [ ] ConfigReviver revive + collectStoneRefs
-- [ ] Tests `test/stone-registry.test.mjs`: register a MockStone type and build via sugar (stone id == key, config passed through); registerBuilder composite returning 2 stones + routes; duplicate registration warns and overwrites; list() shape
-- [ ] Tests `test/config-reviver.test.mjs` (can share file): revive nested $stone (resolve called with id, live object substituted); revive $router with mixed string + {$stone} routes yields a working Router (get() serves the stone's output); unknown $stone error contains the id; malformed ref (extra keys) throws; collectStoneRefs finds refs at any depth incl. inside $router, deduped; input object not mutated
-- [ ] Rebuild + full test run green
+- [x] StoneRegistry with register/registerBuilder/get/list + built-in registrations
+- [x] ConfigReviver revive + collectStoneRefs
+- [x] Tests `test/stone-registry.test.mjs`: register a MockStone type and build via sugar (stone id == key, config passed through); registerBuilder composite returning 2 stones + routes; duplicate registration warns and overwrites; list() shape
+- [x] Tests `test/config-reviver.test.mjs` (shared into stone-registry.test.mjs): revive nested $stone; $router mixed string + {$stone} yields working Router; unknown $stone error contains id; malformed ref throws; collectStoneRefs at any depth incl. $router, deduped; input not mutated
+- [x] Rebuild + full test run green
+
+## Summary of Changes
+
+Added the two standalone StoneStore building blocks, both `@:expose` and reachable from `bin/whet.js`:
+
+**`src/whet/stones/StoneRegistry.hx`** — static registry of stone-type *builders*.
+- `registerBuilder(name, builder, ?schema)` raw form (composite chains, conditional stage-skipping); `register(name, ctor, ?schema)` single-stone sugar wrapping `new ctor({...config, id: key})` via `js.Syntax` (config shallow-copied — caller object never mutated; verified by test). Missing schema pulls `ctor.configSchema()` if it exists (hook wired for the sibling bean).
+- `get(name):Null<StoneTypeEntry>`, `list():Array<{name,hasSchema}>`. Duplicate name → `Log.warn` + overwrite.
+- Typedefs `BuiltEntry` (`FactoryEntry & {?mainStone, ?update}`), `StoneBuilder`, `StoneTypeEntry`.
+- Built-ins (`Files`, `JsonStone`, `Zip`, `RemoteFile`) self-register via `static __init__()`, so they are present on any import (not just CLI — note `bin/whet.js` calls `main()` at load but it early-returns for library imports). JsonDb deferred to whet-np9d; HaxeBuild/Hxml skipped per spec.
+
+**`src/whet/stones/ConfigReviver.hx`** — non-mutating JSON→live-config transform.
+- `revive(value, resolve)`: `{$stone:id}` → `resolve(id)`; `{$router:routes}` → `new Router(revive(routes))` (nested `$stone`s become live; plain strings pass through as `Files` shortcuts); arrays/objects recurse; primitives as-is. `$stone`/`$router` alongside other keys throws a clear malformed-reference error.
+- `collectStoneRefs(value)`: deduped `$stone` ids in first-appearance order, descending into `$router` too.
+- Plain-object detection mirrors `ConfigStore.isJsonSerializable` (prototype check) so class instances are never walked.
+
+12 new tests in `test/stone-registry.test.mjs` (registry + reviver shared), all green; full suite **203/203** after `haxe build.hxml`.
