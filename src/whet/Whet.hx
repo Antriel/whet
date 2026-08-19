@@ -170,7 +170,9 @@ private function initProjects() {
                 if (err is commander.CommanderError
                     && (err.code == 'commander.help' || err.code == 'commander.helpDisplayed'))
                     return;
-                Log.error("Error while executing command.", { error: err });
+                // Lift the stone out: Log.replacer omits custom Error fields.
+                final stone = if (err != null && Reflect.isObject(err)) Reflect.field(err, 'stone') else null;
+                Log.error("Error while executing command.", { error: err, stone: stone });
                 // Reflect the failure in the process exit code so shells (`&&`), CI, and
                 // other tooling don't read a swallowed rejection as success. Use exitCode
                 // (not process.exit) so pending logs flush and the chain unwinds cleanly.

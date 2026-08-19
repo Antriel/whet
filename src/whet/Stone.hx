@@ -220,7 +220,10 @@ abstract class Stone<T:StoneConfig> {
      * @param err Any error that might have happened during `generateSource`.
      */
     public dynamic function handleError(err:Dynamic):Promise<Array<SourceData>> {
-        Log.error("Error while generating.", { stone: this, err: err });
+        // Let Whet log each failure once, while retaining the originating stone.
+        // Do not overwrite an annotation from a nested dependency.
+        if (err != null && Reflect.isObject(err) && Reflect.field(err, 'stone') == null)
+            try Reflect.setField(err, 'stone', this) catch (_:Dynamic) {};
         return Promise.reject(err); // Don't handle anything by default.
     }
 

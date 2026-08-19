@@ -1,11 +1,11 @@
 ---
 # whet-1vzf
 title: 'StoneStore: data-driven stone graphs (registry, reviver, store, preview)'
-status: todo
+status: completed
 type: epic
 priority: normal
 created_at: 2026-07-23T07:05:38Z
-updated_at: 2026-07-23T12:49:01Z
+updated_at: 2026-07-23T15:27:48Z
 ---
 
 Umbrella for landing the StoneStore design from `docs/ecosystem-review-2026-07/03-data-driven-stones.md`, plus the generic StoneFactory live-preview from scry-app-y4be §A (`scry-app/.beans/scry-app-y4be--audio-manager-live-preview-of-unsaved-audio-config.md`).
