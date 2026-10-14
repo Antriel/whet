@@ -155,8 +155,10 @@ class ConfigStore {
             return Promise.reject(err);
         }
         if (data == null) data = new DynamicAccess();
-        return file.write(haxe.Json.stringify(data, null, '  '), force).then(_ -> {
-            persistedData = deepClone(data);
+        var json = haxe.Json.stringify(data, null, '  ');
+        return file.write(json, force).then(_ -> {
+            // What was written, not `data` now: entries edited during the write are still unsaved.
+            persistedData = haxe.Json.parse(json);
             conflicts.clear();
             return null;
         });

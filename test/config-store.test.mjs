@@ -11,6 +11,7 @@ import {
 } from "../bin/whet/cache/Cache.js";
 import { MockStone } from "./helpers/mock-stone.mjs";
 import { createTestProject } from "./helpers/test-env.mjs";
+import { holdRenames } from "./helpers/fs-hold.mjs";
 
 test("Patch application produces correct merged config (nested objects, arrays, primitives)", async () => {
   const env = await createTestProject("cs-merge");
@@ -520,5 +521,58 @@ test("reload keeps unsaved (preview) entries instead of discarding them", async 
   store.clearEntry("k-stone");
   await stone.getHash();
   assert.equal(stone.config.val, 50);
+  await env.cleanup();
+});
+
+test("overlapping flushes: no false conflict from our own write; the last one wins", async () => {
+  const env = await createTestProject("cs-double-flush");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const stone = new MockStone({ project: env.project, id: "s", configStore: store });
+  stone.config.val = 0;
+  await writeFile(configPath, JSON.stringify({ s: { val: 1 } }));
+  await stone.getHash();
+
+  const hold = holdRenames();
+  try {
+    store.setEntry("s", { val: 2 });
+    const first = store.flush();
+    await hold.renamed(); // { val: 2 } on disk, write not yet resolved
+    store.setEntry("s", { val: 3 });
+    const second = store.flush();
+    await new Promise((r) => setTimeout(r, 20));
+    hold.release();
+    await first;
+    await second;
+  } finally {
+    hold.release();
+  }
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { s: { val: 3 } });
+  assert.equal(store.isDirty(), false);
+  await env.cleanup();
+});
+
+test("an entry edited while a flush is writing stays unsaved", async () => {
+  const env = await createTestProject("cs-edit-mid-flush");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const stone = new MockStone({ project: env.project, id: "s", configStore: store });
+  stone.config.val = 0;
+  await writeFile(configPath, JSON.stringify({ s: { val: 1 } }));
+  await stone.getHash();
+
+  const hold = holdRenames();
+  try {
+    store.setEntry("s", { val: 2 });
+    const flushing = store.flush();
+    await hold.renamed();
+    store.setEntry("s", { val: 3 }); // not part of the write in flight
+    hold.release();
+    await flushing;
+  } finally {
+    hold.release();
+  }
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { s: { val: 2 } });
+  assert.equal(store.isDirty("s"), true);
   await env.cleanup();
 });

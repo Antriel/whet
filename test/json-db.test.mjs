@@ -2,8 +2,9 @@ import { it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { stat, utimes } from "node:fs/promises";
 import path from "node:path";
-import { JsonDb, Router } from "../bin/whet.js";
+import { JsonDb, Router, Log } from "../bin/whet.js";
 import { createTestProject } from "./helpers/test-env.mjs";
+import { holdRenames } from "./helpers/fs-hold.mjs";
 
 let env;
 afterEach(async () => {
@@ -270,4 +271,65 @@ it("load: missing file copies defaultData, so edits don't leak into the config",
   assert.deepEqual(db.config.defaultData, [{ v: 1 }]);
   await db.reload(true);
   assert.deepEqual(db.data, [{ v: 1 }]);
+});
+
+// --- The process's own in-flight save (whet-bn3n) ------------------------
+
+it("refresh during the process's own save: no false 'changed on disk' warning, no reload", async () => {
+  env = await createTestProject("jsondb-refresh-mid-save");
+  await env.write("db.json", "[]");
+  const db = new JsonDb({ project: env.project, id: "db.json" });
+  await db.load("db.json");
+  let reloads = 0;
+  db.onReload(() => reloads++);
+
+  const warnings = [];
+  const origLog = Log.log;
+  Log.log = (level, ...args) => {
+    if (level === 40) warnings.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+    return origLog(level, ...args);
+  };
+  const hold = holdRenames();
+  try {
+    db.data = [{ v: 1 }];
+    const saving = db.save();
+    await hold.renamed(); // new bytes on disk, write not yet resolved
+    const refreshing = db.refresh();
+    await sleep(20); // give a refresh that doesn't wait time to compare against the old state
+    hold.release();
+    assert.equal(await saving, true);
+    assert.equal(await refreshing, false);
+  } finally {
+    hold.release();
+    Log.log = origLog;
+  }
+  assert.deepEqual(warnings, []);
+  assert.equal(reloads, 0);
+  assert.equal(db.isDirty(), false);
+  assert.equal(await db.diskChanged(), false);
+});
+
+it("overlapping saves: both land in call order, no false conflict", async () => {
+  env = await createTestProject("jsondb-double-save");
+  await env.write("db.json", "[]");
+  const db = new JsonDb({ project: env.project, id: "db.json" });
+  await db.load("db.json");
+
+  const hold = holdRenames();
+  try {
+    db.data = [{ v: 1 }];
+    const first = db.save();
+    await hold.renamed();
+    db.data = [{ v: 2 }];
+    const second = db.save();
+    await sleep(20);
+    hold.release();
+    assert.equal(await first, true);
+    assert.equal(await second, true);
+  } finally {
+    hold.release();
+  }
+  assert.deepEqual(JSON.parse(await env.read("db.json")), [{ v: 2 }]);
+  assert.equal(db.isDirty(), false);
+  assert.equal(await db.diskChanged(), false);
 });

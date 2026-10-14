@@ -20,7 +20,8 @@ invariants to keep when changing the code.
 
 `JsonDb` never caches to its bound path; only `save()` writes it, through `whet.TrackedFile` (shared
 with `ConfigStore`), which refuses to overwrite a file changed since the last read/write unless
-forced. Freshness is pull-based, like `Files`: `JsonDb.generateHash` and StoneStore's `getResults` /
+forced. `TrackedFile` runs writes one at a time, and `read`/`changed` wait for an in-flight write
+(re-running if one started under them), so whet never mistakes its own write for an external change. Freshness is pull-based, like `Files`: `JsonDb.generateHash` and StoneStore's `getResults` /
 `getUnfilteredHash` call `db.refresh()`, which reloads only when the disk changed *and* `data` is
 clean. `StoneStore.refresh()` is public: direct readers of `entryMap`/`dataMap`/`getExpansion` must
 call it first (routing does it itself). `reload` is atomic (parse or `onReload` failure restores `data` and forgets the disk state, so
