@@ -435,3 +435,90 @@ test("Config patching happens before hash computation", async () => {
   assert.ok(!SourceHash.equals(hash1, hash2));
   await env.cleanup();
 });
+
+test("flush merges per entry: an external edit to another stone survives a persist", async () => {
+  const env = await createTestProject("cs-merge-other");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const a = new MockStone({ project: env.project, id: "a", configStore: store });
+  const b = new MockStone({ project: env.project, id: "b", configStore: store });
+  a.config.val = 0;
+  b.config.val = 0;
+  await writeFile(configPath, JSON.stringify({ a: { val: 1 }, b: { val: 1 } }));
+  await a.getHash();
+  await b.getHash();
+
+  store.setEntry("a", { val: 2 }); // unsaved preview on a
+  await writeFile(configPath, JSON.stringify({ a: { val: 1 }, b: { val: 5 } })); // someone edits b
+
+  await b.getHash(); // b is clean → picks up the external edit despite a's preview
+  assert.equal(b.config.val, 5);
+  await a.getHash();
+  assert.equal(a.config.val, 2);
+
+  await store.flush();
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { a: { val: 2 }, b: { val: 5 } });
+  await env.cleanup();
+});
+
+test("flush rejects when the same entry changed here and on disk; force keeps ours, merges the rest", async () => {
+  const env = await createTestProject("cs-conflict");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const stone = new MockStone({ project: env.project, id: "c-stone", configStore: store });
+  stone.config.val = 1;
+  await writeFile(configPath, JSON.stringify({ "c-stone": { val: 2 } }));
+  await stone.getHash();
+
+  store.setEntry("c-stone", { val: 3 });
+  await writeFile(configPath, JSON.stringify({ "c-stone": { val: 4 }, other: { x: 1 } }));
+  await assert.rejects(store.flush(), (err) => {
+    assert.equal(err.code, "WHET_FILE_CONFLICT");
+    assert.deepEqual(err.stoneIds, ["c-stone"]);
+    return true;
+  });
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { "c-stone": { val: 4 }, other: { x: 1 } });
+
+  await store.flush(true);
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { "c-stone": { val: 3 }, other: { x: 1 } });
+  await store.flush(); // conflict resolved by the forced write
+  await env.cleanup();
+});
+
+test("no conflict when the disk already holds the unsaved value", async () => {
+  const env = await createTestProject("cs-same-edit");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const stone = new MockStone({ project: env.project, id: "s", configStore: store });
+  stone.config.val = 1;
+  await writeFile(configPath, JSON.stringify({ s: { val: 2 } }));
+  await stone.getHash();
+
+  store.setEntry("s", { val: 3 });
+  await writeFile(configPath, JSON.stringify({ s: { val: 3 } }));
+  await store.flush();
+  assert.equal(store.isDirty(), false);
+  await env.cleanup();
+});
+
+test("reload keeps unsaved (preview) entries instead of discarding them", async () => {
+  const env = await createTestProject("cs-keep-dirty");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const stone = new MockStone({ project: env.project, id: "k-stone", configStore: store });
+  stone.config.val = 1;
+  await writeFile(configPath, JSON.stringify({ "k-stone": { val: 2 } }));
+  await stone.getHash();
+
+  store.setEntry("k-stone", { val: 99 });
+  await writeFile(configPath, JSON.stringify({ "k-stone": { val: 50 } }));
+  await stone.getHash();
+  assert.equal(stone.config.val, 99);
+  assert.equal(store.isDirty("k-stone"), true);
+
+  // Discarding the preview makes it clean → the next access picks up the external edit.
+  store.clearEntry("k-stone");
+  await stone.getHash();
+  assert.equal(stone.config.val, 50);
+  await env.cleanup();
+});

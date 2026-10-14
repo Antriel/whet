@@ -19,6 +19,24 @@ design. Consume entry outputs through routes, or via a `$stone` ref from another
 Pass `clearCacheOnRemove: true` to clear the cache of stones from removed entries; otherwise they age
 out via the cache durability rules.
 
+## The file is an input
+
+Whet never writes the store file as a side effect of building or serving. It changes only on
+`store.flushDb()` (`store.db.save()`), which rejects with `code: 'WHET_FILE_CONFLICT'` if the file
+changed on disk since whet last read it (another whet process, an agent, `git checkout`, a hand
+edit); `flushDb(true)` overwrites anyway.
+
+External edits are picked up on the next request to the store: if the file changed and
+`store.db.data` has no unsaved changes, it is reloaded and the entries re-synced. Unsaved changes are
+kept instead (with a warning), and the next `flushDb()` reports the conflict. A file that fails to
+parse or validate keeps failing requests until it's fixed. For push-style live reload, watch the file
+and call `store.db.reload()`.
+
+**Code that reads entries outside the router calls `await store.refresh()` first.** Routing
+(`get`, `getHash`, serving) runs the check itself, but direct reads of `entryMap`, `dataMap` or
+`getExpansion()` (e.g. a stone that builds a manifest from the entries) don't, and would otherwise see
+whatever state the last routed request left behind.
+
 ## Entry format
 
 The file is a JSON array of entries:

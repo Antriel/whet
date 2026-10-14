@@ -605,3 +605,66 @@ it("schema validation runs post-substitution and tolerates $stone refs + tokens"
   // Both group members built with substituted ids.
   assert.equal(store.getExpansion("g").names.sort().join(","), "a,b");
 });
+
+it("an external edit of the DB file is picked up on the next request", async () => {
+  env = await createTestProject("store-external-edit");
+  new MockStone({ project: env.project, id: "src1", outputs: [{ id: "s.txt", content: "ONE" }] });
+  new MockStone({ project: env.project, id: "src2", outputs: [{ id: "s.txt", content: "TWO" }] });
+  await env.write(
+    "store.json",
+    JSON.stringify([{ id: "a", type: "Echo", config: { source: { $stone: "src1" } }, mount: "a.txt" }]),
+  );
+  const store = await new StoneStore({ project: env.project, dbId: "store.json" }).load("store.json");
+  const outer = new Router([["/", store]]); // nested mount: the check runs on the inner store too
+  assert.equal(await outer.getString("a.txt"), "ONE");
+  const hash1 = (await outer.getHash()).toString();
+
+  await env.write(
+    "store.json",
+    JSON.stringify([
+      { id: "a", type: "Echo", config: { source: { $stone: "src2" } }, mount: "a.txt" },
+      { id: "b", type: "Echo", config: { source: { $stone: "src1" } }, mount: "b.txt" },
+    ]),
+  );
+  assert.equal(await outer.getString("a.txt"), "TWO");
+  assert.equal(await outer.getString("b.txt"), "ONE");
+  assert.equal(store.db.isDirty(), false);
+  assert.notEqual((await outer.getHash()).toString(), hash1);
+});
+
+it("flushDb refuses to overwrite an external edit made while the store had unsaved changes", async () => {
+  env = await createTestProject("store-flush-conflict");
+  new MockStone({ project: env.project, id: "src", outputs: [{ id: "s.txt", content: "S" }] });
+  await env.write("store.json", JSON.stringify([{ id: "a", type: "Echo", config: { source: { $stone: "src" } } }]));
+  const store = await new StoneStore({ project: env.project, dbId: "store.json" }).load("store.json");
+
+  store.db.data = [...store.db.data, { id: "mine", type: "Echo", config: { source: { $stone: "src" } } }];
+  await store.syncEntries();
+  await env.write("store.json", JSON.stringify([{ id: "theirs", type: "Echo", config: { source: { $stone: "src" } } }]));
+
+  await store.get(); // the external edit is kept out: unsaved changes win
+  assert.ok(env.project.getStone("mine"));
+  assert.equal(env.project.getStone("theirs"), null);
+  await assert.rejects(store.flushDb(), { code: "WHET_FILE_CONFLICT" });
+  assert.equal(await store.flushDb(true), true);
+  assert.deepEqual(JSON.parse(await env.read("store.json")).map((e) => e.id), ["a", "mine"]);
+});
+
+it("refresh(): direct entry readers outside the router pick up an external edit", async () => {
+  env = await createTestProject("store-refresh-direct");
+  new MockStone({ project: env.project, id: "src", outputs: [{ id: "s.txt", content: "S" }] });
+  await env.write("store.json", JSON.stringify([{ id: "a", type: "Echo", config: { source: { $stone: "src" } } }]));
+  const store = await new StoneStore({ project: env.project, dbId: "store.json" }).load("store.json");
+
+  await env.write(
+    "store.json",
+    JSON.stringify([
+      { id: "a", type: "Echo", config: { source: { $stone: "src" } } },
+      { id: "b", type: "Echo", config: { source: { $stone: "src" } } },
+    ]),
+  );
+  assert.equal(store.dataMap.has("b"), false); // nothing went through the router yet
+  assert.equal(await store.refresh(), true);
+  assert.equal(store.dataMap.has("b"), true);
+  assert.equal(await store.refresh(), false);
+});

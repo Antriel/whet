@@ -62,6 +62,9 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
         if (config == null) config = {};
         var dbId:String = config.dbId != null ? config.dbId : 'stone-store.json';
         db = new JsonDb({ id: dbId, project: config.project });
+        // An external edit of the DB file (picked up by `db.refresh`, or an explicit `db.reload`)
+        // re-syncs the entries.
+        db.onReload(() -> syncEntries());
         clearCacheOnRemove = config.clearCacheOnRemove == true;
     }
 
@@ -70,10 +73,37 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
         return db.load(path).then(_ -> syncEntries()).then(_ -> this);
     }
 
-    /** Persist the DB's canonical data back to its file. */
-    @:keep public function flushDb():Promise<Source> {
-        return db.flush();
+    /**
+     * Persist the DB's canonical data back to its file. Rejects with a `TrackedFile.CONFLICT` error if
+     * the file changed on disk since it was last read, unless `force`. Resolves true if bytes were written.
+     */
+    @:keep public function flushDb(force:Bool = false):Promise<Bool> {
+        return db.save(force);
     }
+
+    /**
+     * Pick up external edits of the DB file: if it changed on disk and `db.data` has no unsaved
+     * changes, reload and re-sync. Resolves true if it reloaded. Routing calls this itself; code that
+     * reads entries outside the router (`entryMap`, `dataMap`, `getExpansion`, ...) must call it first.
+     */
+    @:keep public function refresh():Promise<Bool> {
+        return db.refresh();
+    }
+
+    // --- Router overrides: pick up external edits of the DB file before resolving routes ---
+    // Requests for entry outputs never touch the db stone, so its own `generateHash` check isn't enough.
+
+    override function getResults(mainFilters:whet.route.Router.Filters, results:Array<whet.route.RouteResult>):Promise<Array<whet.route.RouteResult>> {
+        return refresh().then(_ -> superGetResults(mainFilters, results));
+    }
+
+    override function getUnfilteredHash():Promise<SourceHash> {
+        return refresh().then(_ -> superGetUnfilteredHash());
+    }
+
+    function superGetResults(mainFilters, results) return super.getResults(mainFilters, results);
+
+    function superGetUnfilteredHash() return super.getUnfilteredHash();
 
     // --- StoneFactory overrides ---
 

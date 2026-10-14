@@ -381,3 +381,26 @@ test("getStoneConfig meta.uiHints is null for a class without configSchema()", a
   assert.equal(view.meta.uiHints, null);
   await env.cleanup();
 });
+
+test("persist rejects when the same entry changed on disk; force keeps ours, merges the rest", async () => {
+  const env = await createTestProject("cfg-api-conflict");
+  const configPath = path.join(env.rootDir, "config.json");
+  const store = new ConfigStore(configPath);
+  const project = new Project({ name: "cfg-conflict", rootDir: env.rootDir, configStore: store });
+  const stone = new MockStone({ project, id: "conf-stone" });
+  stone.config.val = 1;
+  await writeFile(configPath, JSON.stringify({ "conf-stone": { val: 2 } }));
+  await stone.getHash();
+
+  await writeFile(configPath, JSON.stringify({ "conf-stone": { val: 7 }, other: { x: 1 } }));
+  await assert.rejects(project.setStoneConfig("conf-stone", { val: 3 }, "persist"), {
+    code: "WHET_FILE_CONFLICT",
+    stoneIds: ["conf-stone"],
+  });
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")).other, { x: 1 });
+
+  // Force keeps this stone's version; the other stone's external edit survives.
+  assert.equal(await project.setStoneConfig("conf-stone", { val: 3 }, "persist", true), true);
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf-8")), { "conf-stone": { val: 3 }, other: { x: 1 } });
+  await project.cache.close();
+});

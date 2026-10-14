@@ -16,6 +16,17 @@ invariants to keep when changing the code.
 - **`StoneStore`** — a `StoneFactory` over JSON entries in a `JsonDb`. `ConfigReviver` resolves
   `$stone` / `$router` sentinels; `SchemaValidator` checks configs.
 
+## The DB file is an input
+
+`JsonDb` never caches to its bound path; only `save()` writes it, through `whet.TrackedFile` (shared
+with `ConfigStore`), which refuses to overwrite a file changed since the last read/write unless
+forced. Freshness is pull-based, like `Files`: `JsonDb.generateHash` and StoneStore's `getResults` /
+`getUnfilteredHash` call `db.refresh()`, which reloads only when the disk changed *and* `data` is
+clean. `StoneStore.refresh()` is public: direct readers of `entryMap`/`dataMap`/`getExpansion` must
+call it first (routing does it itself). `reload` is atomic (parse or `onReload` failure restores `data` and forgets the disk state, so
+the next access retries). Don't reintroduce `setAbsolutePath` on the db, and don't make anything on
+the generate path write the file.
+
 ## `syncEntries()` invariants
 
 - Validate everything before touching any stone; aggregate all findings into one path-specific error.

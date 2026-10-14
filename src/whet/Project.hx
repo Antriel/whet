@@ -150,13 +150,18 @@ class Project {
         });
     }
 
-    public function setStoneConfig(id:String, patch:Dynamic, mode:ConfigPatchMode):Promise<Bool> {
+    /**
+     * Set the stone's ConfigStore entry to `patch`. `Persist` also flushes the store, which rejects
+     * with a `TrackedFile.CONFLICT` error if the file changed on disk since it was last read, unless
+     * `force`. Resolves false when the stone or a ConfigStore is missing.
+     */
+    public function setStoneConfig(id:String, patch:Dynamic, mode:ConfigPatchMode, force:Bool = false):Promise<Bool> {
         final stone = getStone(id);
         if (stone == null) return Promise.resolve(false);
         final store:ConfigStore = stone.config.configStore ?? configStore;
         if (store == null) return Promise.resolve(false);
         store.setEntry(stone.id, patch);
-        return if (mode == Persist) store.flush().then(_ -> true) else Promise.resolve(true);
+        return if (mode == Persist) store.flush(force).then(_ -> true) else Promise.resolve(true);
     }
 
     public function clearStoneConfigPreview(id:String):Promise<Bool> {

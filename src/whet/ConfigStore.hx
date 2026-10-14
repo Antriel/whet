@@ -2,8 +2,6 @@ package whet;
 
 import haxe.DynamicAccess;
 import js.lib.WeakMap;
-import js.node.Fs;
-import js.node.Path;
 
 @:expose
 class ConfigStore {
@@ -12,15 +10,17 @@ class ConfigStore {
 
     var data:Null<DynamicAccess<Dynamic>> = null;
     var persistedData:Null<DynamicAccess<Dynamic>> = null;
-    var mtimeMs:Null<Float> = null;
-    var size:Null<Float> = null;
+    final file:TrackedFile;
     var loadPromise:Null<Promise<Nothing>> = null;
+    /** Stones whose unsaved entry was also changed on disk (by someone else) since it was last read. */
+    final conflicts = new js.lib.Set<String>();
 
     final baselines = new WeakMap<DynamicAccess<Dynamic>>();
     final appliedPatches = new WeakMap<DynamicAccess<Dynamic>>();
 
     public function new(path:String) {
         this.path = path;
+        file = new TrackedFile(path);
     }
 
     public function ensureApplied(stone:AnyStone):Promise<Nothing> {
@@ -42,7 +42,8 @@ class ConfigStore {
         return reload().then(_ -> {
             if (data == null) data = new DynamicAccess();
             data.set(stone.id, patch);
-            return writeFile();
+            conflicts.delete(stone.id); // An explicit patch replaces the entry, whatever is on disk.
+            return persist(false);
         }).then(_ -> {
             applyPatch(stone);
             return null;
@@ -66,19 +67,24 @@ class ConfigStore {
         } else {
             data.remove(stoneId);
         }
+        conflicts.delete(stoneId);
     }
 
-    public function flush():Promise<Nothing> {
-        return writeFile();
+    /**
+     * Persist the current data. External edits are merged in first, per entry (see `doReload`).
+     * Rejects with a `TrackedFile.CONFLICT` error, with `stoneIds`, if an unsaved entry was also
+     * changed on disk, unless `force` — which keeps the in-memory version of those entries; other
+     * entries' external edits survive either way.
+     */
+    public function flush(force:Bool = false):Promise<Nothing> {
+        return reload().then(_ -> persist(force));
     }
 
     public function isDirty(?stoneId:String):Bool {
         if (stoneId != null) {
             var current = if (data != null) data.get(stoneId) else null;
             var persisted = if (persistedData != null) persistedData.get(stoneId) else null;
-            if (current == persisted) return false;
-            if (current == null || persisted == null) return true;
-            return haxe.Json.stringify(current) != haxe.Json.stringify(persisted);
+            return !sameJson(current, persisted);
         }
         // Global dirty check.
         var currentStr = if (data != null) haxe.Json.stringify(data) else "{}";
@@ -99,65 +105,67 @@ class ConfigStore {
     }
 
     function doReload():Promise<Nothing> {
-        return statFile().then(stats -> {
-            if (stats == null) {
-                // File doesn't exist (yet).
-                if (data == null) {
-                    data = new DynamicAccess();
-                    persistedData = new DynamicAccess();
-                }
-                return Promise.resolve(null);
-            }
-            var newMtime:Float = (cast stats).mtimeMs;
-            var newSize:Float = (cast stats).size;
-            if (newMtime == mtimeMs && newSize == size) {
-                return Promise.resolve(null);
-            }
-            return readAndParse().then(_ -> {
-                mtimeMs = newMtime;
-                size = newSize;
+        return file.changed().then(changed -> {
+            if (!changed && data != null) return Promise.resolve(null);
+            return file.read().then(content -> {
+                // File doesn't exist (yet) → empty.
+                merge(content != null ? haxe.Json.parse(content) : new DynamicAccess());
                 return null;
+            }).catchError(e -> {
+                file.forget(); // Unparseable: retry on the next access instead of keeping stale data.
+                return Promise.reject(e);
             });
         });
     }
 
-    function statFile():Promise<Dynamic> {
-        return new Promise((res, rej) -> Fs.stat(path, (err, stats) -> {
-            if (err != null) {
-                var code:String = js.Syntax.code('{0}.code', err);
-                if (code == 'ENOENT') res(null)
-                else rej(err);
-            } else res(stats);
-        }));
-    }
-
-    function readAndParse():Promise<Nothing> {
-        return new Promise((res, rej) -> Fs.readFile(path, { encoding: 'utf-8' }, (err, content) -> {
-            if (err != null) rej(err)
-            else {
-                data = haxe.Json.parse(content);
-                persistedData = deepClone(data);
-                res(null);
+    /**
+     * Merge a fresh disk version in, per entry: clean entries take the disk version, unsaved
+     * (preview) entries are kept. An unsaved entry whose disk version also changed — to something
+     * other than the unsaved value — is recorded as a conflict for `flush` to report.
+     */
+    function merge(disk:DynamicAccess<Dynamic>):Void {
+        if (data == null) {
+            data = disk;
+            persistedData = deepClone(disk);
+            return;
+        }
+        var merged = new DynamicAccess<Dynamic>();
+        var keys = [for (k in disk.keys()) k];
+        for (k in data.keys()) if (!disk.exists(k)) keys.push(k);
+        if (persistedData != null) for (k in persistedData.keys()) if (keys.indexOf(k) == -1) keys.push(k);
+        for (k in keys) {
+            if (!isDirty(k)) {
+                if (disk.exists(k)) merged.set(k, deepClone(disk.get(k)));
+                continue;
             }
-        }));
+            if (data.exists(k)) merged.set(k, data.get(k));
+            var base = persistedData != null ? persistedData.get(k) : null;
+            if (!sameJson(base, disk.get(k)) && !sameJson(data.get(k), disk.get(k))) conflicts.add(k);
+        }
+        data = merged;
+        persistedData = deepClone(disk);
     }
 
-    function writeFile():Promise<Nothing> {
-        return Utils.ensureDirExist(Path.dirname(path)).then(_ -> {
-            var content = haxe.Json.stringify(data, null, '  ');
-            return new Promise((res, rej) -> Fs.writeFile(path, content, err -> {
-                if (err != null) rej(err)
-                else Fs.stat(path, (err, stats) -> {
-                    if (err != null) rej(err)
-                    else {
-                        mtimeMs = (cast stats).mtimeMs;
-                        size = (cast stats).size;
-                        persistedData = deepClone(data);
-                        res(null);
-                    }
-                });
-            }));
+    /** Write the current data, unless an unsaved entry conflicts with the disk and not `force`. */
+    function persist(force:Bool):Promise<Nothing> {
+        var conflicting = [for (k in conflicts) if (isDirty(k)) k];
+        if (conflicting.length > 0 && !force) {
+            var err = TrackedFile.conflictError(path, 'Config entries changed both here and on disk: ${conflicting.join(', ')}.');
+            (cast err).stoneIds = conflicting;
+            return Promise.reject(err);
+        }
+        if (data == null) data = new DynamicAccess();
+        return file.write(haxe.Json.stringify(data, null, '  '), force).then(_ -> {
+            persistedData = deepClone(data);
+            conflicts.clear();
+            return null;
         });
+    }
+
+    static function sameJson(a:Dynamic, b:Dynamic):Bool {
+        if (a == b) return true;
+        if (a == null || b == null) return false;
+        return haxe.Json.stringify(a) == haxe.Json.stringify(b);
     }
 
     function getEntry(stone:AnyStone):Null<DynamicAccess<Dynamic>> {
