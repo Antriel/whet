@@ -1,5 +1,26 @@
 # Data-Driven Stones: StoneStore Design Exploration
 
+> **Status (2026-07): implemented.** This document is the original exploration; the design was
+> landed under epic **whet-1vzf**. What shipped differs from the sketch below on several deliberately
+> frozen points — read those *deltas* as authoritative where they conflict with this doc:
+>
+> 1. The registry registers **builders** (`(key, config) -> {stones, routes?, mainStone?, update?}`),
+>    not bare constructors, so one entry can declare a multi-stone chain. `register(name, Class)` is
+>    single-stone sugar.
+> 2. An **`each` expansion clause** (dir scan + regex + `nameTemplate` + per-file `overrides` +
+>    `$file`/`$name` tokens) generalizes AudioDb's group entries — missing from this doc.
+> 3. **Preview lives on `StoneFactory`** via a retained canonical `dataMap` (`previewEntry` /
+>    `revertEntry`); no DB coupling, no baseline snapshot.
+> 4. Sync is **all-or-nothing validated**, processes entries in **topological order** of `$stone`
+>    refs, and **force-updates dependents of any touched entry** (reference-consistency cascade) —
+>    closing the main correctness hole in the sketch below.
+> 5. `disabled: true` per entry; `mount` drops `"$self"` (the mainStone is implicit).
+> 6. `configSchema()`'s primary value is **sync validation + LLM/schema discovery**, not the generic
+>    editor forms this doc headlines (see epic whet-1vzf and bean whet-uzjf).
+>
+> Implementation: `src/whet/stones/{StoneFactory,StoneStore,StoneRegistry,ConfigReviver,JsonDb,
+> SchemaValidator}.hx`. User-facing docs: `CLAUDE.md` › *Data-Driven Stones*, and `README.md`.
+
 The question: interacting with Whet through the editor (dynamic config, ConfigStore)
 works well — how far can the data-driven direction be pushed, without giving up the
 flexibility of script-based `Project.mjs`?

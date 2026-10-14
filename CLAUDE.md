@@ -45,7 +45,7 @@ The compiled output is `bin/whet.js` which serves as both the CLI entry point an
 - `src/whet/Source.hx`: Generated asset data and file operations
 - `src/whet/SourceHash.hx`: Content hashing utilities
 - `src/whet/cache/`: Caching infrastructure (CacheManager, FileCache, MemoryCache)
-- `src/whet/stones/`: Built-in Stone implementations (Files, JsonStone, RemoteFile, Zip, HaxeBuild)
+- `src/whet/stones/`: Built-in Stone implementations (Files, JsonStone, RemoteFile, Zip, HaxeBuild, JsonDb) plus the data-driven layer (StoneFactory, StoneStore, StoneRegistry, ConfigReviver, SchemaValidator)
 - `src/whet/magic/`: Type system abstractions (StoneId, MaybeArray, RoutePathType, MinimatchType)
 - `externs/`: TypeScript definition conversions for Node.js libraries
 
@@ -85,6 +85,113 @@ Stones automatically:
 - Handle caching based on `cacheStrategy`
 - Merge dependency hashes into their own hash
 - Lock during generation to prevent race conditions
+
+# Data-Driven Stones
+
+Beyond hand-wiring stones in a Project file, whet has a layer where a data file decides *which*
+stones exist and how they connect. Three classes, lowest to highest level:
+
+- **`StoneFactory<D, E>`** (`src/whet/stones/StoneFactory.hx`) — the base lifecycle. It *extends
+  `Router`*, so a factory drops straight into routes as a source. `sync(data, keyFn)` diffs incoming
+  data against the current entry set: new keys → `createEntry`, changed keys → `updateEntry`, absent
+  keys → removed (their stones deregistered from the project); it returns the removed keys for cache
+  cleanup. Subclasses override `createEntry` / `updateEntry` / `addBaseRoutes`. It also owns
+  **preview/revert** (below) via a retained canonical `dataMap`.
+- **`StoneRegistry`** (`src/whet/stones/StoneRegistry.hx`) — a named registry of *builders*, not bare
+  constructors. A registered type is a `StoneBuilder`: `(key, revivedConfig) -> {stones, routes?,
+  mainStone?, update?}`, so one entry can declare a whole multi-stone chain (and skip stages
+  conditionally). `register(name, ctor)` is single-stone sugar; `registerBuilder(name, builder)` is the
+  general form. Built-ins (`Files`, `JsonStone`, `JsonDb`, `Zip`, `RemoteFile`) self-register on first
+  access. When `configSchema()` is a static function on the class, the registry picks it up as the
+  type's schema.
+- **`StoneStore`** (`src/whet/stones/StoneStore.hx`) — a `StoneFactory` whose entries *are* generic
+  JSON stone declarations, backed by a `JsonDb` file (default `stone-store.json`). One JSON file
+  describes an entire data-driven stone graph.
+
+## StoneStore entry format
+
+`stone-store.json` is a JSON array of entries. Per entry:
+
+- `id` (required) — stable, explicit; becomes the entry key and the stone id.
+- `type` (required) — a `StoneRegistry` type name.
+- `config` — the stone config, plain JSON, with reference sentinels revived (see below).
+- `mount` — route the entry's `mainStone` into the store's own Router. Either a string
+  (`"ui/"` = mount under that dir) or an array of `[routeUnder, filter?, extractDirs?]` routes.
+  There is **no `"$self"`** — the entry's mainStone is the implicit target. A `mount` on a type that
+  produces no mainStone is an error.
+- `disabled: true` — the "commented-out stone" workflow; the entry is skipped entirely at sync.
+- `each` + `overrides` — directory-scan expansion (see below).
+
+## `$stone` / `$router` references (config reviver)
+
+Inside `config`, `ConfigReviver` (`src/whet/stones/ConfigReviver.hx`) resolves two sentinels into live
+objects:
+
+- `{ "$stone": "<id>" }` → the live stone with that id. Resolution checks sibling store entries first
+  (their `mainStone`), then falls back to `project.getStone(id)`, so entries can reference each other
+  and script-defined stones regardless of order.
+- `{ "$router": <routes> }` → `new Router(<routes>)`, reviving nested `$stone` refs inside the route
+  arrays. Plain strings in routes pass through unchanged (a string is already a `Files` shortcut).
+
+A sentinel object must have exactly that one key. Everything else is plain JSON, which is what stone
+configs already are.
+
+Because entries reference each other by id, `syncEntries()`:
+- **validates all-or-nothing** — structure + per-type `configSchema()` are checked up front; any problem
+  aborts sync leaving current stones untouched, with all findings aggregated into one path-specific
+  error message.
+- **topologically sorts** entries by `$stone` refs (a cycle throws, naming the path).
+- **force-updates dependents of any touched entry** (reference-consistency cascade), so an unchanged
+  entry never keeps a dead instance of a recreated dependency. The default update is an id-stable
+  destroy+recreate (same id + same config → same cache keys, so it's cache-neutral); a builder can
+  supply an `update` hook to mutate in place instead.
+
+## `each` expansion
+
+An entry with an `each` clause is a *group*: `each.dir` is scanned for files matching the
+`each.pattern` regex, producing one sub-entry per match, keyed `groupId/name` (name via
+`each.nameTemplate`). Sparse per-file `overrides` (keyed by derived name) are deep-merged over the base
+`config`, and the tokens `$file` / `$name` are substituted throughout `config`, `$router` route arrays,
+and `mount`. Scans run **only** during `syncEntries()`, never during `previewEntry` (a perf
+invariant). `getExpansion(groupId)` exposes the last scan's files+names for editor tooling.
+
+## Preview semantics
+
+`StoneFactory` keeps a canonical `dataMap` (last-synced data per key). `previewEntry(key, data)`
+mutates the *live* stones for a key without recording it as canonical — no regeneration is forced;
+whet's hash cache regenerates the affected sub-stones lazily on next `getSource()` because their
+configs (and thus hashes) changed. `revertEntry(key)` re-applies the canonical `dataMap` entry (or
+removes a preview-created key). A completed `sync()` always reasserts canonical state over any lingering
+previews. `StoneStore` extends both with the dependent cascade + route rebuild so previews stay
+reference-consistent. This is the mechanism behind live editing of an unsaved config in the editor —
+no DB coupling, no baseline snapshot.
+
+## Script rule: reference the store, never its inner stones
+
+A Project file mounts the store as a route source and does nothing else:
+
+```js
+const store = await new StoneStore({ id: 'assets-store' }).load('assets/stone-store.json');
+bundle.route([['/', store]]); // the store IS a Router
+```
+
+Never capture an inner store-created stone instance in script: recreate-on-sync invalidates captured
+instances by design. Consume entry outputs through routes (or a `$stone` ref from another entry).
+
+## Hash semantics (StoneFactory extends Router)
+
+Because a factory *is* a `Router`, its `getHash()` is Router's: for the unfiltered case it binds each
+route's static structure (mount / filter / extractDirs) to that route's source hash and merges the
+per-route tokens order-independently — no id enumeration, so member stones without `list()` aren't
+forced to generate. In short, a factory's hash tracks its current route set and each routed stone's
+hash; it has no extra self-hash of its own. (`Project.removeStone` deliberately doesn't clear cache, so
+stones from removed entries age out via cache durability rules unless you pass the removed keys from
+`sync` to `cache.clearStone` — `StoneStore` does this when constructed with `clearCacheOnRemove: true`.)
+
+## CLI: `whet stone-schema [type]`
+
+Prints the registered types (no arg) or a type's `configSchema()` JSON — so an agent can discover
+what's editable and legal without reading source.
 
 # Testing
 

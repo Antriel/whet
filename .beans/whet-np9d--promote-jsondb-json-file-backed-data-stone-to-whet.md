@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-07-23T07:06:43Z
-updated_at: 2026-07-23T07:44:05Z
+updated_at: 2026-10-14T08:28:41Z
 parent: whet-1vzf
 ---
 
@@ -45,3 +45,5 @@ Promoted `JsonDb` into whet core: `src/whet/stones/JsonDb.hx` (`class JsonDb ext
 Note: the discovered indent detail — `haxe.Json.stringify(arr, null, '  ')` uses a 2-space *step*, so array-element object props sit at 4 spaces (asserted in the test).
 
 Follow-up (scry repo, out of scope here): `AudioDb.loadDb` switches to core JsonDb and deletes its private copy.
+
+Correction (2026-10-14): generateHash was dropped before commit d5b31f4 and never shipped. Deliberate: generate is one stringify, so a hash costs the same. The summary above is wrong on that point.

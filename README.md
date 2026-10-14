@@ -34,6 +34,41 @@ Some stones might provide helper methods to modify the configuration after it wa
 
 ...
 
+## Data-Driven Stones
+
+Normally a project file wires stones by hand. When a *data* file should instead decide **which** stones
+exist and how they connect, whet has a data-driven layer:
+
+- **StoneFactory** — the base lifecycle for a set of stones driven by external data. It extends
+  `Router`, so a factory is itself a route source. `sync(data, keyFn)` creates/updates/removes entries
+  to match the data (returning removed keys for cache cleanup), and it supports live **preview/revert**
+  of an unsaved config against a retained canonical baseline.
+- **StoneRegistry** — a named registry mapping a type name (`"Files"`, `"Zip"`, a project's own
+  stone…) to a *builder* that produces one or more stones. Built-ins self-register; project and library
+  stones register at import time.
+- **StoneStore** — a `StoneFactory` whose entries are generic JSON declarations, backed by a JSON file
+  (default `stone-store.json`). One file can describe an entire stone graph, so adding an asset folder
+  or toggling a stage becomes a data edit rather than a code change.
+
+An entry is `{ id, type, config, mount?, disabled?, each? }`. Inside `config`, the sentinels
+`{ "$stone": "id" }` and `{ "$router": [...] }` are revived into the live stone / a `Router` — this is
+how one entry references another, so entries are synced in dependency (topological) order and validated
+all-or-nothing before anything is touched. An `each` clause expands a directory scan into one sub-entry
+per matching file (with per-file `overrides` and `$file`/`$name` tokens).
+
+A script mounts the store and nothing more — it references the store (or entry outputs via routes),
+never the inner stones, which are recreated on sync by design:
+
+```js
+const store = await new StoneStore({ id: 'assets-store' }).load('assets/stone-store.json');
+bundle.route([['/', store]]); // the store IS a Router
+```
+
+`whet stone-schema [type]` prints the registered types, or one type's config schema.
+
+See `CLAUDE.md` for the full entry format and semantics, and
+`docs/ecosystem-review-2026-07/03-data-driven-stones.md` for the design rationale.
+
 ## Core Concepts
 
 Project files should have no side effects, unless some of their commands are executed. They only process the active configuration, initializing the available commands.
