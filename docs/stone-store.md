@@ -64,11 +64,58 @@ A sentinel object must have exactly that one key. A `$stone` reference cycle is 
 ## `each` expansion
 
 An entry with `each` is a group. `each.dir` is scanned for files matching the `each.pattern` regex,
-producing one sub-entry per match keyed `groupId/name` (name from `each.nameTemplate`). `overrides`,
-keyed by derived name, are deep-merged over the base `config`. The tokens `$file` / `$name` are
-substituted throughout `config`, `$router` route arrays and `mount`.
+producing one sub-entry per match. Each match gets a name: `each.nameTemplate` with `$1`… replaced
+by the pattern's captures, else the first capture, else the file stem.
+
+```jsonc
+{ "id": "hurt", "type": "audio.asset",
+  "each": { "dir": "assets/audio/hurt/", "pattern": "(.*)\\.wav$", "nameTemplate": "hurt_$1" },
+  "config": { "source": "$file", "pipeline": [{ "id": "norm", "type": "loudnorm", "target": -16 }] },
+  "overrides": { "hurt_3": { "pipeline": [{ "id": "norm", "target": -12 }] } } }
+```
+
+**Keys.** With a `nameTemplate`, the name *is* the sub-entry's key (`hurt_3`), so moving a file to
+another group or renaming the group doesn't rename the asset. All keys share one namespace; two
+entries producing the same key fail the sync. Without a template the key is `groupId/name`
+(`hurt/3`), so bare file stems can't collide by accident.
+
+**Overrides**, keyed by name (= the key when templated), merge over the base `config`:
+
+- Objects merge recursively; strings, numbers and plain arrays replace.
+- An array whose base items all carry a string `id` merges **by id**. Each override item merges into
+  the base item with the same id, and any field may be overridden, `type` included. The base owns
+  membership and order: an override can't add, drop or reorder items. To opt a file out of an item,
+  use a flag the type understands (e.g. `enabled: false`). Override items with an unknown id or no
+  id are warned about and ignored. Ids must be written in the file; StoneStore never generates them.
+
+Then the tokens `$file` / `$name` are substituted throughout `config`, `$router` route arrays and
+`mount`.
 
 ## Validation
 
 Sync is all-or-nothing: structure and each type's `configSchema()` are checked up front. Any problem
 aborts the sync with the current stones untouched, and every finding is reported in one error.
+Schemas see expanded entries, so a group's base `config` is only checked through its files; a group
+that matches no file isn't schema-checked at all.
+
+## Editors: previewing unsaved entries
+
+`store.previewEntry(key, flatEntry)` / `revertEntry(key)` apply a config to live stones without
+saving. For an unsaved *raw* entry (as authored, `each` and `overrides` included), let the store do
+the expansion instead of re-implementing the merge rules:
+
+- `await store.expandRaw(rawEntry)` → the flat entries (`{ key, type, config, mount }`) a sync would
+  build, with merged, token-substituted configs. Touches no stone.
+- `await store.previewRaw(rawEntry, ?keys)` → same, then previews those entries (or only `keys`).
+  Resolves with *all* expanded entries, for showing effective configs.
+
+Both validate first (structure and schema), so a broken edit rejects before anything changes. A
+group reuses the last sync's directory scan of its id; it rescans only if `each` itself was edited
+or the group isn't synced yet.
+
+## Builder `update` hooks
+
+A `StoneRegistry.registerBuilder` builder may return an `update(key, revivedConfig, existing)` hook
+that applies a changed config to the existing stones in place. If the hook can't (the change alters
+which stones exist), it returns `false` without mutating anything, and the entry is recreated, as for
+a type with no hook.

@@ -668,3 +668,249 @@ it("refresh(): direct entry readers outside the router pick up an external edit"
   assert.equal(store.dataMap.has("b"), true);
   assert.equal(await store.refresh(), false);
 });
+
+// --- Merge-by-id overrides, template keys, update → recreate, raw-entry expansion (whet-8alw) ---
+
+async function captureWarnings(fn) {
+  const warnings = [];
+  const orig = Log.log;
+  Log.log = (level, ...args) => {
+    if (level === 40) warnings.push(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+    return orig(level, ...args);
+  };
+  try {
+    await fn();
+  } finally {
+    Log.log = orig;
+  }
+  return warnings;
+}
+
+it("each: an override merges arrays of id'd items by id; the base owns membership and order", async () => {
+  env = await createTestProject("store-merge-by-id");
+  await env.write("d/a.txt", "A");
+  await env.write("d/b.txt", "B");
+  capturedConfigs.clear();
+
+  const base = [
+    { id: "gain", type: "gain", db: 0, opts: { keep: 1, val: "x" } },
+    { id: "norm", type: "loudnorm", target: -16 },
+  ];
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "g",
+      type: "Capture",
+      each: { dir: "d/", pattern: "(.*)\\.txt$" },
+      config: { blocks: base, tags: ["x", "y"] },
+      overrides: {
+        b: {
+          // Out of order, `type` overridden, a nested object deep-merged; plus an unknown id and an
+          // id-less item, both of which are ignored.
+          blocks: [
+            { id: "norm", target: -12, enabled: false },
+            { id: "gain", type: "sox", opts: { val: "y" } },
+            { id: "extra", type: "gain" },
+            { type: "gain" },
+          ],
+          tags: ["z"],
+        },
+      },
+    },
+  ];
+  const warnings = await captureWarnings(() => store.syncEntries());
+
+  assert.deepEqual(capturedConfigs.get("g/a").blocks, base);
+  assert.deepEqual(capturedConfigs.get("g/b").blocks, [
+    { id: "gain", type: "sox", db: 0, opts: { keep: 1, val: "y" } },
+    { id: "norm", type: "loudnorm", target: -12, enabled: false },
+  ]);
+  // Arrays without ids still replace.
+  assert.deepEqual(capturedConfigs.get("g/b").tags, ["z"]);
+  // The authored base is untouched.
+  assert.deepEqual(store.db.data[0].config.blocks[0], { id: "gain", type: "gain", db: 0, opts: { keep: 1, val: "x" } });
+  assert.ok(warnings.some((w) => /"b" @ blocks: no base item has id "extra"/.test(w)), JSON.stringify(warnings));
+  assert.ok(warnings.some((w) => /"b" @ blocks\[3\]: item has no "id"/.test(w)), JSON.stringify(warnings));
+});
+
+it("each: by-id merge recurses into nested id'd arrays", async () => {
+  env = await createTestProject("store-merge-by-id-nested");
+  await env.write("d/a.txt", "A");
+  capturedConfigs.clear();
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "g",
+      type: "Capture",
+      each: { dir: "d/", pattern: "(.*)\\.txt$" },
+      config: { outer: [{ id: "o", inner: [{ id: "i1", v: 1 }, { id: "i2", v: 2 }] }] },
+      overrides: { a: { outer: [{ id: "o", inner: [{ id: "i2", v: 20 }] }] } },
+    },
+  ];
+  await store.syncEntries();
+  assert.deepEqual(capturedConfigs.get("g/a").outer, [{ id: "o", inner: [{ id: "i1", v: 1 }, { id: "i2", v: 20 }] }]);
+});
+
+it("each: with a nameTemplate its expansion is the key verbatim; without one it stays groupId/name", async () => {
+  env = await createTestProject("store-template-key");
+  await env.write("hurt/1.txt", "H1");
+  await env.write("hurt/2.txt", "H2");
+  await env.write("land/1.txt", "L1");
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    {
+      id: "hurt",
+      type: "FileEcho",
+      each: { dir: "hurt/", pattern: "(.*)\\.txt$", nameTemplate: "hurt_$1" },
+      config: { file: "$file" },
+      overrides: { hurt_2: { file: "land/1.txt" } }, // keyed by the derived name, which is the key
+    },
+    { id: "land", type: "FileEcho", each: { dir: "land/", pattern: "(.*)\\.txt$" }, config: { file: "$file" } },
+  ];
+  await store.syncEntries();
+
+  assert.deepEqual([...store.dataMap.keys()], ["hurt_1", "hurt_2", "land/1"]);
+  assert.equal(env.project.getStone("hurt_1").config.file, "hurt/1.txt");
+  assert.equal(env.project.getStone("hurt_2").config.file, "land/1.txt");
+  assert.ok(env.project.getStone("land/1"));
+});
+
+it("each: template keys share one namespace, so a cross-group clash fails the sync", async () => {
+  env = await createTestProject("store-template-collision");
+  await env.write("a/x.txt", "A");
+  await env.write("b/x.txt", "B");
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [
+    { id: "ga", type: "FileEcho", each: { dir: "a/", pattern: "(.*)\\.txt$", nameTemplate: "$1" }, config: { file: "$file" } },
+    { id: "gb", type: "FileEcho", each: { dir: "b/", pattern: "(.*)\\.txt$", nameTemplate: "$1" }, config: { file: "$file" } },
+  ];
+  await assert.rejects(store.syncEntries(), /expanded key "x" produced 2× \(from: a\/x\.txt, b\/x\.txt\)/);
+});
+
+it("a builder's update hook returning false recreates the entry; otherwise it updates in place", async () => {
+  env = await createTestProject("store-update-false");
+  let builds = 0;
+  StoneRegistry.registerBuilder("Hooked", (key, config) => {
+    builds++;
+    const s = new MockStone({ id: key, outputs: [{ id: `${key}.txt`, content: config.content }] });
+    return {
+      stones: [s],
+      mainStone: s,
+      shape: config.shape,
+      update: (k, cfg, existing) => {
+        if (cfg.shape !== existing.shape) return false;
+        existing.mainStone.config.outputs = [{ id: `${k}.txt`, content: cfg.content }];
+      },
+    };
+  });
+
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [{ id: "h", type: "Hooked", config: { shape: 1, content: "one" }, mount: "h/" }];
+  await store.syncEntries();
+  const first = env.project.getStone("h");
+  assert.equal(builds, 1);
+
+  // Param change: in place.
+  store.db.data = [{ id: "h", type: "Hooked", config: { shape: 1, content: "two" }, mount: "h/" }];
+  await store.syncEntries();
+  assert.equal(builds, 1);
+  assert.equal(env.project.getStone("h"), first);
+  assert.equal(await store.getString("h/h.txt"), "two");
+
+  // Shape change: the hook declines, the entry is recreated (fresh stone, same id, mount kept).
+  store.db.data = [{ id: "h", type: "Hooked", config: { shape: 2, content: "three" }, mount: "h/" }];
+  await store.syncEntries();
+  assert.equal(builds, 2);
+  assert.notEqual(env.project.getStone("h"), first);
+  assert.equal(env.project.stones.filter((s) => s.id === "h").length, 1);
+  assert.equal(await store.getString("h/h.txt"), "three");
+});
+
+it("expandRaw expands an unsaved group edit against the cached scan, touching no stone", async () => {
+  env = await createTestProject("store-expand-raw");
+  await env.write("d/a.txt", "A");
+  await env.write("d/b.txt", "B");
+
+  let scanCount = 0;
+  const origScan = Utils.scanFiles;
+  Utils.scanFiles = (...a) => {
+    scanCount++;
+    return origScan.apply(Utils, a);
+  };
+  try {
+    const group = {
+      id: "g",
+      type: "Capture",
+      each: { dir: "d/", pattern: "(.*)\\.txt$" },
+      config: { file: "$file", blocks: [{ id: "x", v: 1 }] },
+    };
+    const store = new StoneStore({ project: env.project });
+    store.db.data = [group];
+    await store.syncEntries();
+    assert.equal(scanCount, 1);
+    const stonesBefore = env.project.stones.slice();
+
+    const edited = { ...group, overrides: { b: { blocks: [{ id: "x", v: 2 }] } } };
+    const flat = await store.expandRaw(edited);
+    assert.equal(scanCount, 1, "same each params: no rescan");
+    assert.deepEqual(
+      flat.map((e) => [e.key, e.type, e.config]),
+      [
+        ["g/a", "Capture", { file: "d/a.txt", blocks: [{ id: "x", v: 1 }] }],
+        ["g/b", "Capture", { file: "d/b.txt", blocks: [{ id: "x", v: 2 }] }],
+      ],
+    );
+    assert.deepEqual(env.project.stones, stonesBefore);
+    assert.equal(store.isPreviewDirty(), false);
+
+    // A changed pattern can't reuse the cached scan...
+    const narrowed = await store.expandRaw({ ...group, each: { dir: "d/", pattern: "(a)\\.txt$" } });
+    assert.equal(scanCount, 2);
+    assert.deepEqual(narrowed.map((e) => e.key), ["g/a"]);
+    // ...and doesn't replace it: the canonical scan is still the sync's.
+    assert.deepEqual(store.getExpansion("g").names, ["a", "b"]);
+
+    assert.deepEqual(await store.expandRaw({ ...group, disabled: true }), []);
+    const single = await store.expandRaw({ id: "s", type: "Capture", config: { v: 1 } });
+    assert.deepEqual(single.map((e) => [e.key, e.config]), [["s", { v: 1 }]]);
+    await assert.rejects(store.expandRaw({ id: "bad", type: "NoSuchType" }), /unknown type "NoSuchType"/);
+  } finally {
+    Utils.scanFiles = origScan;
+  }
+});
+
+it("previewRaw previews the chosen expanded keys, returns all of them, and reverts", async () => {
+  env = await createTestProject("store-preview-raw");
+  await env.write("d/a.txt", "A");
+  await env.write("d/b.txt", "B");
+  await env.write("alt.txt", "ALT");
+
+  const group = {
+    id: "g",
+    type: "FileEcho",
+    each: { dir: "d/", pattern: "(.*)\\.txt$", nameTemplate: "s_$1" },
+    config: { file: "$file" },
+    mount: "$name.out",
+  };
+  const store = new StoneStore({ project: env.project });
+  store.db.data = [group];
+  await store.syncEntries();
+
+  const edited = { ...group, overrides: { s_a: { file: "alt.txt" }, s_b: { file: "alt.txt" } } };
+  const flat = await store.previewRaw(edited, ["s_a"]);
+  assert.deepEqual(flat.map((e) => [e.key, e.config.file]), [["s_a", "alt.txt"], ["s_b", "alt.txt"]]);
+  assert.equal(store.isPreviewDirty("s_a"), true);
+  assert.equal(store.isPreviewDirty("s_b"), false);
+  assert.equal(await store.getString("s_a.out"), "ALT");
+  assert.equal(await store.getString("s_b.out"), "B");
+
+  store.revertAllPreviews();
+  assert.equal(await store.getString("s_a.out"), "A");
+
+  // An invalid edit rejects before touching anything.
+  await assert.rejects(store.previewRaw({ ...group, each: { dir: "d/", pattern: "(" } }), /not a valid RegExp/);
+  assert.equal(store.isPreviewDirty(), false);
+});

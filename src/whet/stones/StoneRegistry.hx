@@ -95,8 +95,12 @@ class StoneRegistry {
 typedef BuiltEntry = FactoryEntry & {
     /** The primary stone for this entry (implicit `"$self"` mount target). */
     var ?mainStone:AnyStone;
-    /** Optional in-place update hook for a re-synced config (skips destroy+recreate). */
-    var ?update:(key:String, revivedConfig:Dynamic, existing:Dynamic)->Void;
+    /**
+     * Optional in-place update hook for a re-synced config (skips destroy+recreate). Return `false`
+     * (before mutating anything) when the change can't be applied in place, e.g. it alters which
+     * stones exist; the entry is then recreated as for a type without a hook.
+     */
+    var ?update:(key:String, revivedConfig:Dynamic, existing:Dynamic)->Null<Bool>;
 };
 
 typedef StoneBuilder = (key:String, revivedConfig:Dynamic)->BuiltEntry;

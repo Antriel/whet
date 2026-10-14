@@ -1,10 +1,11 @@
 ---
 # whet-8alw
 title: 'StoneStore: close the gaps its first consumer (AudioDb) hit — merge-by-id overrides, nameTemplate keys, rebuild from update'
-status: todo
+status: in-progress
 type: feature
+priority: normal
 created_at: 2026-10-14T12:41:21Z
-updated_at: 2026-10-14T12:41:21Z
+updated_at: 2026-10-14T12:52:09Z
 parent: whet-1vzf
 ---
 
@@ -117,10 +118,55 @@ the expanded configs back too, for display (the effective per-file pipeline). De
 
 ## Todos
 
-- [ ] Provenance: confirm or correct the timeline above; record the key-prefix reason if one exists
-- [ ] Merge-by-id overrides (own merge fn; ids required; base owns membership/order; `type` overridable; unknown id warns)
-- [ ] `nameTemplate` expansion is the key; default stays `<id>/<stem>`
-- [ ] Builder `update` may return `false` → recreate
-- [ ] Decide + implement the unsaved-entry expansion API (or record why not)
-- [ ] Tests (`test/stone-store.test.mjs`); `docs/stone-store.md`; publish (0.7.3 beta)
-- [ ] Note in scry-app-dxgt what landed and under which names
+- [x] Provenance: confirm or correct the timeline above; record the key-prefix reason if one exists
+- [x] Merge-by-id overrides (own merge fn; ids required; base owns membership/order; `type` overridable; unknown id warns)
+- [x] `nameTemplate` expansion is the key; default stays `<id>/<stem>`
+- [x] Builder `update` may return `false` → recreate
+- [x] Decide + implement the unsaved-entry expansion API (or record why not)
+- [x] Tests (`test/stone-store.test.mjs`); `docs/stone-store.md`; publish (0.7.3 beta)
+- [x] Note in scry-app-dxgt what landed and under which names
+
+## Provenance findings (2026-10-14)
+
+Timeline **confirmed**:
+- scry `913621b` (2026-07-22, "audio per group overrides"): AudioDb's overrides are plain nested
+  objects merged by a local `deepMerge` that replaces arrays; assets keyed by bare name
+  (`this.sync(flatEntries, e => e.name)`).
+- whet `516e85f` (2026-07-23, whet-qwye) ported that, reusing `ConfigStore.deepMerge`. Array-replace
+  was faithful to AudioDb as it was that day.
+- scry `08d9c79` (2026-07-28, "audio pipeline", scry-app-ezol) introduced `pipeline` and
+  `mergePipeline`. So gap 1 is drift after the snapshot.
+
+Key prefix: **no recorded reason.** It's in qwye's spec (`key = entry.id + '/' + names[i]`), but not
+in doc 03, the epic or the commit. It also contradicts qwye's own premise ("semantics intentionally
+identical to AudioDb"). The likely unstated reason is that a StoneStore key is a project-wide stone id
+for single-stone types (`register` builds `{...config, id: key}`), so bare stems would collide.
+AudioDb didn't hit that because its builder namespaces its own stones (`audio/${key}:wav`). That's
+the reason the template-less default keeps, so it doesn't argue against gap 2.
+
+## Decision: unsaved-entry expansion API
+
+The server expands, as the scry side leaned. `StoneStore.expandRaw(rawEntry) -> Promise<FlatEntryData[]>`
+and `StoneStore.previewRaw(rawEntry, ?keys) -> Promise<FlatEntryData[]>` (all expanded entries, for
+showing effective configs). Both validate structure and schema first, so a broken edit rejects before
+any stone changes. A group reuses the last sync's scan of its id while `each.dir/pattern/nameTemplate`
+are unchanged (perf invariant). If `each` itself changed, or the group was never synced, it scans,
+without caching the result or touching `getExpansion`. Sync and `expandRaw` share one pure
+`expandGroup`, so there is one implementation of keys, merge and tokens.
+
+## Summary of Changes
+
+- `StoneStore.mergeOverride`: StoneStore's own override merge. `ConfigStore.deepMerge` is
+  unchanged. A base array whose items all carry a string `id` merges by id. Base membership and order
+  win, any field (incl. `type`) is overridable, it recurses into nested id'd arrays, and unknown or
+  missing ids warn (with group/file/path) and are ignored. Other arrays replace.
+  - Judgment call: a base with **no** such field takes the override's array as-is, the same as any
+    key the base lacks. "Base owns membership" applies where the base has a list.
+  - Per-item merge is deep, where audio's `mergePipeline` was a shallow `{...b, ...params}`.
+- `each` key: the `nameTemplate` expansion verbatim when given, else `groupId/name`.
+- `BuiltEntry.update` may return `false`; `updateEntry` then does the id-stable remove + `createEntry`.
+- `expandRaw` / `previewRaw` (above). `expandEntries` was refactored into `singleEntry`, `scanGroup`,
+  `expandGroup` and `assertUniqueKeys`.
+- Docs: `docs/stone-store.md` (keys, override rules, the zero-match schema note, editor preview API,
+  update hooks); `src/whet/stones/CLAUDE.md` invariants; whet skill authoring reference.
+- 7 new tests in `test/stone-store.test.mjs`; full suite 286/286.

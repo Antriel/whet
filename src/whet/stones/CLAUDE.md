@@ -33,9 +33,14 @@ the generate path write the file.
 - Topologically sort by `$stone` refs; a cycle throws naming the path.
 - Force-update dependents of any touched entry, so no unchanged entry keeps a dead instance of a
   recreated dependency. Default update is id-stable destroy+recreate (same id + config → same cache
-  keys, so cache-neutral); a builder's `update` hook can mutate in place instead.
+  keys, so cache-neutral); a builder's `update` hook can mutate in place instead, or return `false`
+  to get the recreate.
 - `each` directory scans run **only** in `syncEntries()`, never in `previewEntry` (perf invariant).
-  `getExpansion(groupId)` exposes the last scan for editor tooling.
+  `getExpansion(groupId)` exposes the last scan for editor tooling. `expandRaw` reuses that scan
+  while the group's `each` params are unchanged, and never writes to it.
+- Group overrides merge with `mergeOverride` (by-id arrays), **not** `ConfigStore.deepMerge`:
+  ConfigStore patches are a separate contract, keep the two independent. `expandGroup` is pure (no
+  I/O) so sync and `expandRaw` share one implementation of keys, merge and tokens.
 
 ## Preview / revert
 

@@ -57,6 +57,9 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
      */
     final groupMatches:js.lib.Map<String, {files:Array<String>, names:Array<String>}> = new js.lib.Map();
 
+    /** `scanParamsOf(each)` per group in `groupMatches`, so `expandRaw` knows when the cached scan still applies. */
+    final groupScanParams:js.lib.Map<String, String> = new js.lib.Map();
+
     public function new(?config:StoneStoreConfig) {
         super();
         if (config == null) config = {};
@@ -144,10 +147,8 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
 
     /**
      * Expand raw entries into the flat list `sync` consumes. Entries without an `each` clause pass
-     * through 1:1. An `each` clause scans `each.dir` for files matching `each.pattern`, spawning one
-     * sub-entry per match keyed `groupId/name`, with sparse per-file `overrides` deep-merged over
-     * `config` and `$file`/`$name` tokens substituted throughout (config, `$router` route arrays, and
-     * mount). Scans run only here — never during `previewEntry` (the perf invariant).
+     * through 1:1. An `each` clause scans `each.dir` (see `expandGroup` for keys, overrides and
+     * tokens). Scans run only here — never during `previewEntry` (the perf invariant).
      *
      * `config` for non-each entries is passed by reference: `db.data` is the owned canonical baseline,
      * and `dataMap` is a live view of it (revert re-applies `db.data`, so no snapshot is kept — see the
@@ -157,14 +158,9 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
      */
     function expandEntries(entries:Array<Dynamic>):Promise<Array<FlatEntryData>> {
         groupMatches.clear();
-        var root:String = cast project.rootDir;
+        groupScanParams.clear();
         var out:Array<FlatEntryData> = [];
-        var keyFiles = new Map<String, Array<String>>(); // for collision reporting
-        function record(key:String, file:String, fe:FlatEntryData):Void {
-            out.push(fe);
-            if (!keyFiles.exists(key)) keyFiles.set(key, []);
-            keyFiles.get(key).push(file);
-        }
+        var sources:Array<String> = []; // parallel to `out`, for collision reporting
 
         // Chain scans so groupMatches / output order stay deterministic (entries in db order).
         var chain:Promise<Nothing> = Promise.resolve(Nil);
@@ -172,54 +168,147 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
             var entry = e;
             chain = chain.then(_ -> {
                 if (entry.each == null) {
-                    record((entry.id:String), '(single entry)', {
-                        key: (entry.id:String),
-                        type: (entry.type:String),
-                        config: entry.config != null ? entry.config : {},
-                        mount: entry.mount,
-                    });
+                    out.push(singleEntry(entry));
+                    sources.push('(single entry)');
                     return Promise.resolve(Nil);
                 }
-                var each = entry.each;
-                return Utils.scanFiles(root, each.dir, each.pattern, each.nameTemplate).then(matches -> {
+                return scanGroup(entry.each).then(matches -> {
                     groupMatches.set((entry.id:String), matches);
-                    // Typo guard: an override keyed by a name no file produced is almost always a typo.
-                    if (entry.overrides != null) {
-                        var ov:DynamicAccess<Dynamic> = entry.overrides;
-                        for (ovKey in ov.keys())
-                            if (matches.names.indexOf(ovKey) == -1)
-                                Log.warn('StoneStore group "${entry.id}" has an override for "$ovKey", which '
-                                    + 'matches no scanned file (typo?).', { group: (entry.id:String) });
-                    }
-                    for (i in 0...matches.files.length) {
-                        var name = matches.names[i];
-                        var file = matches.files[i];
-                        var base:Dynamic = entry.config != null ? entry.config : {};
-                        var ovr:Dynamic = entry.overrides != null ? Reflect.field(entry.overrides, name) : null;
-                        var raw = ovr != null ? ConfigStore.deepMerge(base, ovr) : base;
-                        var key = (entry.id:String) + '/' + name;
-                        record(key, file, {
-                            key: key,
-                            type: (entry.type:String),
-                            config: substituteTokens(raw, file, name),
-                            mount: substituteTokens(entry.mount, file, name),
-                        });
-                    }
+                    groupScanParams.set((entry.id:String), scanParamsOf(entry.each));
+                    for (fe in expandGroup(entry, matches)) out.push(fe);
+                    for (f in matches.files) sources.push(f);
                     return Nil;
                 });
             });
         }
 
         return chain.then(_ -> {
-            // Collision: any key produced by more than one (group/single) source.
-            var errors:Array<String> = [];
-            for (key => fs in keyFiles)
-                if (fs.length > 1)
-                    errors.push('expanded key "$key" produced ${fs.length}× (from: ' + fs.join(', ') + ')');
-            if (errors.length > 0)
-                throw new js.lib.Error('StoneStore expansion failed:\n - ' + errors.join('\n - '));
+            assertUniqueKeys(out, sources);
             return out;
         });
+    }
+
+    /** A non-`each` entry as the flat entry `sync` consumes (config by reference, see `expandEntries`). */
+    static function singleEntry(entry:Dynamic):FlatEntryData {
+        return {
+            key: (entry.id:String),
+            type: (entry.type:String),
+            config: entry.config != null ? entry.config : {},
+            mount: entry.mount,
+        };
+    }
+
+    function scanGroup(each:Dynamic):Promise<{files:Array<String>, names:Array<String>}> {
+        return Utils.scanFiles(cast project.rootDir, each.dir, each.pattern, each.nameTemplate);
+    }
+
+    /** Identity of an `each` scan: a cached scan is reusable only while these are unchanged. */
+    static function scanParamsOf(each:Dynamic):String {
+        return haxe.Json.stringify([each.dir, each.pattern, each.nameTemplate]);
+    }
+
+    /**
+     * Expand one `each` group over already-scanned `matches` (no I/O), one flat entry per file, in
+     * `matches.files` order. The key is the `each.nameTemplate` expansion verbatim when a template is
+     * given, else `groupId/name` (bare stems as project-wide ids would collide by accident). Sparse
+     * per-file `overrides`, keyed by derived name, merge over `config` (`mergeOverride`), then
+     * `$file`/`$name` are substituted throughout (config, `$router` route arrays, and mount).
+     */
+    static function expandGroup(entry:Dynamic, matches:{files:Array<String>, names:Array<String>}):Array<FlatEntryData> {
+        var groupId:String = entry.id;
+        // Typo guard: an override keyed by a name no file produced is almost always a typo.
+        if (entry.overrides != null) {
+            var ov:DynamicAccess<Dynamic> = entry.overrides;
+            for (ovKey in ov.keys())
+                if (matches.names.indexOf(ovKey) == -1)
+                    Log.warn('StoneStore group "$groupId" has an override for "$ovKey", which '
+                        + 'matches no scanned file (typo?).', { group: groupId });
+        }
+        var templated = entry.each.nameTemplate != null;
+        var out:Array<FlatEntryData> = [];
+        for (i in 0...matches.files.length) {
+            var name = matches.names[i];
+            var file = matches.files[i];
+            var base:Dynamic = entry.config != null ? entry.config : {};
+            var ovr:Dynamic = entry.overrides != null ? Reflect.field(entry.overrides, name) : null;
+            var raw = ovr == null ? base : mergeOverride(base, ovr, '', (path, msg) ->
+                Log.warn('StoneStore group "$groupId" override for "$name"' + (path != '' ? ' @ $path' : '')
+                    + ': $msg', { group: groupId }));
+            var key = templated ? name : groupId + '/' + name;
+            out.push({
+                key: key,
+                type: (entry.type:String),
+                config: substituteTokens(raw, file, name),
+                mount: substituteTokens(entry.mount, file, name),
+            });
+        }
+        return out;
+    }
+
+    /** Throws one aggregated error naming every key produced by more than one source. */
+    static function assertUniqueKeys(flat:Array<FlatEntryData>, sources:Array<String>):Void {
+        var keySources = new Map<String, Array<String>>();
+        for (i in 0...flat.length) {
+            var key = flat[i].key;
+            if (!keySources.exists(key)) keySources.set(key, []);
+            keySources.get(key).push(sources[i]);
+        }
+        var errors:Array<String> = [];
+        for (key => fs in keySources)
+            if (fs.length > 1)
+                errors.push('expanded key "$key" produced ${fs.length}× (from: ' + fs.join(', ') + ')');
+        if (errors.length > 0)
+            throw new js.lib.Error('StoneStore expansion failed:\n - ' + errors.join('\n - '));
+    }
+
+    /**
+     * Merge a per-file override over a group's base config. Like `ConfigStore.deepMerge` (plain
+     * objects recurse, everything else replaces), except for a base array whose items are all objects
+     * with a string `id`: that merges **by id**. Each override item deep-merges (this same function)
+     * into the base item with its id, any field included (`type` too). The base owns membership and
+     * order: an override item with no id, or an id no base item has, is warned about and ignored.
+     * Arrays without ids still replace. Deliberately not `ConfigStore.deepMerge`, whose patches are
+     * a separate contract. Never mutates its inputs; may share unpatched subtrees with `base`.
+     */
+    static function mergeOverride(base:Dynamic, patch:Dynamic, path:String, warn:(path:String, msg:String)->Void):Dynamic {
+        if (isPlainObject(base) && isPlainObject(patch)) {
+            var result = new DynamicAccess<Dynamic>();
+            for (k => v in (base:DynamicAccess<Dynamic>)) result.set(k, v);
+            for (k => v in (patch:DynamicAccess<Dynamic>))
+                result.set(k, mergeOverride(result.get(k), v, path == '' ? k : path + '.' + k, warn));
+            return result;
+        }
+        if (base is Array && patch is Array && mergesById(base, patch)) {
+            var baseArr:Array<Dynamic> = base;
+            var patchArr:Array<Dynamic> = patch;
+            var known = [for (b in baseArr) (b.id:String) => true];
+            var byId = new Map<String, Dynamic>();
+            for (i in 0...patchArr.length) {
+                var item = patchArr[i];
+                if (!hasStringId(item))
+                    warn(path + '[$i]', 'item has no "id", so it can\'t address a base item; ignored.');
+                else if (!known.exists(item.id))
+                    warn(path, 'no base item has id "${item.id}"; ignored (an override tunes items, it '
+                        + 'can\'t add them).');
+                else byId.set(item.id, item);
+            }
+            return [for (b in baseArr) byId.exists(b.id)
+                ? mergeOverride(b, byId.get(b.id), path + '[' + b.id + ']', warn) : b];
+        }
+        return patch;
+    }
+
+    /** An array pair merges by id when the base is a list of id'd items (an empty base counts only if the patch is one). */
+    static function mergesById(base:Array<Dynamic>, patch:Array<Dynamic>):Bool {
+        function keyed(a:Array<Dynamic>) {
+            for (item in a) if (!hasStringId(item)) return false;
+            return a.length > 0;
+        }
+        return keyed(base) || (base.length == 0 && keyed(patch));
+    }
+
+    static inline function hasStringId(v:Dynamic):Bool {
+        return isPlainObject(v) && v.id is String && (v.id:String).length > 0;
     }
 
     /**
@@ -252,6 +341,43 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
      */
     @:keep public function getExpansion(entryId:String):Null<{files:Array<String>, names:Array<String>}> {
         return groupMatches.has(entryId) ? groupMatches.get(entryId) : null;
+    }
+
+    /**
+     * Expand one raw (e.g. unsaved, editor-held) entry exactly as a sync would, without touching any
+     * stone: structure and schema are validated, overrides merged, tokens substituted. Resolves with
+     * the flat entries — `[]` for a disabled entry. A group reuses the last sync's scan of its id
+     * (no rescan, the preview perf invariant) unless its `each` dir/pattern/nameTemplate differ from
+     * that scan's, or it has none (a new group); then it scans, without caching the result.
+     */
+    @:keep public function expandRaw(raw:Dynamic):Promise<Array<FlatEntryData>> {
+        return refresh().then(_ -> {
+            validateData([raw]);
+            if (isDisabled(raw)) return Promise.resolve([]);
+            if (raw.each == null) return Promise.resolve([singleEntry(raw)]);
+            var id:String = raw.id;
+            var scan = groupMatches.has(id) && groupScanParams.get(id) == scanParamsOf(raw.each)
+                ? Promise.resolve(groupMatches.get(id)) : scanGroup(raw.each);
+            return scan.then(matches -> {
+                var flat = expandGroup(raw, matches);
+                assertUniqueKeys(flat, matches.files);
+                validateSchemas(flat);
+                return flat;
+            });
+        });
+    }
+
+    /**
+     * `expandRaw`, then `previewEntry` each expanded entry (or only those whose key is in `keys`).
+     * This is how an editor previews an unsaved group edit without knowing the merge rules. Resolves
+     * with **all** expanded entries, previewed or not, so the editor can show effective configs.
+     * An invalid entry rejects before any stone is touched. Undo with `revertEntry`/`revertAllPreviews`.
+     */
+    @:keep public function previewRaw(raw:Dynamic, ?keys:Array<String>):Promise<Array<FlatEntryData>> {
+        return expandRaw(raw).then(flat -> {
+            for (fe in flat) if (keys == null || keys.indexOf(fe.key) != -1) previewEntry(fe.key, fe);
+            return flat;
+        });
     }
 
     override public function sync(data:Array<FlatEntryData>, keyFn:FlatEntryData->String):Array<String> {
@@ -293,13 +419,14 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
         touchedKeys.add(key);
         if (existing.update != null) {
             var revived = ConfigReviver.revive(data.config, makeResolve(key));
-            existing.update(key, revived, existing);
-        } else {
-            // Id-stable recreate: same id + same config → same cache keys, so recreate is
-            // cache-neutral. Remove before create (Stone ctor warns on duplicate explicit ids).
-            removeEntry(key);
-            entryMap.set(key, createEntry(key, data));
+            // `false` means the hook can't apply this change in place (e.g. it alters which stones
+            // exist): fall through to the recreate.
+            if (js.Syntax.code("{0} !== false", existing.update(key, revived, existing))) return;
         }
+        // Id-stable recreate: same id + same config → same cache keys, so recreate is
+        // cache-neutral. Remove before create (Stone ctor warns on duplicate explicit ids).
+        removeEntry(key);
+        entryMap.set(key, createEntry(key, data));
     }
 
     /**
