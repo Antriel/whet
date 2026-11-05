@@ -1,11 +1,11 @@
 ---
 # whet-7486
 title: Build errors log four times, in the least readable encoding
-status: in-progress
+status: completed
 type: task
 priority: normal
 created_at: 2026-08-17T14:16:37Z
-updated_at: 2026-08-17T15:41:48Z
+updated_at: 2026-11-05T09:18:25Z
 ---
 
 Noted 2026-08-17 from a bingo-2026 session. **Investigated 2026-08-17** — root cause found, design settled, see below.
@@ -50,8 +50,8 @@ So both consumers get their preferred form **from the compiler itself** — no s
 - [x] **Error shape.** On failure build a short plain message (`Haxe build failed (id "game.hxml"): <classic lines>`) and attach the pretty text as a separate property (`haxeLog`), read from the log file. Fall back to stderr when the file is missing/empty (older Haxe, or user-overridden defines).
 - [x] **Drop HaxeBuild's own `stack`** — it points into an `exec` callback and says nothing about the compile error.
 - [x] **Default `handleError` annotates instead of logging** (`Stone.hx:222-225`): attach the stone id to the error and reject, no `Log.error`. The command boundary then logs **once**, with the stone id included. One line, no information lost, no arbitration over which layer "owns" reporting.
-- [ ] **Games drop `message.reporting=pretty` + `message.color`** from `GameHaxeBuild.mjs` (bingo-2026, gooye-2). Under Haxe 5 the negation route is a trap — `message.no-color` is deprecated and emits its own warning that then pollutes output; not setting `message.color` is the correct move. Another argument for whet owning these rather than games negating them.
-- [ ] **`BuildStatusPlugin` serves `err.haxeLog ?? err.message`.** The HTML page, `ansiToHtml` and `addVsCodeLinks` are **untouched** — still coloured, still structured.
+- [x] **Games drop `message.reporting=pretty` + `message.color`** from `GameHaxeBuild.mjs` (bingo-2026, gooye-2). Under Haxe 5 the negation route is a trap — `message.no-color` is deprecated and emits its own warning that then pollutes output; not setting `message.color` is the correct move. Another argument for whet owning these rather than games negating them.
+- [x] **`BuildStatusPlugin` serves `err.haxeLog ?? err.message`.** The HTML page, `ansiToHtml` and `addVsCodeLinks` are **untouched** — still coloured, still structured.
 
 ## Decisions taken
 
@@ -88,3 +88,15 @@ The games depend on published `whet@^0.7.0` (both `bingo-2026` and `gooye-2`), a
 Note the whet-side change already gives those games a **4x** reduction with no edit at all (2972 → 720 bytes, two lines → one), because the duplicate log line and the repeated `stack` are gone regardless of which reporting mode the hxml picks. The remaining 720 → 359 is what dropping the defines buys.
 
 Also observed in passing, out of scope here: project **load** failures log twice too (`Whet.hx:97-98` logs the error and then its stack as a second record). Same shape of bug, different path — worth its own bean.
+
+## Summary of Changes
+
+Checked 2026-11-05. bingo-2026 is dropped; the games that matter are gooye-2 and lightning-bounce.
+
+- **Whet released**: the whet side shipped and both games depend on and have installed `whet@^0.7.4`.
+- **Game defines dropped**: `scripts/GameHaxeBuild.mjs` in both games no longer sets any `message.*` define.
+- **BuildStatusPlugin**: the `scry` submodule in both games serves `haxeLog || message`.
+
+Leftovers, owned by other repos (not tracked here): secondary HaxeBuilds still set `message.reporting=pretty` + `message.color`: gooye-2 `scripts/SimulatorBuild.mjs`, lightning-bounce `scripts/LogicTestBuild.mjs` (both `logic-test.hxml` and `headless.hxml`), and reactor `OpfsLogsJsStone.mjs` (`pretty` only). They now cost the 720-byte form instead of 359, and these are the agent-facing headless builds. Removing the defines is safe now, since whet 0.7.4 provides the pretty channel via `haxeLog`.
+
+The load-failure double log noted at the end is fixed in whet-nv8o.
