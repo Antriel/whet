@@ -1,10 +1,11 @@
 ---
 # whet-vg2x
 title: Project load failures log twice, stack duplicated
-status: todo
+status: completed
 type: bug
+priority: normal
 created_at: 2026-08-17T15:52:21Z
-updated_at: 2026-08-17T15:52:21Z
+updated_at: 2026-11-05T09:22:41Z
 ---
 
 Noticed 2026-08-17 while working on whet-7486. Same shape of bug (one failure, several log records), different code path — whet-7486 fixed the stone/command boundary only, this one is the project **load** path and was left alone.
@@ -56,10 +57,20 @@ Git history explains it. The extra log was added **2022-05-06** (`2112d5f`, "rou
 
 ## Work
 
-- [ ] Delete `Whet.hx:98`. Confirm the load failure then produces exactly one record that still contains the full stack.
-- [ ] Confirm the `topLevelHelp` branch is unaffected (a load error during `whet --help` is deliberately swallowed and still exits 0).
-- [ ] Quick sweep of the other error call sites for the same pattern — `Source.hx:90`, `Source.hx:111`, `Stone.hx:210`, `FileCache.hx:165`, `FileCache.hx:171`, `FileCache.hx:176`. They look like single logs, but confirm none of them pairs a structured log with a bare-stack log.
+- [x] Delete `Whet.hx:98`. Confirm the load failure then produces exactly one record that still contains the full stack.
+- [x] Confirm the `topLevelHelp` branch is unaffected (a load error during `whet --help` is deliberately swallowed and still exits 0).
+- [x] Quick sweep of the other error call sites for the same pattern — `Source.hx:90`, `Source.hx:111`, `Stone.hx:210`, `FileCache.hx:165`, `FileCache.hx:171`, `FileCache.hx:176`. They look like single logs, but confirm none of them pairs a structured log with a bare-stack log.
 
 ## Not in scope
 
 Whether `Log.replacer` should keep emitting `stack` at all. It should — with a short `message` the stack is genuinely useful, and that was settled in whet-7486 (the replacer stays a dumb format converter; producers decide what their errors carry).
+
+## Summary of Changes
+
+Done 2026-11-05, while closing whet-7486 (commit `e6c98aa`, which was filed under a duplicate bean, whet-nv8o, now scrapped).
+
+- Removed the bare-stack `Log.error` in the load `catchError`. A project that throws on import now gives exactly one level-50 record, the full stack is still inside `error`, and the exit code is still 1.
+- `topLevelHelp`: `whet -p <throwing project> --help` prints the help with no log records and exits 0. Unchanged.
+- Sweep: every listed site, and every other `Log.error`/`Log.warn` in `src/whet`, logs once. None pairs a structured log with a bare-stack log. Found a different defect on the way: `FileCache.hx:298` passed the Error as the record itself (`Log.error(msg, err)`), so the Error's non-enumerable `message` and `stack` were dropped. Changed it to `{ error: err }`.
+
+297/297 tests pass.

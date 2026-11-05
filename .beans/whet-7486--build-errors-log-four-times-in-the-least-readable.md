@@ -5,7 +5,7 @@ status: completed
 type: task
 priority: normal
 created_at: 2026-08-17T14:16:37Z
-updated_at: 2026-11-05T09:18:25Z
+updated_at: 2026-11-05T09:22:41Z
 ---
 
 Noted 2026-08-17 from a bingo-2026 session. **Investigated 2026-08-17** — root cause found, design settled, see below.
@@ -99,4 +99,4 @@ Checked 2026-11-05. bingo-2026 is dropped; the games that matter are gooye-2 and
 
 Leftovers, owned by other repos (not tracked here): secondary HaxeBuilds still set `message.reporting=pretty` + `message.color`: gooye-2 `scripts/SimulatorBuild.mjs`, lightning-bounce `scripts/LogicTestBuild.mjs` (both `logic-test.hxml` and `headless.hxml`), and reactor `OpfsLogsJsStone.mjs` (`pretty` only). They now cost the 720-byte form instead of 359, and these are the agent-facing headless builds. Removing the defines is safe now, since whet 0.7.4 provides the pretty channel via `haxeLog`.
 
-The load-failure double log noted at the end is fixed in whet-nv8o.
+The load-failure double log noted at the end is fixed in whet-vg2x.

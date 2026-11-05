@@ -295,7 +295,7 @@ class FileCache extends BaseCache<String, RuntimeFileCacheValue> {
                 resolve(null);
             },
             err -> {
-                Log.error('FileCache DB save error.', err);
+                Log.error('FileCache DB save error.', { error: err });
                 resolve(null); }
         );
     }
