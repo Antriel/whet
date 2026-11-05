@@ -54,7 +54,7 @@ function main() {
     final firstSegment = getCommands(program.args)[0];
     topLevelHelp = firstSegment.length > 0 && (firstSegment[0] == '--help' || firstSegment[0] == '-h');
 
-    final options = program.opts();
+    final options:Dynamic = program.opts();
     if (options.logLevel != null) { // Validate & apply --log-level / WHET_LOG_LEVEL.
         var n = Std.parseInt(options.logLevel);
         if (n == null) n = LogLevel.fromString(options.logLevel);
@@ -134,7 +134,7 @@ private function initProjects() {
         commands[0] = res.operands.concat(res.unknown);
 
         // Enable profiling on all projects if --profile flag is set.
-        var profileFormat:Dynamic = program.opts().profile;
+        var profileFormat:Dynamic = (program.opts():Dynamic).profile;
         if (profileFormat != null) {
             var format:String = if (profileFormat == true) "json" else profileFormat;
             for (p in Project.projects) p.enableProfiling();

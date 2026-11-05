@@ -411,17 +411,13 @@ abstract Filters(Array<Filter>) from Array<Filter> {
     }
 
     function isPathPossible(f:Filter):Bool {
-        inline function onHit(hit:Bool) {
-            if (f.filter.options.flipNegate) return hit;
-            return hit != f.filter.negate;
-        }
         // If we are only interested in base filename, we can't determine result yet.
         if (f.filter.options.matchBase) return true;
-        for (set in f.filter.set) {
-            final hit = f.filter.matchOne(cast f.pathSoFar, set, true); // (`cast` needed – wrong type definitions.)
-            if (hit) return onHit(true);
-        }
-        return onHit(false); // No hit.
+        // Nothing to narrow on yet (e.g. every part was removed by `extractDirs`).
+        if (f.pathSoFar.length == 0) return true;
+        // Partial match: true if the pattern could still match something under this directory.
+        // Handles `negate`/`flipNegate` itself.
+        return f.filter.match(f.pathSoFar.join('/'), true);
     }
 
 }
