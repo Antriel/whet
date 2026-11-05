@@ -45,64 +45,73 @@ class Router {
      */
     public function get(pattern:MinimatchType = null):Promise<Array<RouteResult>> {
         return MemoContext.ensure(
-            () -> getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null), [])
+            () -> getResults(new Filters(pattern != null ? makeMinimatch(pattern) : null))
         );
     }
 
-    function getResults(mainFilters:Filters, results:Array<RouteResult>):Promise<Array<RouteResult>> {
-        return new Promise((res, rej) -> {
-            var allRouteProms = [];
-            var queryIsPattern = mainFilters.isWildcardQuery();
+    /**
+     * Results come back in route order, and within a route in the source's own id order. Each
+     * route fills its own slot and the slots are joined after all have resolved, so the order never
+     * depends on which listing finishes first (that varies with timing and with what this process has
+     * already cached). Stones that pack or concatenate what they get (atlases, fonts) rely on it.
+     */
+    function getResults(mainFilters:Filters):Promise<Array<RouteResult>> {
+        var routeProms:Array<Promise<Array<RouteResult>>> = [];
+        var queryIsPattern = mainFilters.isWildcardQuery();
 
-            for (route in routes) {
-                var routeFilters = mainFilters.clone(); // Clone filters so other routes aren't affected.
-                var isDirMount = route.routeUnder.isDir();
-                var possible = if (isDirMount) routeFilters.step(route.routeUnder);
-                else routeFilters.finalize(route.routeUnder);
+        for (route in routes) {
+            var routeFilters = mainFilters.clone(); // Clone filters so other routes aren't affected.
+            var isDirMount = route.routeUnder.isDir();
+            var possible = if (isDirMount) routeFilters.step(route.routeUnder);
+            else routeFilters.finalize(route.routeUnder);
 
-                if (!possible) continue;
-                if (route.filter != null || route.extractDirs != null) routeFilters.add(route.filter, route.extractDirs);
+            if (!possible) continue;
+            if (route.filter != null || route.extractDirs != null) routeFilters.add(route.filter, route.extractDirs);
 
-                // Output-filter pruning applies only to dir mounts: the source enumerates many ids
-                // under the mount, so couldMatch (which matches the query against the source's
-                // declared output patterns/extensions with a '**/' prefix) can quickly reject it.
-                // A file (rename) mount serves exactly `routeUnder` regardless of the source's own
-                // ids — already matched authoritatively by finalize() above — so the source's
-                // id-space patterns don't describe the served path; pruning here would falsely
-                // reject any rename whose target basename differs from the source id.
-                if (isDirMount) {
-                    var outputFilter:Null<OutputFilter> = null;
-                    if (route.source is AnyStone) {
-                        outputFilter = (cast route.source:AnyStone).getOutputFilter();
-                    } else if (route.source is Router) {
-                        outputFilter = (cast route.source:Router).getOutputFilter();
-                    }
-
-                    if (outputFilter != null) {
-                        var queryPattern = routeFilters.getQueryPattern();
-                        if (queryPattern != null
-                            && !OutputFilterMatcher.couldMatch(queryPattern, outputFilter, queryIsPattern)) {
-                            continue; // Skip this source entirely
-                        }
-                    }
+            // Output-filter pruning applies only to dir mounts: the source enumerates many ids
+            // under the mount, so couldMatch (which matches the query against the source's
+            // declared output patterns/extensions with a '**/' prefix) can quickly reject it.
+            // A file (rename) mount serves exactly `routeUnder` regardless of the source's own
+            // ids — already matched authoritatively by finalize() above — so the source's
+            // id-space patterns don't describe the served path; pruning here would falsely
+            // reject any rename whose target basename differs from the source id.
+            if (isDirMount) {
+                var outputFilter:Null<OutputFilter> = null;
+                if (route.source is AnyStone) {
+                    outputFilter = (cast route.source:AnyStone).getOutputFilter();
+                } else if (route.source is Router) {
+                    outputFilter = (cast route.source:Router).getOutputFilter();
                 }
 
-                var prom:Promise<Any> = if (route.source is AnyStone) {
-                    final stone:AnyStone = cast route.source;
-                    stone.listIds().then(list -> {
-                        for (sourceId in list) {
-                            var serveId = routeFilters.tryFinalize(sourceId);
-                            if (serveId != null) {
-                                results.push({ source: stone, sourceId: sourceId, serveId: serveId });
-                            }
-                        }
-                    });
-                } else if (route.source is Router) {
-                    (cast route.source:Router).getResults(routeFilters, results);
-                } else throw new js.lib.Error("Router source must be a Stone or a Router.");
-                allRouteProms.push(prom);
+                if (outputFilter != null) {
+                    var queryPattern = routeFilters.getQueryPattern();
+                    if (queryPattern != null
+                        && !OutputFilterMatcher.couldMatch(queryPattern, outputFilter, queryIsPattern)) {
+                        continue; // Skip this source entirely
+                    }
+                }
             }
-            Promise.all(allRouteProms).then(_ -> res(results));
+
+            routeProms.push(if (route.source is AnyStone) {
+                final stone:AnyStone = cast route.source;
+                stone.listIds().then(list -> {
+                    var routeResults:Array<RouteResult> = [];
+                    for (sourceId in list) {
+                        var serveId = routeFilters.tryFinalize(sourceId);
+                        if (serveId != null) {
+                            routeResults.push({ source: stone, sourceId: sourceId, serveId: serveId });
+                        }
+                    }
+                    routeResults;
+                });
+            } else if (route.source is Router) {
+                (cast route.source:Router).getResults(routeFilters);
+            } else Promise.reject(new js.lib.Error("Router source must be a Stone or a Router.")));
+        }
+        return Promise.all(routeProms).then(perRoute -> {
+            var results:Array<RouteResult> = [];
+            for (routeResults in perRoute) for (r in routeResults) results.push(r);
+            results;
         });
     }
 
@@ -126,7 +135,7 @@ class Router {
             serveIds.sort((a, b) -> a.compare(b)); // Consistent ordering
             Promise.all(uniqueStones.map(s -> s.getHash()))
                 .then((hashes:Array<SourceHash>) -> {
-                    // Sort hashes for consistent ordering (stone order in results is non-deterministic)
+                    // Sort hashes so the merged hash ignores route order (results come back in route order)
                     hashes.sort((a, b) -> a.toString() < b.toString() ? -1 : a.toString() > b.toString() ? 1 : 0);
                     // Include serveIds in hash to capture filter effects
                     return SourceHash.merge(...hashes).add(SourceHash.fromString(serveIds.join('\n')));

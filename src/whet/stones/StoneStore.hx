@@ -96,15 +96,15 @@ class StoneStore extends StoneFactory<FlatEntryData, BuiltEntry> {
     // --- Router overrides: pick up external edits of the DB file before resolving routes ---
     // Requests for entry outputs never touch the db stone, so its own `generateHash` check isn't enough.
 
-    override function getResults(mainFilters:whet.route.Router.Filters, results:Array<whet.route.RouteResult>):Promise<Array<whet.route.RouteResult>> {
-        return refresh().then(_ -> superGetResults(mainFilters, results));
+    override function getResults(mainFilters:whet.route.Router.Filters):Promise<Array<whet.route.RouteResult>> {
+        return refresh().then(_ -> superGetResults(mainFilters));
     }
 
     override function getUnfilteredHash():Promise<SourceHash> {
         return refresh().then(_ -> superGetUnfilteredHash());
     }
 
-    function superGetResults(mainFilters, results) return super.getResults(mainFilters, results);
+    function superGetResults(mainFilters) return super.getResults(mainFilters);
 
     function superGetUnfilteredHash() return super.getUnfilteredHash();
 

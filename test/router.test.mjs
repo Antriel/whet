@@ -304,3 +304,59 @@ test("Router.getOutputFilter: duplicate extension across siblings keeps extensio
   assert.equal(res.length, 1, "logo.avif must resolve despite sibling duplicate png extension");
   await env.cleanup();
 });
+
+// A MockStone whose listing resolves after `listDelayMs`, so tests can make an earlier route finish last.
+class SlowListStone extends MockStone {
+  constructor(opts) {
+    super(opts);
+    this.listDelayMs = opts.listDelayMs ?? 0;
+    this.listError = opts.listError ?? null;
+  }
+  async list() {
+    await new Promise((resolve) => setTimeout(resolve, this.listDelayMs));
+    if (this.listError) throw this.listError;
+    return this.config.outputs.map((o) => o.id);
+  }
+}
+
+test("Router.get returns results in route order, not listing completion order", async () => {
+  const env = await createTestProject("router-result-order");
+  const mk = (id, listDelayMs, files) =>
+    new SlowListStone({
+      project: env.project,
+      id,
+      listDelayMs,
+      outputs: files.map((f) => ({ id: f, content: f })),
+    });
+  // Listing delays are the reverse of route order: the first route resolves last.
+  const a = mk("a", 40, ["a1.json", "a2.json"]);
+  const b = mk("b", 20, ["b1.json"]);
+  const c = mk("c", 0, ["c1.json"]);
+  const d = mk("d", 30, ["d1.json"]);
+  const e = mk("e", 0, ["e1.json"]);
+
+  // A nested router keeps its place among the outer routes, and its own routes stay in order too.
+  const inner = new Router([["inner/", d], ["inner/", e]]);
+  const router = new Router([["a/", a], ["b/", b], ["", inner], ["c/", c]]);
+
+  const expected = ["a/a1.json", "a/a2.json", "b/b1.json", "inner/d1.json", "inner/e1.json", "c/c1.json"];
+  assert.deepEqual((await router.get()).map((r) => r.serveId), expected);
+  assert.deepEqual((await router.get("**/*.json")).map((r) => r.serveId), expected);
+  // First-result helpers honour route order as priority.
+  assert.equal(await router.getString("**/*.json"), "a1.json");
+  await env.cleanup();
+});
+
+test("Router.get rejects when a source listing fails", async () => {
+  const env = await createTestProject("router-list-reject");
+  const ok = new SlowListStone({ project: env.project, id: "ok", outputs: [{ id: "x.txt", content: "x" }] });
+  const bad = new SlowListStone({
+    project: env.project,
+    id: "bad",
+    listDelayMs: 5,
+    listError: new Error("listing failed"),
+  });
+  const router = new Router([["ok/", ok], ["nested/", new Router([["", bad]])]]);
+  await assert.rejects(router.get(), /listing failed/);
+  await env.cleanup();
+});

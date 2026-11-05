@@ -1,11 +1,11 @@
 ---
 # whet-8alw
 title: 'StoneStore: close the gaps its first consumer (AudioDb) hit — merge-by-id overrides, nameTemplate keys, rebuild from update'
-status: in-progress
+status: completed
 type: feature
 priority: normal
 created_at: 2026-10-14T12:41:21Z
-updated_at: 2026-10-14T12:52:09Z
+updated_at: 2026-11-05T08:52:47Z
 parent: whet-1vzf
 ---
 
@@ -170,3 +170,11 @@ without caching the result or touching `getExpansion`. Sync and `expandRaw` shar
 - Docs: `docs/stone-store.md` (keys, override rules, the zero-match schema note, editor preview API,
   update hooks); `src/whet/stones/CLAUDE.md` invariants; whet skill authoring reference.
 - 7 new tests in `test/stone-store.test.mjs`; full suite 286/286.
+
+## Verified against gooye-2 (2026-11-05)
+
+Consumer side is done (scry-app-dxgt, completed 2026-10-14). gooye-2 depends on whet `^0.7.4` and
+its `scry/whetstones/assets/AudioDb.mjs` is a stock StoneStore: no `validateData`/`expandEntries`
+overrides; the `audio.asset` update hook returns `false` on a pipeline shape change;
+`AudioDbPlugin` previews unsaved group edits via `previewRaw`. `assets/audio.json` is in the
+generic format (`each` + `nameTemplate` such as `whoosh_$2`, id'd pipeline blocks, no `type: "group"`).
